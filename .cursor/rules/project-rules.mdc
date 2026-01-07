@@ -1,0 +1,477 @@
+# InBody Accounting Dash - 프로젝트 개발 규칙
+
+## 1. 프로젝트 개요
+
+**InBody Accounting Dash**는 Next.js 15 App Router 기반의 웹 어플리케이션입니다.
+
+### 핵심 원칙
+
+- **사용자 경험 최우선**: 로딩 / 빈 상태 / 오류 상태 UI를 모두 제공하고 상호 작용 지연을 최소화한다.
+- **오류 처리 철저**: 서버 / 클라이언트 모두 예외를 포착하고, 사용자에게는 영어로 친절한 메시지를 제공한다. (개발환경에서는 상세 로그 출력)
+
+---
+
+## 2. 기술 스택
+
+### 코어 기술
+
+- **Next.js 15** (App Router)
+- **TypeScript**
+- **shadcn/ui**
+- **Tailwind CSS**
+- **AI SDK**
+- **ESLint**
+
+### 필수 설치 패키지
+
+```bash
+npm install @supabase/supabase-js
+npm install recharts                    # 차트
+npm install react-simple-maps           # 지도
+npm install react-tooltip               # 툴팁
+npm install date-fns                    # 날짜 포맷
+npm install xlsx                        # (Phase 2: 엑셀 파싱)
+```
+
+---
+
+## 3. 프로젝트 구조
+
+```
+subsidiary-dashboard/
+├── app/
+│   ├── page.tsx                 # 메인 대시보드 (지도)
+│   ├── layout.tsx               # 공통 레이아웃
+│   ├── globals.css
+│   └── api/
+│       └── financial-data/
+│           └── route.ts         # (Phase 2: 엑셀 업로드용)
+├── components/
+│   ├── ui/                      # shadcn/ui 컴포넌트
+│   ├── WorldMap.tsx             # 세계지도 컴포넌트
+│   ├── SubsidiaryCard.tsx       # 법인 정보 카드
+│   ├── FinancialChart.tsx       # 재무 차트
+│   └── DataUpload.tsx           # (Phase 2: 업로드)
+├── lib/
+│   ├── supabase.ts              # Supabase 클라이언트
+│   ├── utils.ts                 # 유틸 함수
+│   └── types.ts                 # 타입 정의
+├── public/
+└── .env.local                   # 환경 변수
+```
+
+---
+
+## 4. 코딩 컨벤션 (바이브코딩)
+
+### 4.1 네이밍 규칙
+
+#### 파일명
+
+```typescript
+// 컴포넌트: PascalCase
+WorldMap.tsx
+SubsidiaryCard.tsx
+
+// 유틸/서비스: camelCase
+subsidiaryService.ts
+formatUtils.ts
+```
+
+#### 컴포넌트
+
+```typescript
+// PascalCase
+export function SubsidiaryCard() {}
+export function WorldMap() {}
+```
+
+#### 함수
+
+```typescript
+// camelCase
+function formatCurrency() {}
+const handleClick = () => {}
+```
+
+#### 상수
+
+```typescript
+// UPPER_SNAKE_CASE (중요한 것만)
+const MAX_SUBSIDIARIES = 20;
+const API_BASE_URL = 'https://api.example.com';
+```
+
+#### 변수
+
+```typescript
+// camelCase
+const revenueData = [];
+const selectedSubsidiary = null;
+```
+
+### 4.2 타입 정의
+
+모든 타입은 `lib/types.ts`에 중앙 관리합니다.
+
+```typescript
+// lib/types.ts
+
+export interface Subsidiary {
+  id: string;
+  name: string;
+  code: string;
+  country: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  region: string;
+}
+
+export interface FinancialData {
+  id: string;
+  subsidiary_id: string;
+  fiscal_year: number;
+  quarter: number;
+  revenue_krw: number;
+  operating_profit_krw: number;
+  target_revenue_krw?: number;
+  created_at: string;
+}
+
+// 필요시 확장
+export interface FinancialDataWithSubsidiary extends FinancialData {
+  subsidiary: Subsidiary;
+}
+```
+
+### 4.3 컴포넌트 구조
+
+#### 간단한 컴포넌트
+
+```typescript
+/**
+ * 지도 위 법인 마커 컴포넌트
+ */
+interface Props {
+  subsidiary: Subsidiary;
+  onClick: () => void;
+}
+
+export function SubsidiaryMarker({ subsidiary, onClick }: Props) {
+  return (
+    <circle
+      cx={subsidiary.longitude}
+      cy={subsidiary.latitude}
+      r={8}
+      onClick={onClick}
+      className="cursor-pointer hover:fill-blue-500"
+    />
+  );
+}
+```
+
+#### 복잡한 컴포넌트
+
+```typescript
+/**
+ * 법인별 재무 데이터 차트 컴포넌트
+ */
+export function FinancialChart({ data }: { data: FinancialData[] }) {
+  // 1. hooks 먼저
+  const [selectedPeriod, setSelectedPeriod] = useState('Q4');
+  
+  // 2. 계산/로직
+  const chartData = useMemo(() => {
+    return data.map(d => ({
+      quarter: `${d.fiscal_year} Q${d.quarter}`,
+      revenue: d.revenue_krw / 100000000, // 억원 단위
+    }));
+  }, [data]);
+  
+  // 3. 렌더링
+  return <BarChart data={chartData} />;
+}
+```
+
+---
+
+## 5. 코딩 스타일
+
+### 5.1 기본 원칙
+
+- **함수형 컴포넌트를 기본으로 사용한다**
+- **모든 함수는 화살표 함수로 작성한다**
+- **컴포넌트 파일명은 PascalCase로 저장한다**
+- **한글 주석 필수**: 컴포넌트 상단에 한 문장 개요를 한글로 작성하고, JSDoc도 한글로 기술한다
+- **ESLint 규칙을 준수한다**
+
+### 5.2 함수 작성
+
+```typescript
+// ✅ 좋은 예: 화살표 함수 사용
+const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat('ko-KR', {
+    style: 'currency',
+    currency: 'KRW',
+  }).format(amount);
+};
+
+// ❌ 나쁜 예: function 키워드 사용 (컴포넌트 제외)
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('ko-KR', {
+    style: 'currency',
+    currency: 'KRW',
+  }).format(amount);
+}
+```
+
+### 5.3 컴포넌트 작성
+
+```typescript
+/**
+ * 법인 정보 카드 컴포넌트
+ * 선택된 법인의 기본 정보와 최근 재무 데이터를 표시합니다.
+ */
+interface SubsidiaryCardProps {
+  subsidiary: Subsidiary;
+  financialData?: FinancialData;
+  onClose: () => void;
+}
+
+export function SubsidiaryCard({
+  subsidiary,
+  financialData,
+  onClose,
+}: SubsidiaryCardProps) {
+  // 컴포넌트 로직
+  return (
+    <div className="p-4 bg-white rounded-lg shadow-lg">
+      {/* UI 구현 */}
+    </div>
+  );
+}
+```
+
+### 5.4 주석 작성
+
+```typescript
+/**
+ * 재무 데이터를 차트 형식으로 변환합니다.
+ * @param data - 원본 재무 데이터 배열
+ * @param period - 조회 기간 (예: 'Q4', 'annual')
+ * @returns 차트에 표시할 형식으로 변환된 데이터
+ */
+const transformChartData = (
+  data: FinancialData[],
+  period: string
+): ChartDataPoint[] => {
+  // 구현
+};
+
+// 중요한 로직에는 인라인 주석 추가
+const revenue = data.revenue_krw / 100000000; // 억원 단위로 변환
+```
+
+---
+
+## 6. 상태 관리
+
+### 6.1 컴포넌트 내부 상태
+
+```typescript
+// useState 사용
+const [selectedSubsidiary, setSelectedSubsidiary] = useState<Subsidiary | null>(null);
+const [isLoading, setIsLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
+```
+
+### 6.2 계산된 값
+
+```typescript
+// useMemo로 비용이 큰 연산 최적화
+const sortedData = useMemo(() => {
+  return data.sort((a, b) => b.revenue_krw - a.revenue_krw);
+}, [data]);
+```
+
+### 6.3 이벤트 핸들러
+
+```typescript
+// useCallback으로 함수 메모이제이션
+const handleSubsidiaryClick = useCallback((id: string) => {
+  const subsidiary = subsidiaries.find(s => s.id === id);
+  setSelectedSubsidiary(subsidiary || null);
+}, [subsidiaries]);
+```
+
+---
+
+## 7. 오류 처리
+
+### 7.1 클라이언트 오류 처리
+
+```typescript
+const fetchFinancialData = async (subsidiaryId: string) => {
+  try {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('financial_data')
+      .select('*')
+      .eq('subsidiary_id', subsidiaryId);
+    
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    // 개발 환경: 상세 로그
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Failed to fetch financial data:', err);
+    }
+    // 사용자에게 친절한 영어 메시지
+    setError('Failed to load financial data. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
+```
+
+### 7.2 서버 오류 처리
+
+```typescript
+// app/api/financial-data/route.ts
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    // 로직 처리
+    return Response.json({ success: true, data });
+  } catch (error) {
+    // 개발 환경: 상세 로그
+    if (process.env.NODE_ENV === 'development') {
+      console.error('API Error:', error);
+    }
+    // 사용자 친화적 응답
+    return Response.json(
+      { success: false, error: 'An error occurred while processing your request.' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+---
+
+## 8. UI/UX 가이드라인
+
+### 8.1 로딩 상태
+
+```typescript
+if (isLoading) {
+  return (
+    <div className="flex items-center justify-center p-8">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <span className="ml-2">Loading...</span>
+    </div>
+  );
+}
+```
+
+### 8.2 빈 상태
+
+```typescript
+if (!data || data.length === 0) {
+  return (
+    <div className="text-center p-8 text-gray-500">
+      <p className="text-lg">No financial data available</p>
+      <p className="text-sm mt-2">Upload data to get started</p>
+    </div>
+  );
+}
+```
+
+### 8.3 오류 상태
+
+```typescript
+if (error) {
+  return (
+    <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+      <p className="text-red-800">{error}</p>
+      <button
+        onClick={retry}
+        className="mt-2 text-sm text-red-600 hover:text-red-800"
+      >
+        Try Again
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+## 9. 성능 최적화
+
+- 큰 리스트는 `useMemo`로 최적화
+- 이벤트 핸들러는 `useCallback`으로 메모이제이션
+- 이미지는 Next.js `Image` 컴포넌트 사용
+- 동적 import로 큰 컴포넌트 lazy loading
+
+```typescript
+// 동적 import 예시
+const DynamicChart = dynamic(() => import('@/components/FinancialChart'), {
+  loading: () => <div>Loading chart...</div>,
+  ssr: false,
+});
+```
+
+---
+
+## 10. 환경 변수
+
+`.env.local` 파일에 민감한 정보를 저장합니다.
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# 기타 설정
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com
+```
+
+**주의**: `.env.local`은 절대 Git에 커밋하지 않습니다.
+
+---
+
+## 11. Git 컨벤션
+
+### 커밋 메시지
+
+```
+feat: 새로운 기능 추가
+fix: 버그 수정
+docs: 문서 수정
+style: 코드 포맷팅
+refactor: 코드 리팩토링
+test: 테스트 코드
+chore: 빌드 설정 등
+
+예시:
+feat: 법인별 재무 차트 컴포넌트 추가
+fix: 지도 마커 클릭 이벤트 오류 수정
+```
+
+---
+
+## 12. 체크리스트
+
+새로운 컴포넌트/기능 추가 시:
+
+- [ ] 타입 정의 (`lib/types.ts`)
+- [ ] 한글 주석 (컴포넌트 상단, JSDoc)
+- [ ] 로딩 상태 UI
+- [ ] 빈 상태 UI
+- [ ] 오류 상태 UI
+- [ ] 반응형 디자인 (Tailwind)
+- [ ] 접근성 (aria 속성)
+- [ ] ESLint 통과
+- [ ] 성능 최적화 (memo, callback)
