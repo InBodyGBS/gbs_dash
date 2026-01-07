@@ -240,7 +240,7 @@ export const ScheduleGrid = ({
                   {items.length > 0 ? (
                     <div className="flex flex-col gap-0.5 min-h-[2rem] max-h-[6rem] overflow-y-auto">
                       {items.map((item) => {
-                        const category = getCategoryById(item.category);
+                        const category = getCategoryById(item.category as any);
                         if (!category) return null;
 
                         // 레이블 축약 (첫 단어의 첫 3글자)

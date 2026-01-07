@@ -289,13 +289,13 @@ export default function SchedulePage() {
       const existingItem = existingItems[0];
       if (existingItem.status === 'planned') {
         // 확정으로 변경
-        const { error } = await supabase
+        // @ts-ignore - schedule_items 타입 정의 필요
+        const { error } = await (supabase as any)
           .from('schedule_items')
-          // @ts-ignore - schedule_items 타입 정의 필요
           .update({
             status: 'confirmed',
             confirmed_date: new Date().toISOString(),
-          })
+          } as any)
           .eq('id', existingItem.id);
 
         if (!error) {
@@ -318,7 +318,7 @@ export default function SchedulePage() {
     }
 
     // @ts-ignore - schedule_items 타입 정의 필요
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('schedule_items')
       .insert({
         quarter_id: quarterId,
@@ -326,7 +326,7 @@ export default function SchedulePage() {
         category: categoryId,
         planned_date: date,
         status: 'planned',
-      });
+      } as any);
 
     if (error) {
       console.error('❌ Schedule item 추가 실패:', error);
@@ -347,7 +347,8 @@ export default function SchedulePage() {
       return;
     }
 
-    const { error } = await supabase
+    // @ts-ignore - schedule_items 타입 정의 필요
+    const { error } = await (supabase as any)
       .from('schedule_items')
       .delete()
       .eq('id', itemId);
@@ -363,12 +364,12 @@ export default function SchedulePage() {
   // 항목 확정 핸들러
   const handleItemConfirm = async (itemId: string) => {
     // @ts-ignore - schedule_items 타입 정의 필요
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('schedule_items')
       .update({
         status: 'confirmed',
         confirmed_date: new Date().toISOString(),
-      })
+      } as any)
       .eq('id', itemId);
 
     if (error) {
@@ -414,7 +415,7 @@ export default function SchedulePage() {
         
         if (items.length > 0) {
           const categoryLabels = items.map(item => {
-            const category = getCategoryById(item.category);
+            const category = getCategoryById(item.category as any);
             const status = item.status === 'confirmed' ? '✓' : '○';
             return category ? `${status}${category.label}` : '';
           }).filter(Boolean);
@@ -481,12 +482,12 @@ export default function SchedulePage() {
         if (existingCategoryItem.status === 'planned') {
           // 확정으로 변경
           // @ts-ignore - schedule_items 타입 정의 필요
-          const { error } = await supabase
+          const { error } = await (supabase as any)
             .from('schedule_items')
             .update({
               status: 'confirmed',
               confirmed_date: new Date().toISOString(),
-            })
+            } as any)
             .eq('id', existingCategoryItem.id);
 
           if (!error) {
@@ -498,7 +499,8 @@ export default function SchedulePage() {
         } else {
           // 확정된 항목 삭제
           if (confirm('확정된 일정을 삭제하시겠습니까?')) {
-            const { error } = await supabase
+            // @ts-ignore - schedule_items 타입 정의 필요
+            const { error } = await (supabase as any)
               .from('schedule_items')
               .delete()
               .eq('id', existingCategoryItem.id);
@@ -532,7 +534,7 @@ export default function SchedulePage() {
         });
 
         // @ts-ignore - schedule_items 타입 정의 필요
-        const { data: insertedData, error } = await supabase
+        const { data: insertedData, error } = await (supabase as any)
           .from('schedule_items')
           .insert({
             quarter_id: quarterId,
@@ -540,7 +542,7 @@ export default function SchedulePage() {
             category: selectedCategory,
             planned_date: date,
             status: 'planned',
-          })
+          } as any)
           .select();
 
         if (error) {

@@ -86,8 +86,8 @@ export const getAllLatestFinancialData = async (): Promise<FinancialDataWithSubs
         *,
         subsidiaries (*)
       `)
-      .eq('fiscal_year', latestPeriod.fiscal_year)
-      .eq('quarter', latestPeriod.quarter);
+      .eq('fiscal_year', (latestPeriod as any).fiscal_year)
+      .eq('quarter', (latestPeriod as any).quarter);
 
     if (error) throw error;
     return (data as FinancialDataWithSubsidiary[]) || [];
