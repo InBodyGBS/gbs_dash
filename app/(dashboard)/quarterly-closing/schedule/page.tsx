@@ -288,22 +288,10 @@ export default function SchedulePage() {
     if (existingItems.length > 0) {
       const existingItem = existingItems[0];
       if (existingItem.status === 'planned') {
-        // 확정으로 변경
-        // @ts-ignore - schedule_items 타입 정의 필요
-        const { error } = await (supabase as any)
-          .from('schedule_items')
-          .update({
-            status: 'confirmed',
-            confirmed_date: new Date().toISOString(),
-          } as any)
-          .eq('id', existingItem.id);
-
-        if (!error) {
-          toast.success('일정이 확정되었습니다.');
-          loadData();
-        } else {
-          toast.error(`확정 실패: ${error.message}`);
-        }
+        // 확정 날짜 선택 다이얼로그는 ScheduleGrid에서 처리
+        // 여기서는 바로 확정하지 않고, 사용자가 날짜를 선택할 수 있도록 함
+        // 실제로는 ScheduleGrid의 handleBadgeClick에서 처리됨
+        toast.info('Badge를 클릭하여 확정 날짜를 선택하세요.');
       } else {
         toast.info('이미 확정된 일정입니다.');
       }
@@ -361,21 +349,21 @@ export default function SchedulePage() {
     }
   };
 
-  // 항목 확정 핸들러
-  const handleItemConfirm = async (itemId: string) => {
+  // 항목 확정 핸들러 (확정 날짜 포함)
+  const handleItemConfirm = async (itemId: string, confirmedDate: string) => {
     // @ts-ignore - schedule_items 타입 정의 필요
     const { error } = await (supabase as any)
       .from('schedule_items')
       .update({
         status: 'confirmed',
-        confirmed_date: new Date().toISOString(),
+        confirmed_date: confirmedDate,
       } as any)
       .eq('id', itemId);
 
     if (error) {
       toast.error(`확정 실패: ${error.message}`);
     } else {
-      toast.success('일정이 확정되었습니다.');
+      toast.success(`일정이 ${format(parseISO(confirmedDate), 'yyyy년 MM월 dd일')}에 확정되었습니다.`);
       loadData();
     }
   };
@@ -480,22 +468,9 @@ export default function SchedulePage() {
       if (existingCategoryItem) {
         // 기존 항목이 있으면 상태 토글
         if (existingCategoryItem.status === 'planned') {
-          // 확정으로 변경
-          // @ts-ignore - schedule_items 타입 정의 필요
-          const { error } = await (supabase as any)
-            .from('schedule_items')
-            .update({
-              status: 'confirmed',
-              confirmed_date: new Date().toISOString(),
-            } as any)
-            .eq('id', existingCategoryItem.id);
-
-          if (!error) {
-            toast.success('일정이 확정되었습니다.');
-            loadData();
-          } else {
-            toast.error(`확정 실패: ${error.message}`);
-          }
+          // 확정 날짜 선택 다이얼로그는 ScheduleGrid에서 처리
+          // 여기서는 바로 확정하지 않고, 사용자가 날짜를 선택할 수 있도록 함
+          toast.info('Badge를 클릭하여 확정 날짜를 선택하세요.');
         } else {
           // 확정된 항목 삭제
           if (confirm('확정된 일정을 삭제하시겠습니까?')) {

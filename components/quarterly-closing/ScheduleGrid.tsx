@@ -10,6 +10,8 @@ import { format, eachDayOfInterval, parseISO, startOfMonth, endOfMonth, addMonth
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { ScheduleItem, Quarter } from '@/lib/types/quarterly-closing';
@@ -24,7 +26,7 @@ interface ScheduleGridProps {
   onCellClick: (subsidiaryId: string, date: string) => void;
   onCategoryDrop?: (subsidiaryId: string, date: string, categoryId: string) => void;
   onItemDelete?: (itemId: string) => void;
-  onItemConfirm?: (itemId: string) => void;
+  onItemConfirm?: (itemId: string, confirmedDate: string) => void;
 }
 
 export const ScheduleGrid = ({
@@ -39,6 +41,11 @@ export const ScheduleGrid = ({
 }: ScheduleGridProps) => {
   // 현재 표시할 월 (분기 시작월로 초기화)
   const [currentMonth, setCurrentMonth] = useState<Date>(() => parseISO(quarter.start_date));
+  
+  // 확정 날짜 선택 다이얼로그 상태
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [selectedItemForConfirm, setSelectedItemForConfirm] = useState<ScheduleItem | null>(null);
+  const [selectedConfirmDate, setSelectedConfirmDate] = useState<Date | undefined>(undefined);
 
   // quarter가 변경되면 현재 월을 초기화
   useEffect(() => {
@@ -133,7 +140,23 @@ export const ScheduleGrid = ({
   const handleBadgeClick = (e: React.MouseEvent, item: ScheduleItem) => {
     e.stopPropagation(); // 셀 클릭 이벤트 방지
     if (onItemConfirm && item.status === 'planned') {
-      onItemConfirm(item.id);
+      // 확정 날짜 선택 다이얼로그 열기
+      setSelectedItemForConfirm(item);
+      // 기본값: planned_date 또는 오늘 날짜
+      const plannedDate = parseISO(item.planned_date);
+      setSelectedConfirmDate(plannedDate);
+      setConfirmDialogOpen(true);
+    }
+  };
+
+  // 확정 날짜 선택 후 확정 처리
+  const handleConfirmWithDate = () => {
+    if (selectedItemForConfirm && selectedConfirmDate && onItemConfirm) {
+      const confirmedDateStr = format(selectedConfirmDate, 'yyyy-MM-dd');
+      onItemConfirm(selectedItemForConfirm.id, confirmedDateStr);
+      setConfirmDialogOpen(false);
+      setSelectedItemForConfirm(null);
+      setSelectedConfirmDate(undefined);
     }
   };
 
@@ -301,6 +324,59 @@ export const ScheduleGrid = ({
         </tbody>
       </table>
       </div>
+
+      {/* 확정 날짜 선택 다이얼로그 */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>확정 날짜 선택</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedItemForConfirm && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    계획된 날짜: <span className="font-medium">{format(parseISO(selectedItemForConfirm.planned_date), 'yyyy년 MM월 dd일')}</span>
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    확정할 날짜를 선택하세요:
+                  </p>
+                </div>
+                <div className="flex justify-center">
+                  <Calendar
+                    mode="single"
+                    selected={selectedConfirmDate}
+                    onSelect={setSelectedConfirmDate}
+                    disabled={(date) => {
+                      // 분기 범위 내에서만 선택 가능
+                      const quarterStart = parseISO(quarter.start_date);
+                      const quarterEnd = parseISO(quarter.end_date);
+                      return date < quarterStart || date > quarterEnd;
+                    }}
+                    className="rounded-md border"
+                  />
+                </div>
+                {selectedConfirmDate && (
+                  <p className="text-sm text-center text-gray-700 mt-4">
+                    선택한 확정 날짜: <span className="font-semibold text-blue-600">{format(selectedConfirmDate, 'yyyy년 MM월 dd일')}</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)}>
+              취소
+            </Button>
+            <Button 
+              onClick={handleConfirmWithDate}
+              disabled={!selectedConfirmDate}
+            >
+              확정
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
