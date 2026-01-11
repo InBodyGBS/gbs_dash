@@ -60,30 +60,31 @@ export const FinancialChart = ({ data }: FinancialChartProps) => {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={200}>
       <BarChart
         data={chartData}
-        margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+        margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis
           dataKey="period"
-          tick={{ fontSize: 12, fill: '#6b7280' }}
+          tick={{ fontSize: 10, fill: '#6b7280' }}
           tickLine={false}
           axisLine={{ stroke: '#e5e7eb' }}
         />
         <YAxis
-          tick={{ fontSize: 12, fill: '#6b7280' }}
+          tick={{ fontSize: 10, fill: '#6b7280' }}
           tickLine={false}
           axisLine={{ stroke: '#e5e7eb' }}
           tickFormatter={(value) => `${value}억`}
+          width={40}
         />
         <Tooltip content={<CustomTooltip />} />
         <Bar
           dataKey="revenue"
           fill="#3B82F6"
           radius={[4, 4, 0, 0]}
-          maxBarSize={60}
+          maxBarSize={40}
         />
       </BarChart>
     </ResponsiveContainer>
