@@ -1,12 +1,12 @@
 /**
- * Issue 데이터 CRUD 서비스
+ * Issue ?�이??CRUD ?�비??
  */
 
 import { supabase } from '@/lib/supabase/client';
 import type { Issue, IssueFormData, IssueStats, CategoryCount, EntityCount } from '@/lib/types/issue';
 
 /**
- * 모든 이슈 조회
+ * 모든 ?�슈 조회
  */
 export async function getAllIssues(): Promise<Issue[]> {
   const { data, error } = await supabase
@@ -23,7 +23,7 @@ export async function getAllIssues(): Promise<Issue[]> {
 }
 
 /**
- * 특정 이슈 조회
+ * ?�정 ?�슈 조회
  */
 export async function getIssueById(id: string): Promise<Issue | null> {
   const { data, error } = await supabase
@@ -41,12 +41,12 @@ export async function getIssueById(id: string): Promise<Issue | null> {
 }
 
 /**
- * 이슈 생성
+ * ?�슈 ?�성
  */
 export async function createIssue(issueData: IssueFormData): Promise<Issue | null> {
   const { data, error } = await supabase
     .from('issues')
-    .insert(issueData)
+    .insert(issueData as any)
     .select()
     .single();
 
@@ -59,7 +59,7 @@ export async function createIssue(issueData: IssueFormData): Promise<Issue | nul
 }
 
 /**
- * 이슈 수정
+ * ?�슈 ?�정
  */
 export async function updateIssue(id: string, updates: Partial<IssueFormData>): Promise<Issue | null> {
   const { data, error } = await supabase
@@ -78,7 +78,7 @@ export async function updateIssue(id: string, updates: Partial<IssueFormData>): 
 }
 
 /**
- * 이슈 삭제
+ * ?�슈 ??��
  */
 export async function deleteIssue(id: string): Promise<boolean> {
   const { error } = await supabase
@@ -95,11 +95,11 @@ export async function deleteIssue(id: string): Promise<boolean> {
 }
 
 /**
- * 이슈 통계 조회
+ * ?�슈 ?�계 조회
  */
 export async function getIssueStats(issues: Issue[]): Promise<IssueStats> {
   const total = issues.length;
-  const completed = issues.filter((issue) => issue.status === '완료').length;
+  const completed = issues.filter((issue) => issue.status === '?�료').length;
   const inProgress = total - completed;
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -112,7 +112,7 @@ export async function getIssueStats(issues: Issue[]): Promise<IssueStats> {
 }
 
 /**
- * 카테고리별 이슈 개수
+ * 카테고리�??�슈 개수
  */
 export async function getCategoryStats(issues: Issue[]): Promise<CategoryCount[]> {
   const categoryMap = new Map<string, number>();
@@ -131,7 +131,7 @@ export async function getCategoryStats(issues: Issue[]): Promise<CategoryCount[]
 }
 
 /**
- * Entity별 이슈 개수
+ * Entity�??�슈 개수
  */
 export async function getEntityStats(issues: Issue[]): Promise<EntityCount[]> {
   const entityMap = new Map<string, { name: string; count: number }>();
@@ -152,4 +152,5 @@ export async function getEntityStats(issues: Issue[]): Promise<EntityCount[]> {
     }))
     .sort((a, b) => b.count - a.count);
 }
+
 

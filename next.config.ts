@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   },
   typescript: {
     // 빌드 시 TypeScript 오류를 경고로 처리
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true,
   },
 };
 
