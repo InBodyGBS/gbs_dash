@@ -31,6 +31,10 @@ export async function getIssues(): Promise<Issue[]> {
   return data || [];
 }
 
+export async function getAllIssues(): Promise<Issue[]> {
+  return getIssues();
+}
+
 export async function updateIssue(
   id: string,
   updates: Partial<IssueFormData>
