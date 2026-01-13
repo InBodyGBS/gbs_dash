@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { format, eachDayOfInterval, parseISO, startOfMonth, endOfMonth, addMonths, isSameMonth } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -27,6 +27,7 @@ interface ScheduleGridProps {
   onCategoryDrop?: (subsidiaryId: string, date: string, categoryId: string) => void;
   onItemDelete?: (itemId: string) => void;
   onItemConfirm?: (itemId: string, confirmedDate: string) => void;
+  onEntityOrderChange?: (newOrder: Subsidiary[]) => void;
 }
 
 export const ScheduleGrid = ({
@@ -38,19 +39,65 @@ export const ScheduleGrid = ({
   onCategoryDrop,
   onItemDelete,
   onItemConfirm,
+  onEntityOrderChange,
 }: ScheduleGridProps) => {
-  // 현재 표시할 월 (분기 시작월로 초기화)
-  const [currentMonth, setCurrentMonth] = useState<Date>(() => parseISO(quarter.start_date));
+  // localStorage에서 저장된 월 복원
+  const loadSavedMonth = (quarterStart: string, quarterEnd: string): Date | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const saved = localStorage.getItem('quarterly-closing-schedule-month');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const savedDate = new Date(parsed);
+        // 저장된 날짜가 현재 quarter 범위 내인지 확인
+        const start = parseISO(quarterStart);
+        const end = parseISO(quarterEnd);
+        if (savedDate >= start && savedDate <= end) {
+          return savedDate;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load saved month:', error);
+    }
+    return null;
+  };
+
+  // 현재 표시할 월 (저장된 월 또는 분기 시작월로 초기화)
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => {
+    const saved = loadSavedMonth(quarter.start_date, quarter.end_date);
+    return saved || parseISO(quarter.start_date);
+  });
   
   // 확정 날짜 선택 다이얼로그 상태
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedItemForConfirm, setSelectedItemForConfirm] = useState<ScheduleItem | null>(null);
   const [selectedConfirmDate, setSelectedConfirmDate] = useState<Date | undefined>(undefined);
 
-  // quarter가 변경되면 현재 월을 초기화
+  // Entity 순서 변경을 위한 상태
+  const [orderedSubsidiaries, setOrderedSubsidiaries] = useState<Subsidiary[]>(subsidiaries);
+  const [draggedEntityIndex, setDraggedEntityIndex] = useState<number | null>(null);
+
+  // subsidiaries가 변경되면 orderedSubsidiaries 업데이트
   useEffect(() => {
-    setCurrentMonth(parseISO(quarter.start_date));
-  }, [quarter.start_date]);
+    setOrderedSubsidiaries(subsidiaries);
+  }, [subsidiaries]);
+
+  // quarter가 변경되면 현재 월을 초기화 (저장된 월이 있으면 사용)
+  useEffect(() => {
+    const saved = loadSavedMonth(quarter.start_date, quarter.end_date);
+    setCurrentMonth(saved || parseISO(quarter.start_date));
+  }, [quarter.start_date, quarter.end_date]);
+
+  // currentMonth 변경 시 저장
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('quarterly-closing-schedule-month', JSON.stringify(currentMonth));
+      } catch (error) {
+        console.error('Failed to save month:', error);
+      }
+    }
+  }, [currentMonth]);
 
   // 전체 분기 기간의 모든 날짜
   const allDates = eachDayOfInterval({
@@ -160,6 +207,50 @@ export const ScheduleGrid = ({
     }
   };
 
+  // Entity 드래그 핸들러
+  const handleEntityDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedEntityIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('entityIndex', index.toString());
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleEntityDragEnd = (e: React.DragEvent) => {
+    setDraggedEntityIndex(null);
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+  };
+
+  const handleEntityDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedIndex = draggedEntityIndex;
+    if (draggedIndex !== null && draggedIndex !== index) {
+      const newOrder = [...orderedSubsidiaries];
+      [newOrder[draggedIndex], newOrder[index]] = [newOrder[index], newOrder[draggedIndex]];
+      setOrderedSubsidiaries(newOrder);
+      setDraggedEntityIndex(index);
+    }
+  };
+
+  const handleEntityDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedIndex = parseInt(e.dataTransfer.getData('entityIndex'));
+    if (!isNaN(draggedIndex) && draggedIndex !== index) {
+      const newOrder = [...orderedSubsidiaries];
+      [newOrder[draggedIndex], newOrder[index]] = [newOrder[index], newOrder[draggedIndex]];
+      setOrderedSubsidiaries(newOrder);
+      if (onEntityOrderChange) {
+        onEntityOrderChange(newOrder);
+      }
+    }
+    setDraggedEntityIndex(null);
+  };
+
   return (
     <div className="space-y-4">
       {/* 월 네비게이션 */}
@@ -234,14 +325,25 @@ export const ScheduleGrid = ({
 
         {/* 바디 */}
         <tbody>
-          {subsidiaries.map((subsidiary) => {
+          {orderedSubsidiaries.map((subsidiary, entityIndex) => {
             const achievementRate = calculateBySubsidiary(scheduleItems, subsidiary.id);
 
             return (
-              <tr key={subsidiary.id} className="hover:bg-gray-50">
+              <tr 
+                key={subsidiary.id} 
+                className="hover:bg-gray-50"
+                draggable
+                onDragStart={(e) => handleEntityDragStart(e, entityIndex)}
+                onDragEnd={handleEntityDragEnd}
+                onDragOver={(e) => handleEntityDragOver(e, entityIndex)}
+                onDrop={(e) => handleEntityDrop(e, entityIndex)}
+              >
                 {/* 법인명 */}
-                <td className="border border-gray-200 px-4 py-3 font-medium text-sm sticky left-0 bg-white z-10">
-                  {subsidiary.name.replace('InBody ', '')}
+                <td className="border border-gray-200 px-2 py-3 font-medium text-sm sticky left-0 bg-white z-10">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
+                    <span>{subsidiary.name.replace('InBody ', '')}</span>
+                  </div>
                 </td>
 
                 {/* 날짜별 셀 */}

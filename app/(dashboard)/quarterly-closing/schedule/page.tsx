@@ -30,25 +30,100 @@ import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem } from '@/lib/types/quarterly-closing';
 import type { DateRange } from 'react-day-picker';
 
+const STORAGE_KEY = 'quarterly-closing-schedule-state';
+const ENTITY_ORDER_KEY = 'quarterly-closing-entity-order';
+
 export default function SchedulePage() {
+  // localStorage에서 저장된 상태 복원
+  const loadSavedState = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          selectedYear: parsed.selectedYear || '2025',
+          selectedQuarter: parsed.selectedQuarter || '1',
+          dateRange: parsed.dateRange ? {
+            from: parsed.dateRange.from ? new Date(parsed.dateRange.from) : undefined,
+            to: parsed.dateRange.to ? new Date(parsed.dateRange.to) : undefined,
+          } : undefined,
+          filterMode: parsed.filterMode || 'quarter',
+          selectedCategory: parsed.selectedCategory || null,
+        };
+      }
+    } catch (error) {
+      console.error('Failed to load saved state:', error);
+    }
+    return null;
+  };
+
+  // 상태 저장 (필터 상태는 저장하지 않음)
+  const saveState = (state: {
+    selectedYear: string;
+    selectedQuarter: string;
+    dateRange: DateRange | undefined;
+    filterMode: 'quarter' | 'custom';
+    selectedCategory: string | null;
+  }) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        selectedYear: state.selectedYear,
+        selectedQuarter: state.selectedQuarter,
+        dateRange: state.dateRange ? {
+          from: state.dateRange.from?.toISOString(),
+          to: state.dateRange.to?.toISOString(),
+        } : undefined,
+        filterMode: state.filterMode,
+        // selectedCategory는 저장하지 않음 (항상 초기에는 전체 표시)
+      }));
+    } catch (error) {
+      console.error('Failed to save state:', error);
+    }
+  };
+
+  const savedState = loadSavedState();
+  // 필터는 저장하지 않고 항상 초기에는 전체 표시
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // 카테고리 선택 핸들러 (디버깅용 로그 추가)
   const handleCategorySelect = (categoryId: string) => {
     console.log('📝 카테고리 상태 변경:', selectedCategory, '→', categoryId);
-    setSelectedCategory(categoryId);
+    // 같은 카테고리를 다시 클릭하면 필터 해제
+    const newCategory = selectedCategory === categoryId ? null : categoryId;
+    setSelectedCategory(newCategory);
+    // 상태 저장 (필터는 저장하지 않음)
+    saveState({
+      selectedYear,
+      selectedQuarter,
+      dateRange,
+      filterMode,
+      selectedCategory: null, // 필터는 저장하지 않음
+    });
   };
   
   // 필터 상태
-  const [selectedYear, setSelectedYear] = useState<string>('2025');
-  const [selectedQuarter, setSelectedQuarter] = useState<string>('1');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [filterMode, setFilterMode] = useState<'quarter' | 'custom'>('quarter');
+  const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(savedState?.selectedQuarter || '1');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(savedState?.dateRange);
+  const [filterMode, setFilterMode] = useState<'quarter' | 'custom'>(savedState?.filterMode || 'quarter');
   
   const [quarter, setQuarter] = useState<Quarter | null>(null);
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 상태 변경 시 저장 (필터는 저장하지 않음)
+  useEffect(() => {
+    saveState({
+      selectedYear,
+      selectedQuarter,
+      dateRange,
+      filterMode,
+      selectedCategory: null, // 필터는 저장하지 않음
+    });
+  }, [selectedYear, selectedQuarter, dateRange, filterMode]);
 
   // 데이터 로드
   useEffect(() => {
@@ -126,7 +201,10 @@ export default function SchedulePage() {
         .order('name');
 
       if (subsError) throw subsError;
-      setSubsidiaries(subsData || []);
+      
+      // 저장된 Entity 순서 복원
+      const orderedSubsidiaries = applyEntityOrder(subsData || []);
+      setSubsidiaries(orderedSubsidiaries);
 
       // 스케줄 항목 (quarter_id가 실제로 존재하는 경우만)
       if (quarterData.id.startsWith('temp-') || quarterData.id.startsWith('custom-')) {
@@ -147,6 +225,48 @@ export default function SchedulePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Entity 순서 적용
+  const applyEntityOrder = (subs: Subsidiary[]): Subsidiary[] => {
+    if (typeof window === 'undefined') return subs;
+    try {
+      const savedOrder = localStorage.getItem(ENTITY_ORDER_KEY);
+      if (savedOrder) {
+        const order: string[] = JSON.parse(savedOrder);
+        // 순서에 따라 정렬
+        const ordered = [...subs].sort((a, b) => {
+          const indexA = order.indexOf(a.id);
+          const indexB = order.indexOf(b.id);
+          // 순서에 없는 항목은 뒤로
+          if (indexA === -1 && indexB === -1) return 0;
+          if (indexA === -1) return 1;
+          if (indexB === -1) return -1;
+          return indexA - indexB;
+        });
+        return ordered;
+      }
+    } catch (error) {
+      console.error('Failed to load entity order:', error);
+    }
+    return subs;
+  };
+
+  // Entity 순서 저장
+  const saveEntityOrder = (order: string[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(ENTITY_ORDER_KEY, JSON.stringify(order));
+    } catch (error) {
+      console.error('Failed to save entity order:', error);
+    }
+  };
+
+  // Entity 순서 변경 핸들러
+  const handleEntityOrderChange = (newOrder: Subsidiary[]) => {
+    setSubsidiaries(newOrder);
+    saveEntityOrder(newOrder.map(s => s.id));
+    toast.success('Entity 순서가 저장되었습니다.');
   };
 
   // Date Range 변경 핸들러
@@ -566,7 +686,12 @@ export default function SchedulePage() {
     );
   }
 
-  const achievementRate = calculateAchievementRate(scheduleItems);
+  // 필터링된 스케줄 항목 (카테고리 필터 적용)
+  const filteredScheduleItems = selectedCategory
+    ? scheduleItems.filter((item) => item.category === selectedCategory)
+    : scheduleItems;
+
+  const achievementRate = calculateAchievementRate(filteredScheduleItems);
 
   return (
     <div className="flex h-[calc(100vh-12rem)]">
@@ -582,12 +707,29 @@ export default function SchedulePage() {
         {/* 상단 헤더 */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Schedule</h2>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Schedule</h2>
+              {selectedCategory && (
+                <p className="text-sm text-gray-600 mt-1">
+                  필터: {getCategoryById(selectedCategory as any)?.label || selectedCategory}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-2 h-6 px-2 text-xs"
+                    onClick={() => setSelectedCategory(null)}
+                  >
+                    필터 해제
+                  </Button>
+                </p>
+              )}
+            </div>
 
             {/* 전체 성사율 */}
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <p className="text-sm text-gray-500">전체 성사율</p>
+                <p className="text-sm text-gray-500">
+                  {selectedCategory ? '필터된 성사율' : '전체 성사율'}
+                </p>
                 <p className="text-3xl font-bold text-blue-600">{achievementRate}%</p>
               </div>
 
@@ -699,12 +841,13 @@ export default function SchedulePage() {
         <ScheduleGrid
           quarter={quarter}
           subsidiaries={subsidiaries}
-          scheduleItems={scheduleItems}
+          scheduleItems={filteredScheduleItems}
           selectedCategory={selectedCategory}
           onCellClick={handleCellClick}
           onCategoryDrop={handleCategoryDrop}
           onItemDelete={handleItemDelete}
           onItemConfirm={handleItemConfirm}
+          onEntityOrderChange={handleEntityOrderChange}
         />
       </div>
     </div>

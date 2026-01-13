@@ -1,6 +1,6 @@
 /**
  * Quarterly Closing 카테고리 상수
- * 9개 결산 서류 카테고리 정의
+ * 10개 결산 서류 카테고리 정의
  */
 
 export const CLOSING_CATEGORIES = [
@@ -13,6 +13,7 @@ export const CLOSING_CATEGORIES = [
   { id: 'sga-detail', label: 'SG&A detail', color: '#F97316' },
   { id: 'demo-detail', label: 'Demo detail', color: '#6366F1' },
   { id: 'pkg', label: 'PKG', color: '#EF4444' },
+  { id: 'interco-transaction', label: 'Interco transaction', color: '#06B6D4' },
 ] as const;
 
 /**

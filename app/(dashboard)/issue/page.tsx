@@ -174,147 +174,151 @@ export default function IssuePage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Issue Management</h1>
-          <p className="text-sm text-gray-600 mt-1">해외법인 이슈 통합 관리</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportExcel}>
-            <Download className="w-4 h-4 mr-2" />
-            Excel 다운로드
-          </Button>
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Issue
-          </Button>
-        </div>
-      </div>
-
-      {/* 통계 및 필터 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-        <StatCard
-          title="전체 이슈"
-          value={stats.total}
-          icon={<FileText className="w-5 h-5" />}
-          color="blue"
-          onClick={handleResetFilters}
-        />
-        <StatCard
-          title="확인 중"
-          value={stats.inProgress}
-          icon={<Clock className="w-5 h-5" />}
-          color="orange"
-        />
-        <StatCard
-          title="완료"
-          value={stats.completed}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="green"
-        />
-        <StatCard
-          title="완료율"
-          value={`${stats.completionRate}%`}
-          icon={<TrendingUp className="w-5 h-5" />}
-          color="purple"
-        />
-        <FilterCard
-          title="카테고리"
-          value={filters.categories.length > 0 ? `${filters.categories.length}개` : '전체'}
-          icon={<Tag className="w-5 h-5" />}
-          color="gray"
-          onClick={() => setCategoryDialogOpen(true)}
-          isActive={filters.categories.length > 0}
-        />
-        <FilterCard
-          title="Entity"
-          value={filters.entities.length > 0 ? `${filters.entities.length}개` : '전체'}
-          icon={<Building2 className="w-5 h-5" />}
-          color="gray"
-          onClick={() => setEntityDialogOpen(true)}
-          isActive={filters.entities.length > 0}
-        />
-      </div>
-
-      {/* 검색 및 필터 */}
-      <div className="bg-white rounded-lg border p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* 검색 */}
-          <div className="md:col-span-1">
-            <Input
-              placeholder="제목, 카테고리, Entity로 검색..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="w-full"
-            />
-          </div>
-
-          {/* 정렬 */}
-          <Select value={sortBy} onValueChange={(value) => setSortBy(value as IssueSortOption)}>
-            <SelectTrigger>
-              <SelectValue placeholder="정렬" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="created_desc">최신순</SelectItem>
-              <SelectItem value="created_asc">오래된순</SelectItem>
-              <SelectItem value="entity">Entity순</SelectItem>
-              <SelectItem value="category">카테고리순</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* 상태 필터 */}
-          <Select
-            value={filters.statuses[0] || 'all'}
-            onValueChange={(value) =>
-              setFilters({
-                ...filters,
-                statuses: value === 'all' ? [] : [value as any],
-              })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="상태" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">전체 상태</SelectItem>
-              {ISSUE_STATUS_LIST.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* 이슈 목록 */}
-      <div className="space-y-4">
+    <div className="flex flex-col h-full max-h-screen overflow-hidden">
+      <div className="flex-shrink-0 space-y-6 pb-6">
+        {/* 헤더 */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">
-            📋 이슈 목록 ({displayedIssues.length}개)
-          </h2>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Issue Management</h1>
+            <p className="text-sm text-gray-600 mt-1">해외법인 이슈 통합 관리</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="w-4 h-4 mr-2" />
+              Excel 다운로드
+            </Button>
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Issue
+            </Button>
+          </div>
         </div>
 
-        {displayedIssues.length === 0 ? (
-          <div className="bg-white rounded-lg border p-12 text-center">
-            <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 mb-2">표시할 이슈가 없습니다</p>
-            <p className="text-sm text-gray-500">새로운 이슈를 등록해보세요</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {displayedIssues.map((issue) => (
-              <IssueCard
-                key={issue.id}
-                issue={issue}
-                subsidiary={subsidiaries.find((s) => s.id === issue.entity_id)}
-                onClick={() => setSelectedIssue(issue)}
+        {/* 통계 및 필터 카드 */}
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <StatCard
+            title="전체 이슈"
+            value={stats.total}
+            icon={<FileText className="w-5 h-5" />}
+            color="blue"
+            onClick={handleResetFilters}
+          />
+          <StatCard
+            title="확인 중"
+            value={stats.inProgress}
+            icon={<Clock className="w-5 h-5" />}
+            color="orange"
+          />
+          <StatCard
+            title="완료"
+            value={stats.completed}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="green"
+          />
+          <StatCard
+            title="완료율"
+            value={`${stats.completionRate}%`}
+            icon={<TrendingUp className="w-5 h-5" />}
+            color="purple"
+          />
+          <FilterCard
+            title="카테고리"
+            value={filters.categories.length > 0 ? `${filters.categories.length}개` : '전체'}
+            icon={<Tag className="w-5 h-5" />}
+            color="gray"
+            onClick={() => setCategoryDialogOpen(true)}
+            isActive={filters.categories.length > 0}
+          />
+          <FilterCard
+            title="Entity"
+            value={filters.entities.length > 0 ? `${filters.entities.length}개` : '전체'}
+            icon={<Building2 className="w-5 h-5" />}
+            color="gray"
+            onClick={() => setEntityDialogOpen(true)}
+            isActive={filters.entities.length > 0}
+          />
+        </div>
+
+        {/* 검색 및 필터 */}
+        <div className="bg-white rounded-lg border p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 검색 */}
+            <div className="md:col-span-1">
+              <Input
+                placeholder="제목, 카테고리, Entity로 검색..."
+                value={filters.search}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                className="w-full"
               />
-            ))}
+            </div>
+
+            {/* 정렬 */}
+            <Select value={sortBy} onValueChange={(value) => setSortBy(value as IssueSortOption)}>
+              <SelectTrigger>
+                <SelectValue placeholder="정렬" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created_desc">최신순</SelectItem>
+                <SelectItem value="created_asc">오래된순</SelectItem>
+                <SelectItem value="entity">Entity순</SelectItem>
+                <SelectItem value="category">카테고리순</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* 상태 필터 */}
+            <Select
+              value={filters.statuses[0] || 'all'}
+              onValueChange={(value) =>
+                setFilters({
+                  ...filters,
+                  statuses: value === 'all' ? [] : [value as any],
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="상태" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 상태</SelectItem>
+                {ISSUE_STATUS_LIST.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* 이슈 목록 - 스크롤 가능 영역 */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="space-y-4 pb-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">
+              📋 이슈 목록 ({displayedIssues.length}개)
+            </h2>
+          </div>
+
+          {displayedIssues.length === 0 ? (
+            <div className="bg-white rounded-lg border p-12 text-center">
+              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 mb-2">표시할 이슈가 없습니다</p>
+              <p className="text-sm text-gray-500">새로운 이슈를 등록해보세요</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {displayedIssues.map((issue) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  subsidiary={subsidiaries.find((s) => s.id === issue.entity_id)}
+                  onClick={() => setSelectedIssue(issue)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 이슈 생성 다이얼로그 */}
