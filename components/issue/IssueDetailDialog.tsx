@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { Pencil, Trash2, CheckCircle } from 'lucide-react';
@@ -55,6 +55,19 @@ export function IssueDetailDialog({
     response: issue.response || '',
     status: issue.status,
   });
+
+  // issue prop이 변경될 때 formData 업데이트
+  useEffect(() => {
+    setFormData({
+      title: issue.title,
+      category: issue.category,
+      description: issue.description,
+      response: issue.response || '',
+      status: issue.status,
+    });
+    // 수정 모드가 열려있으면 닫기
+    setIsEditing(false);
+  }, [issue]);
 
   const handleUpdate = async () => {
     try {

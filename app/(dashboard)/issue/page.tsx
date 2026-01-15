@@ -336,7 +336,15 @@ export default function IssuePage() {
           subsidiary={subsidiaries.find((s) => s.id === selectedIssue.entity_id)}
           open={!!selectedIssue}
           onOpenChange={(open) => !open && setSelectedIssue(null)}
-          onUpdate={loadData}
+          onUpdate={async () => {
+            await loadData();
+            // 업데이트 후 최신 이슈 데이터로 selectedIssue 업데이트
+            const updatedIssues = await getAllIssues();
+            const updatedIssue = updatedIssues.find((i) => i.id === selectedIssue.id);
+            if (updatedIssue) {
+              setSelectedIssue(updatedIssue);
+            }
+          }}
           onDelete={loadData}
         />
       )}

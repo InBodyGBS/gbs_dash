@@ -14,6 +14,7 @@ export interface Issue {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  period?: string | null; // Year+Quarter 형식 (예: 20254Q)
 }
 
 export type IssueCategory =
@@ -30,6 +31,8 @@ export type IssueCategory =
   | 'Bad debt'
   | 'Allowance'
   | 'FS'
+  | 'Sales'
+  | 'Demo'
   | 'Others';
 
 export type IssueStatus = '확인 중' | '완료';
@@ -42,6 +45,7 @@ export interface IssueFormData {
   response?: string;
   status?: IssueStatus;
   created_by: string;
+  period?: string; // Year+Quarter 형식 (예: 20254Q), 필수 아님
 }
 
 export interface IssueFilters {

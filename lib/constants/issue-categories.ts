@@ -18,6 +18,8 @@ export const ISSUE_CATEGORIES: readonly IssueCategory[] = [
   'Bad debt',         // 대손
   'Allowance',        // 충당금
   'FS',               // 재무제표
+  'Sales',            // 영업
+  'Demo',             // 데모
   'Others',           // 기타
 ] as const;
 
@@ -43,6 +45,8 @@ export const CATEGORY_COLORS: Record<IssueCategory, string> = {
   'Bad debt': '#DC2626',         // red-600
   'Allowance': '#7C3AED',        // violet-600
   'FS': '#2563EB',               // blue-600
+  'Sales': '#22C55E',            // green-500
+  'Demo': '#A855F7',             // purple-500
   'Others': '#6B7280',           // gray-500
 };
 
@@ -61,6 +65,8 @@ export const CATEGORY_LABELS: Record<IssueCategory, string> = {
   'Bad debt': '대손',
   'Allowance': '충당금',
   'FS': '재무제표',
+  'Sales': '영업',
+  'Demo': '데모',
   'Others': '기타',
 };
 

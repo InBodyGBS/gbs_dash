@@ -49,6 +49,7 @@ export function IssueCreateDialog({
     entity_id: '',
     description: '',
     response: '',
+    period: '',
     created_by: '조승현', // TODO: 실제 사용자 인증 연동
   });
 
@@ -97,6 +98,7 @@ export function IssueCreateDialog({
         category: parsed.category as IssueCategory,
         entity_id: subsidiary?.id || subsidiaries.find((s) => s.code === 'HQ')?.id || '',
         description: parsed.description,
+        period: parsed.period || '',
       });
 
       toast.dismiss();
@@ -121,7 +123,17 @@ export function IssueCreateDialog({
 
     try {
       setLoading(true);
-      await createIssue(formData as IssueFormData);
+      const issueData = {
+        title: formData.title!,
+        category: formData.category!,
+        entity_id: formData.entity_id!,
+        description: formData.description!,
+        response: formData.response || undefined,
+        period: formData.period || undefined,
+        created_by: formData.created_by || '조승현',
+      };
+      console.log('📤 Sending issue data:', issueData);
+      const newIssue = await createIssue(issueData);
       toast.success('이슈가 등록되었습니다');
       onSuccess();
       onOpenChange(false);
@@ -132,6 +144,7 @@ export function IssueCreateDialog({
         entity_id: '',
         description: '',
         response: '',
+        period: '',
         created_by: '조승현',
       });
       setAiInput('');
@@ -200,8 +213,8 @@ export function IssueCreateDialog({
               />
             </div>
 
-            {/* 카테고리 & Entity */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* 카테고리 & Entity & 기간 */}
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="category">
                   카테고리 <span className="text-red-500">*</span>
@@ -254,6 +267,17 @@ export function IssueCreateDialog({
                     })}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="period">기간 (선택)</Label>
+                <Input
+                  id="period"
+                  placeholder="예: 20254Q"
+                  value={formData.period}
+                  onChange={(e) => setFormData({ ...formData, period: e.target.value })}
+                  maxLength={10}
+                />
               </div>
             </div>
 

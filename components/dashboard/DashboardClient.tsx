@@ -2,12 +2,13 @@
 
 /**
  * 대시보드 클라이언트 컴포넌트
- * WorldMap과 SubsidiaryCard를 연결하고 상태를 관리합니다.
+ * WorldMap(전체), SubsidiaryCardGrid(국내/해외)와 SubsidiaryCard를 연결하고 상태를 관리합니다.
  */
 
 import { useState, useMemo } from 'react';
 import type { Subsidiary } from '@/lib/supabase/types';
 import { WorldMap } from './WorldMap';
+import { SubsidiaryCardGrid } from './SubsidiaryCardGrid';
 import { SubsidiaryCard } from './SubsidiaryCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useSidebar } from '@/lib/contexts/SidebarContext';
@@ -20,7 +21,7 @@ type FilterType = 'all' | 'domestic' | 'overseas';
 
 /**
  * 대시보드 메인 클라이언트 컴포넌트
- * 법인 선택 상태를 관리하고 지도와 카드를 조율합니다.
+ * 법인 선택 상태를 관리하고 지도(전체) 또는 카드 그리드(국내/해외)와 상세 카드를 조율합니다.
  */
 export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
   const [selectedSubsidiaryId, setSelectedSubsidiaryId] = useState<string | null>(null);
@@ -61,7 +62,7 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* 탭 필터 - Header 아래, 지도 위 */}
+      {/* 탭 필터 - Header 아래 */}
       <div className="px-6 py-4 border-b border-gray-200 bg-white">
         <Tabs value={filterType} onValueChange={(value) => setFilterType(value as FilterType)}>
           <TabsList>
@@ -72,20 +73,28 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
         </Tabs>
       </div>
 
-      {/* 지도 및 카드 영역 - full screen */}
+      {/* 지도/카드 그리드 및 상세 카드 영역 - full screen */}
       <div className="flex-1 w-full flex relative overflow-hidden">
-        {/* 지도 영역 - full screen */}
+        {/* 지도 또는 카드 그리드 영역 - full screen */}
         <div
           className="transition-all duration-300 w-full h-full"
           style={{
             width: selectedSubsidiaryId ? `calc(100% - ${popupWidth}px)` : '100%',
           }}
         >
-          <WorldMap
-            subsidiaries={filteredSubsidiaries}
-            selectedId={selectedSubsidiaryId}
-            onSubsidiaryClick={setSelectedSubsidiaryId}
-          />
+          {filterType === 'all' ? (
+            <WorldMap
+              subsidiaries={filteredSubsidiaries}
+              selectedId={selectedSubsidiaryId}
+              onSubsidiaryClick={setSelectedSubsidiaryId}
+            />
+          ) : (
+            <SubsidiaryCardGrid
+              subsidiaries={filteredSubsidiaries}
+              selectedId={selectedSubsidiaryId}
+              onSubsidiaryClick={setSelectedSubsidiaryId}
+            />
+          )}
         </div>
 
         {/* 법인 정보 카드 (우측 패널) */}
