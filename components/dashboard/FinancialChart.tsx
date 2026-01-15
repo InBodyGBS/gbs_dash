@@ -25,8 +25,7 @@ interface FinancialChartProps {
 
 interface ChartDataPoint {
   period: string;
-  revenue: number; // 억원 단위
-  revenueRaw: number; // 원 단위 (tooltip용)
+  revenue: number; // 원 단위
 }
 
 /**
@@ -46,8 +45,7 @@ export const FinancialChart = ({ data }: FinancialChartProps) => {
 
     return sorted.map((d) => ({
       period: formatPeriod(d.fiscal_year, d.quarter),
-      revenue: d.revenue_krw / 100000000, // 억원 단위
-      revenueRaw: d.revenue_krw,
+      revenue: d.revenue_krw, // 원 단위
     }));
   }, [data]);
 
@@ -76,8 +74,16 @@ export const FinancialChart = ({ data }: FinancialChartProps) => {
           tick={{ fontSize: 10, fill: '#6b7280' }}
           tickLine={false}
           axisLine={{ stroke: '#e5e7eb' }}
-          tickFormatter={(value) => `${value}억`}
-          width={40}
+          tickFormatter={(value) => {
+            if (value >= 100000000) {
+              return `${(value / 100000000).toFixed(0)}억`;
+            }
+            if (value >= 10000) {
+              return `${(value / 10000).toFixed(0)}만`;
+            }
+            return value.toLocaleString();
+          }}
+          width={50}
         />
         <Tooltip content={<CustomTooltip />} />
         <Bar
@@ -104,7 +110,7 @@ const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
     <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
       <p className="text-sm font-medium text-gray-900 mb-1">{data.period}</p>
       <p className="text-lg font-bold text-blue-600">
-        {formatKRW(data.revenueRaw)}
+        {formatKRW(data.revenue)}
       </p>
     </div>
   );

@@ -52,15 +52,17 @@ export default function SystemPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
       {/* 헤더 */}
-      <div>
+      <div className="flex-shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">System Management</h1>
         <p className="text-sm text-gray-600 mt-1">법인별 IT 시스템 현황 관리</p>
       </div>
 
       {/* 컨텐츠 영역 */}
-      <SystemGrid subsidiaries={subsidiaries} systems={systems} onUpdate={loadData} />
+      <div className="flex-1 overflow-hidden">
+        <SystemGrid subsidiaries={subsidiaries} systems={systems} onUpdate={loadData} />
+      </div>
     </div>
   );
 }

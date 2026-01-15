@@ -24,12 +24,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Project, Task, SystemCategory, ProjectStatus, TaskStatus } from '@/lib/types/system';
 import type { Subsidiary } from '@/lib/supabase/types';
 import {
   createProject,
   updateProject,
+  deleteProject,
   getTasks,
   createTask,
   updateTask,
@@ -169,11 +171,47 @@ export function ProjectDialog({
     }
   };
 
+  const handleDelete = async () => {
+    if (!project) return;
+    
+    if (!confirm('이 프로젝트를 삭제하시겠습니까? 모든 Task도 함께 삭제됩니다.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await deleteProject(project.id);
+      toast.success('프로젝트가 삭제되었습니다');
+      onSuccess();
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      toast.error('삭제 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!max-w-[70vw] !w-[70vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{project ? '프로젝트 수정' : 'New Project'}</DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>{project ? '프로젝트 수정' : 'New Project'}</DialogTitle>
+            {project && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={handleDelete}
+                disabled={loading}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                삭제
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {project ? (
@@ -213,7 +251,7 @@ export function ProjectDialog({
                       <SelectContent>
                         {subsidiaries.map((sub) => (
                           <SelectItem key={sub.id} value={sub.id}>
-                            {sub.name} ({sub.code})
+                            {sub.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -351,7 +389,7 @@ export function ProjectDialog({
                   <SelectContent>
                     {subsidiaries.map((sub) => (
                       <SelectItem key={sub.id} value={sub.id}>
-                        {sub.name} ({sub.code})
+                        {sub.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -121,18 +121,38 @@ export function IssueCreateDialog({
       return;
     }
 
+    const issueData: any = {
+      title: formData.title!,
+      category: formData.category!,
+      entity_id: formData.entity_id!,
+      description: formData.description!,
+      created_by: formData.created_by || '조승현',
+    };
+
+    // 선택적 필드: 값이 있을 때만 추가
+    if (formData.response && formData.response.trim()) {
+      issueData.response = formData.response.trim();
+    }
+    if (formData.period && formData.period.trim()) {
+      issueData.period = formData.period.trim();
+    }
+
+    // 디버깅용
+    console.log('📤 Issue Data being sent:', issueData);
+    console.log('📝 All fields:', {
+      hasTitle: !!issueData.title,
+      hasCategory: !!issueData.category,
+      hasEntityId: !!issueData.entity_id,
+      hasDescription: !!issueData.description,
+      hasResponse: !!issueData.response,
+      hasPeriod: !!issueData.period,
+      periodValue: issueData.period || '(empty)',
+      hasCreatedBy: !!issueData.created_by,
+    });
+    console.log('🔍 Raw formData.period:', formData.period);
+
     try {
       setLoading(true);
-      const issueData = {
-        title: formData.title!,
-        category: formData.category!,
-        entity_id: formData.entity_id!,
-        description: formData.description!,
-        response: formData.response || undefined,
-        period: formData.period || undefined,
-        created_by: formData.created_by || '조승현',
-      };
-      console.log('📤 Sending issue data:', issueData);
       const newIssue = await createIssue(issueData);
       toast.success('이슈가 등록되었습니다');
       onSuccess();
@@ -149,7 +169,13 @@ export function IssueCreateDialog({
       });
       setAiInput('');
     } catch (error) {
-      console.error('Failed to create issue:', error);
+      console.error('❌ Detailed Error:', error);
+      // error 객체 전체를 출력
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as any;
+        console.error('Response data:', axiosError.response?.data);
+        console.error('Response status:', axiosError.response?.status);
+      }
       toast.error('이슈 등록 실패');
     } finally {
       setLoading(false);

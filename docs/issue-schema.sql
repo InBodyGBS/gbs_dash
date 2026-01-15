@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS issues (
   entity_id UUID NOT NULL REFERENCES subsidiaries(id) ON DELETE CASCADE,
   description TEXT NOT NULL,
   response TEXT,
+  period TEXT, -- Year+Quarter 형식 (예: 20254Q)
   status TEXT NOT NULL DEFAULT '확인 중',
   created_by TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

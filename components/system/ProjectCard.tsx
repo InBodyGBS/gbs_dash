@@ -8,8 +8,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Calendar, User, CheckCircle, Clock, AlertCircle, Pause } from 'lucide-react';
+import { Calendar, User, CheckCircle, Clock, AlertCircle, Pause, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import type { Project, Task } from '@/lib/types/system';
 import type { Subsidiary } from '@/lib/supabase/types';
 import { getTasks } from '@/lib/services/projectService';
@@ -19,6 +20,7 @@ interface ProjectCardProps {
   project: Project;
   subsidiary?: Subsidiary;
   onClick: () => void;
+  onDelete?: (projectId: string) => void;
 }
 
 const STATUS_CONFIG: Record<
@@ -60,7 +62,7 @@ const TASK_STATUS_ICONS: Record<Task['status'], React.ReactNode> = {
   보류: <Pause className="w-3 h-3 text-orange-500" />,
 };
 
-export function ProjectCard({ project, subsidiary, onClick }: ProjectCardProps) {
+export function ProjectCard({ project, subsidiary, onClick, onDelete }: ProjectCardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,6 +96,13 @@ export function ProjectCard({ project, subsidiary, onClick }: ProjectCardProps) 
   const previewTasks = tasks.slice(0, 5);
   const remainingTasks = tasks.length - previewTasks.length;
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 카드 클릭 이벤트 방지
+    if (onDelete) {
+      onDelete(project.id);
+    }
+  };
+
   return (
     <Card
       className="cursor-pointer hover:shadow-lg transition-shadow border-l-4"
@@ -105,6 +114,17 @@ export function ProjectCard({ project, subsidiary, onClick }: ProjectCardProps) 
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-lg font-semibold text-gray-900">{project.title}</h3>
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleDelete}
+                  title="프로젝트 삭제"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
               <span>{subsidiary?.name || 'Unknown'}</span>

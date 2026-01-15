@@ -54,6 +54,7 @@ export function IssueDetailDialog({
     description: issue.description,
     response: issue.response || '',
     status: issue.status,
+    period: issue.period || '',
   });
 
   // issue prop이 변경될 때 formData 업데이트
@@ -64,6 +65,7 @@ export function IssueDetailDialog({
       description: issue.description,
       response: issue.response || '',
       status: issue.status,
+      period: issue.period || '',
     });
     // 수정 모드가 열려있으면 닫기
     setIsEditing(false);
@@ -91,14 +93,10 @@ export function IssueDetailDialog({
 
     try {
       setLoading(true);
-      const success = await deleteIssue(issue.id);
-      if (success) {
-        toast.success('이슈가 삭제되었습니다');
-        onOpenChange(false);
-        onDelete();
-      } else {
-        toast.error('이슈 삭제 실패');
-      }
+      await deleteIssue(issue.id);
+      toast.success('이슈가 삭제되었습니다');
+      onOpenChange(false);
+      onDelete();
     } catch (error) {
       console.error('Failed to delete issue:', error);
       toast.error('이슈 삭제 실패');
@@ -113,6 +111,7 @@ export function IssueDetailDialog({
       await updateIssue(issue.id, { status: '완료' });
       toast.success('이슈가 완료 처리되었습니다');
       onUpdate();
+      onOpenChange(false); // 팝업 닫기
     } catch (error) {
       console.error('Failed to mark as completed:', error);
       toast.error('완료 처리 실패');
@@ -159,7 +158,7 @@ export function IssueDetailDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="edit-category">카테고리</Label>
                 <Select
@@ -196,6 +195,17 @@ export function IssueDetailDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="edit-period">기간 (선택)</Label>
+                <Input
+                  id="edit-period"
+                  placeholder="예: 20254Q"
+                  value={formData.period}
+                  onChange={(e) => setFormData({ ...formData, period: e.target.value })}
+                  maxLength={10}
+                />
               </div>
             </div>
 
@@ -277,6 +287,12 @@ export function IssueDetailDialog({
                   <span className="text-gray-900">
                     {format(new Date(issue.completed_at), 'yyyy년 MM월 dd일 HH:mm', { locale: ko })}
                   </span>
+                </div>
+              )}
+              {issue.period && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-gray-700">📆 기간:</span>
+                  <span className="text-gray-900">{issue.period}</span>
                 </div>
               )}
             </div>

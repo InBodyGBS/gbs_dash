@@ -2,7 +2,7 @@
  * System 관리 관련 타입 정의
  */
 
-export type SystemCategory = 'ERP' | 'CRM' | '생산관리' | '물류' | '회계' | 'CS' | 'Payroll' | '기타';
+export type SystemCategory = 'ERP' | 'CRM' | '물류' | '회계' | 'CS' | 'Payroll' | '생산관리' | '기타';
 
 export interface System {
   id: string;

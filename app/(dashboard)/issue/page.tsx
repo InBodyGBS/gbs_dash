@@ -208,12 +208,28 @@ export default function IssuePage() {
             value={stats.inProgress}
             icon={<Clock className="w-5 h-5" />}
             color="orange"
+            onClick={() => {
+              const isActive = filters.statuses.includes('확인 중');
+              setFilters({
+                ...filters,
+                statuses: isActive ? [] : ['확인 중'],
+              });
+            }}
+            isActive={filters.statuses.includes('확인 중')}
           />
           <StatCard
             title="완료"
             value={stats.completed}
             icon={<CheckCircle className="w-5 h-5" />}
             color="green"
+            onClick={() => {
+              const isActive = filters.statuses.includes('완료');
+              setFilters({
+                ...filters,
+                statuses: isActive ? [] : ['완료'],
+              });
+            }}
+            isActive={filters.statuses.includes('완료')}
           />
           <StatCard
             title="완료율"
@@ -342,7 +358,12 @@ export default function IssuePage() {
             const updatedIssues = await getAllIssues();
             const updatedIssue = updatedIssues.find((i) => i.id === selectedIssue.id);
             if (updatedIssue) {
-              setSelectedIssue(updatedIssue);
+              // 완료 처리된 경우 팝업 닫기
+              if (updatedIssue.status === '완료') {
+                setSelectedIssue(null);
+              } else {
+                setSelectedIssue(updatedIssue);
+              }
             }
           }}
           onDelete={loadData}

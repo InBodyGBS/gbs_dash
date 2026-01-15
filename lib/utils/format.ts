@@ -7,12 +7,22 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 /**
+ * 원화를 원 단위로 포맷팅
+ * @param amount - 원화 금액 (원 단위)
+ * @returns 원 단위 문자열 (예: "50,000,000,000원")
+ * @example formatKRW(50000000000) // "50,000,000,000원"
+ */
+export const formatKRW = (amount: number): string => {
+  return `${amount.toLocaleString('ko-KR')}원`;
+};
+
+/**
  * 원화를 억원 단위로 포맷팅
  * @param amount - 원화 금액 (원 단위)
  * @returns 억원 단위 문자열 (예: "500억원")
- * @example formatKRW(50000000000) // "500억원"
+ * @example formatKRWInBillion(50000000000) // "500억원"
  */
-export const formatKRW = (amount: number): string => {
+export const formatKRWInBillion = (amount: number): string => {
   const billion = amount / 100000000;
   return `${billion.toLocaleString('ko-KR')}억원`;
 };

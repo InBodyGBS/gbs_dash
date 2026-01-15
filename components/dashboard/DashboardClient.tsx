@@ -11,6 +11,7 @@ import { WorldMap } from './WorldMap';
 import { SubsidiaryCardGrid } from './SubsidiaryCardGrid';
 import { SubsidiaryCard } from './SubsidiaryCard';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useSidebar } from '@/lib/contexts/SidebarContext';
 
 interface DashboardClientProps {
@@ -28,10 +29,8 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const { sidebarOpen } = useSidebar();
 
-  // Sidebar 상태에 따라 팝업 너비 동적 조정
+  // Sidebar 상태에 따라 팝업 너비 동적 조정 (전체 탭에서만 사용)
   const popupWidth = useMemo(() => {
-    // Sidebar가 열려있으면 팝업을 더 작게 (240px), 닫혀있으면 320px
-    // Sidebar 너비(256px)를 고려하여 팝업이 화면 밖으로 나가지 않도록 조정
     return sidebarOpen ? 240 : 320;
   }, [sidebarOpen]);
 
@@ -73,13 +72,13 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
         </Tabs>
       </div>
 
-      {/* 지도/카드 그리드 및 상세 카드 영역 - full screen */}
+      {/* 지도/카드 그리드 및 상세 카드 영역 */}
       <div className="flex-1 w-full flex relative overflow-hidden">
-        {/* 지도 또는 카드 그리드 영역 - full screen */}
+        {/* 지도 또는 카드 그리드 영역 */}
         <div
           className="transition-all duration-300 w-full h-full"
           style={{
-            width: selectedSubsidiaryId ? `calc(100% - ${popupWidth}px)` : '100%',
+            width: filterType === 'all' && selectedSubsidiaryId ? `calc(100% - ${popupWidth}px)` : '100%',
           }}
         >
           {filterType === 'all' ? (
@@ -97,8 +96,8 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
           )}
         </div>
 
-        {/* 법인 정보 카드 (우측 패널) */}
-        {selectedSubsidiaryId && (
+        {/* 법인 정보 카드 (전체 탭: 우측 패널) */}
+        {filterType === 'all' && selectedSubsidiaryId && (
           <div
             className="absolute right-0 top-0 bottom-0 z-10"
             style={{ width: `${popupWidth}px` }}
@@ -110,6 +109,20 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
           </div>
         )}
       </div>
+
+      {/* 법인 정보 카드 (국내/해외 탭: 가운데 팝업) */}
+      {filterType !== 'all' && (
+        <Dialog open={!!selectedSubsidiaryId} onOpenChange={(open) => !open && setSelectedSubsidiaryId(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+            {selectedSubsidiaryId && (
+              <SubsidiaryCard
+                subsidiaryId={selectedSubsidiaryId}
+                onClose={() => setSelectedSubsidiaryId(null)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

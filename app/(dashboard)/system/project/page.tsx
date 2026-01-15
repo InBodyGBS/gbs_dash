@@ -202,6 +202,7 @@ export default function ProjectPage() {
                   project={project}
                   subsidiary={subsidiaries.find((s) => s.id === project.entity_id)}
                   onClick={() => setSelectedProject(project)}
+                  onDelete={handleDelete}
                 />
               ))}
             </div>
@@ -226,13 +227,8 @@ export default function ProjectPage() {
           subsidiaries={subsidiaries}
           onSuccess={() => {
             loadData();
-            // 업데이트 후 최신 프로젝트 데이터로 업데이트
-            getProjects().then((updatedProjects) => {
-              const updated = updatedProjects.find((p) => p.id === selectedProject.id);
-              if (updated) {
-                setSelectedProject(updated);
-              }
-            });
+            // 수정 후 팝업 자동 종료
+            setSelectedProject(null);
           }}
         />
       )}

@@ -66,10 +66,10 @@ export const SubsidiaryCard = ({ subsidiaryId, onClose }: SubsidiaryCardProps) =
   if (!subsidiaryId) return null;
 
   return (
-    <div className="h-full w-full bg-white rounded-lg shadow-lg border border-gray-200 animate-in slide-in-from-right duration-300">
-      <Card className="h-full border-0 rounded-lg overflow-y-auto">
+    <div className="w-full">
+      <Card className="border-0 rounded-lg">
         {/* 헤더 */}
-        <CardHeader className="sticky top-0 bg-white border-b z-10 pb-3">
+        <CardHeader className="sticky top-0 bg-white border-b z-10 pb-3 px-6 pt-6">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               {loading ? (
@@ -96,7 +96,7 @@ export const SubsidiaryCard = ({ subsidiaryId, onClose }: SubsidiaryCardProps) =
         </CardHeader>
 
         {/* 컨텐츠 */}
-        <CardContent className="pt-4 px-4">
+        <CardContent className="pt-4 px-6 pb-6">
           {/* 로딩 상태 */}
           {loading && (
             <div className="space-y-3">

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Calendar as CalendarIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -17,15 +17,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { CategorySidebar } from '@/components/quarterly-closing/CategorySidebar';
 import { ScheduleGrid } from '@/components/quarterly-closing/ScheduleGrid';
 import { calculateAchievementRate } from '@/lib/utils/achievement-rate';
-import { format, eachDayOfInterval, parseISO } from 'date-fns';
-import { getCategoryById, CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import { format, addDays, differenceInDays, eachDayOfInterval, parseISO } from 'date-fns';
+import { getCategoryById } from '@/lib/constants/closing-categories';
 import { cn } from '@/lib/utils';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quarterly-closing';
+import type { DateRange } from 'react-day-picker';
 import { OverviewGrid } from '@/components/quarterly-closing/OverviewGrid';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -43,6 +46,12 @@ export default function SchedulePage() {
         return {
           selectedYear: parsed.selectedYear || '2025',
           selectedQuarter: parsed.selectedQuarter || '1',
+          dateRange: parsed.dateRange ? {
+            from: parsed.dateRange.from ? new Date(parsed.dateRange.from) : undefined,
+            to: parsed.dateRange.to ? new Date(parsed.dateRange.to) : undefined,
+          } : undefined,
+          filterMode: parsed.filterMode || 'quarter',
+          selectedCategory: parsed.selectedCategory || null,
         };
       }
     } catch (error) {
@@ -51,16 +60,25 @@ export default function SchedulePage() {
     return null;
   };
 
-  // 상태 저장
+  // 상태 저장 (필터 상태는 저장하지 않음)
   const saveState = (state: {
     selectedYear: string;
     selectedQuarter: string;
+    dateRange: DateRange | undefined;
+    filterMode: 'quarter' | 'custom';
+    selectedCategory: string | null;
   }) => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         selectedYear: state.selectedYear,
         selectedQuarter: state.selectedQuarter,
+        dateRange: state.dateRange ? {
+          from: state.dateRange.from?.toISOString(),
+          to: state.dateRange.to?.toISOString(),
+        } : undefined,
+        filterMode: state.filterMode,
+        // selectedCategory는 저장하지 않음 (항상 초기에는 전체 표시)
       }));
     } catch (error) {
       console.error('Failed to save state:', error);
@@ -68,16 +86,31 @@ export default function SchedulePage() {
   };
 
   const savedState = loadSavedState();
+  // 필터는 저장하지 않고 항상 초기에는 전체 표시
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // 카테고리 선택 핸들러 (디버깅용 로그 추가)
+  const handleCategorySelect = (categoryId: string) => {
+    console.log('📝 카테고리 상태 변경:', selectedCategory, '→', categoryId);
+    // 같은 카테고리를 다시 클릭하면 필터 해제
+    const newCategory = selectedCategory === categoryId ? null : categoryId;
+    setSelectedCategory(newCategory);
+    // 상태 저장 (필터는 저장하지 않음)
+    saveState({
+      selectedYear,
+      selectedQuarter,
+      dateRange,
+      filterMode,
+      selectedCategory: null, // 필터는 저장하지 않음
+    });
+  };
   
   // 필터 상태
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
   const [selectedQuarter, setSelectedQuarter] = useState<string>(savedState?.selectedQuarter || '1');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(savedState?.dateRange);
+  const [filterMode, setFilterMode] = useState<'quarter' | 'custom'>(savedState?.filterMode || 'quarter');
   
-  // 귀속연도 상태 (선택한 값 유지)
-  const [selectedFiscalPeriod, setSelectedFiscalPeriod] = useState<string>('');
-  
-  // 데이터 상태
   const [quarter, setQuarter] = useState<Quarter | null>(null);
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
@@ -85,82 +118,79 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar'>('overview');
 
-  // Entity 순서 적용
-  const applyEntityOrder = (subs: Subsidiary[]): Subsidiary[] => {
-    if (typeof window === 'undefined') return subs;
-    try {
-      const savedOrder = localStorage.getItem(ENTITY_ORDER_KEY);
-      if (savedOrder) {
-        const order: string[] = JSON.parse(savedOrder);
-        const ordered = [...subs].sort((a, b) => {
-          const indexA = order.indexOf(a.id);
-          const indexB = order.indexOf(b.id);
-          if (indexA === -1 && indexB === -1) return 0;
-          if (indexA === -1) return 1;
-          if (indexB === -1) return -1;
-          return indexA - indexB;
-        });
-        return ordered;
-      }
-    } catch (error) {
-      console.error('Failed to load entity order:', error);
-    }
-    return subs;
-  };
+  // 상태 변경 시 저장 (필터는 저장하지 않음)
+  useEffect(() => {
+    saveState({
+      selectedYear,
+      selectedQuarter,
+      dateRange,
+      filterMode,
+      selectedCategory: null, // 필터는 저장하지 않음
+    });
+  }, [selectedYear, selectedQuarter, dateRange, filterMode]);
 
-  // Entity 순서 저장
-  const saveEntityOrder = (order: string[]) => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(ENTITY_ORDER_KEY, JSON.stringify(order));
-    } catch (error) {
-      console.error('Failed to save entity order:', error);
-    }
-  };
-
-  // 데이터 로드
   const loadData = async () => {
     setLoading(true);
     try {
-      console.log('🔍 데이터 로딩 시작...', { selectedYear, selectedQuarter });
+      console.log('🔍 데이터 로딩 시작...', { filterMode, selectedYear, selectedQuarter, dateRange });
 
       let quarterData: Quarter | null = null;
 
-      const { data, error: quarterError } = await supabase
-        .from('quarters')
-        .select('*')
-        .eq('year', parseInt(selectedYear))
-        .eq('quarter', parseInt(selectedQuarter))
-        .maybeSingle();
+      if (filterMode === 'quarter') {
+        // Quarter 모드: Supabase에서 분기 데이터 조회
+        const { data, error: quarterError } = await supabase
+          .from('quarters')
+          .select('*')
+          .eq('year', parseInt(selectedYear))
+          .eq('quarter', parseInt(selectedQuarter))
+          .maybeSingle();
 
-      if (data) {
-        quarterData = data;
-        console.log('✅ 분기 데이터 조회 성공:', quarterData);
-      } else {
-        const quarterStartDate = new Date(parseInt(selectedYear), (parseInt(selectedQuarter) - 1) * 3, 1);
-        const quarterEndDate = new Date(parseInt(selectedYear), parseInt(selectedQuarter) * 3, 0);
+        if (data) {
+          // Supabase에 분기 데이터가 있으면 사용
+          quarterData = data;
+          console.log('✅ 분기 데이터 조회 성공:', quarterData);
+        } else {
+          // 분기 데이터가 없으면 자동 생성
+          const quarterStartDate = new Date(parseInt(selectedYear), (parseInt(selectedQuarter) - 1) * 3, 1);
+          const quarterEndDate = new Date(parseInt(selectedYear), parseInt(selectedQuarter) * 3, 0);
+          
+          quarterData = {
+            id: `temp-${selectedYear}-${selectedQuarter}`,
+            year: parseInt(selectedYear),
+            quarter: parseInt(selectedQuarter),
+            start_date: format(quarterStartDate, 'yyyy-MM-dd'),
+            end_date: format(quarterEndDate, 'yyyy-MM-dd'),
+            created_at: new Date().toISOString(),
+          };
+          console.log('⚠️ 분기 데이터 없음, 임시 생성:', quarterData);
+          
+          if (quarterError) {
+            console.warn('Supabase 조회 에러 (임시 데이터 사용):', quarterError);
+          }
+        }
+      } else if (filterMode === 'custom' && dateRange?.from) {
+        // Custom 모드: Date Range 사용
+        const startDate = dateRange.from;
+        const endDate = dateRange.to || startDate;
         
         quarterData = {
-          id: `temp-${selectedYear}-${selectedQuarter}`,
-          year: parseInt(selectedYear),
-          quarter: parseInt(selectedQuarter),
-          start_date: format(quarterStartDate, 'yyyy-MM-dd'),
-          end_date: format(quarterEndDate, 'yyyy-MM-dd'),
+          id: `custom-${format(startDate, 'yyyyMMdd')}-${format(endDate, 'yyyyMMdd')}`,
+          year: startDate.getFullYear(),
+          quarter: Math.floor(startDate.getMonth() / 3) + 1,
+          start_date: format(startDate, 'yyyy-MM-dd'),
+          end_date: format(endDate, 'yyyy-MM-dd'),
           created_at: new Date().toISOString(),
         };
-        console.log('⚠️ 분기 데이터 없음, 임시 생성:', quarterData);
-        
-        if (quarterError) {
-          console.warn('Supabase 조회 에러 (임시 데이터 사용):', quarterError);
-        }
+        console.log('✅ Custom Date Range:', quarterData);
       }
 
       if (!quarterData) {
-        console.error('❌ quarterData가 생성되지 않음', { selectedYear, selectedQuarter });
+        console.error('❌ quarterData가 생성되지 않음', { filterMode, selectedYear, selectedQuarter, dateRange });
         throw new Error('날짜 범위를 선택해주세요.');
       }
       
       console.log('✅ 최종 quarterData:', quarterData);
+
       setQuarter(quarterData);
 
       // 법인 데이터
@@ -171,11 +201,13 @@ export default function SchedulePage() {
 
       if (subsError) throw subsError;
       
+      // 저장된 Entity 순서 복원
       const orderedSubsidiaries = applyEntityOrder(subsData || []);
       setSubsidiaries(orderedSubsidiaries);
 
       // 스케줄 항목 (quarter_id가 실제로 존재하는 경우만)
       if (quarterData.id.startsWith('temp-') || quarterData.id.startsWith('custom-')) {
+        // 임시 또는 커스텀 quarter는 스케줄 항목 없음
         setScheduleItems([]);
         setSubmissions([]);
       } else {
@@ -204,6 +236,85 @@ export default function SchedulePage() {
     }
   };
 
+  // 데이터 로드
+  useEffect(() => {
+    loadData();
+  }, [selectedYear, selectedQuarter, dateRange, filterMode]);
+
+  // Entity 순서 적용
+  const applyEntityOrder = (subs: Subsidiary[]): Subsidiary[] => {
+    if (typeof window === 'undefined') return subs;
+    try {
+      const savedOrder = localStorage.getItem(ENTITY_ORDER_KEY);
+      if (savedOrder) {
+        const order: string[] = JSON.parse(savedOrder);
+        // 순서에 따라 정렬
+        const ordered = [...subs].sort((a, b) => {
+          const indexA = order.indexOf(a.id);
+          const indexB = order.indexOf(b.id);
+          // 순서에 없는 항목은 뒤로
+          if (indexA === -1 && indexB === -1) return 0;
+          if (indexA === -1) return 1;
+          if (indexB === -1) return -1;
+          return indexA - indexB;
+        });
+        return ordered;
+      }
+    } catch (error) {
+      console.error('Failed to load entity order:', error);
+    }
+    return subs;
+  };
+
+  // Entity 순서 저장
+  const saveEntityOrder = (order: string[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(ENTITY_ORDER_KEY, JSON.stringify(order));
+    } catch (error) {
+      console.error('Failed to save entity order:', error);
+    }
+  };
+
+  // Entity 순서 변경 핸들러
+  const handleEntityOrderChange = (newOrder: Subsidiary[]) => {
+    setSubsidiaries(newOrder);
+    saveEntityOrder(newOrder.map(s => s.id));
+    toast.success('Entity 순서가 저장되었습니다.');
+  };
+
+  // Date Range 변경 핸들러
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    if (!range?.from) {
+      setDateRange(undefined);
+      return;
+    }
+
+    // 시작일만 선택된 경우
+    if (!range.to) {
+      setDateRange(range);
+      // 시작일 기준으로 Quarter 자동 선택
+      const quarter = Math.floor(range.from.getMonth() / 3) + 1;
+      setSelectedQuarter(quarter.toString());
+      return;
+    }
+
+    // 60일 제한 검사
+    const daysDiff = differenceInDays(range.to, range.from);
+    if (daysDiff > 60) {
+      toast.error('날짜 범위는 최대 60일까지 선택 가능합니다.');
+      // 시작일로부터 60일로 제한
+      const limitedEndDate = addDays(range.from, 60);
+      setDateRange({ from: range.from, to: limitedEndDate });
+    } else {
+      setDateRange(range);
+    }
+
+    // 시작일 기준으로 Quarter 자동 선택
+    const quarter = Math.floor(range.from.getMonth() / 3) + 1;
+    setSelectedQuarter(quarter.toString());
+  };
+
   // Quarter를 Supabase에 생성하는 헬퍼 함수
   const ensureQuarterExists = async (): Promise<string | null> => {
     console.log('🔍 ensureQuarterExists 시작:', quarter);
@@ -213,6 +324,7 @@ export default function SchedulePage() {
       return null;
     }
 
+    // 이미 실제 quarter ID가 있으면 그대로 사용
     if (!quarter.id.startsWith('temp-') && !quarter.id.startsWith('custom-')) {
       console.log('✅ 실제 Quarter ID 사용:', quarter.id);
       return quarter.id;
@@ -220,9 +332,11 @@ export default function SchedulePage() {
 
     console.log('⚠️ 임시 Quarter ID 감지, Supabase에서 확인/생성:', quarter.id);
 
+    // 임시 quarter인 경우 Supabase에 생성
     try {
       console.log('🔎 기존 Quarter 조회:', { year: quarter.year, quarter: quarter.quarter });
       
+      // @ts-ignore - quarters 타입 정의 필요
       const { data: existingQuarter, error: checkError } = await supabase
         .from('quarters')
         .select('id')
@@ -235,8 +349,10 @@ export default function SchedulePage() {
       }
 
       if (existingQuarter) {
+        // 이미 존재하면 ID 반환
         const quarterId = (existingQuarter as { id: string }).id;
         console.log('✅ Quarter 이미 존재:', quarterId);
+        // State 업데이트
         setQuarter({ ...quarter, id: quarterId });
         return quarterId;
       }
@@ -248,9 +364,10 @@ export default function SchedulePage() {
         end_date: quarter.end_date,
       });
 
-      // @ts-ignore - quarters 타입 정의 필요
-      const { data: newQuarter, error: insertError } = await (supabase as any)
+      // 존재하지 않으면 생성
+      const { data: newQuarter, error: insertError } = await supabase
         .from('quarters')
+        // @ts-ignore - quarters 타입 정의 필요
         .insert({
           year: quarter.year,
           quarter: quarter.quarter,
@@ -262,11 +379,15 @@ export default function SchedulePage() {
 
       if (insertError) {
         console.error('❌ Quarter 생성 실패:', insertError);
+        console.error('에러 코드:', insertError.code);
+        console.error('에러 상세:', insertError.details);
+        console.error('에러 메시지:', insertError.message);
         toast.error(`분기 생성 실패: ${insertError.message}`);
         return null;
       }
 
       console.log('✅ Quarter 생성 성공:', newQuarter);
+      // 생성된 quarter로 업데이트
       const quarterId = (newQuarter as { id: string })?.id;
       if (quarterId) {
         setQuarter({ ...quarter, id: quarterId });
@@ -280,65 +401,6 @@ export default function SchedulePage() {
     }
   };
 
-  // 카테고리 선택 핸들러
-  const handleCategorySelect = (categoryId: string) => {
-    console.log('📝 카테고리 상태 변경:', selectedCategory, '→', categoryId);
-    const newCategory = selectedCategory === categoryId ? null : categoryId;
-    setSelectedCategory(newCategory);
-    saveState({
-      selectedYear,
-      selectedQuarter,
-    });
-  };
-
-
-  // Entity 순서 변경 핸들러
-  const handleEntityOrderChange = (newOrder: Subsidiary[]) => {
-    setSubsidiaries(newOrder);
-    saveEntityOrder(newOrder.map(s => s.id));
-    toast.success('Entity 순서가 저장되었습니다.');
-  };
-
-  // 귀속연도에서 업무 기간(Year/Quarter) 계산
-  const calculateWorkPeriod = (fiscalPeriod: string): { year: string; quarter: string } => {
-    const match = fiscalPeriod.match(/^(\d{4})(\d)Q$/);
-    if (!match) {
-      return { year: selectedYear, quarter: selectedQuarter };
-    }
-    
-    const fiscalYear = parseInt(match[1]);
-    const fiscalQuarter = parseInt(match[2]);
-    
-    // 귀속연도 규칙:
-    // 20254Q → Year: 2026, Quarter: 1Q
-    // 20261Q → Year: 2026, Quarter: 2Q
-    // 20262Q → Year: 2026, Quarter: 3Q
-    // 20263Q → Year: 2026, Quarter: 4Q
-    // 20264Q → Year: 2027, Quarter: 1Q
-    
-    if (fiscalQuarter === 4) {
-      return { year: (fiscalYear + 1).toString(), quarter: '1' };
-    } else {
-      return { year: fiscalYear.toString(), quarter: (fiscalQuarter + 1).toString() };
-    }
-  };
-
-  // Overview 탭용 귀속연도 선택 핸들러
-  const handleFiscalPeriodChange = (fiscalPeriod: string) => {
-    setSelectedFiscalPeriod(fiscalPeriod);
-    const workPeriod = calculateWorkPeriod(fiscalPeriod);
-    setSelectedYear(workPeriod.year);
-    setSelectedQuarter(workPeriod.quarter);
-  };
-
-  // Calendar 탭용 귀속연도 선택 핸들러
-  const handleCalendarFiscalPeriodChange = (fiscalPeriod: string) => {
-    setSelectedFiscalPeriod(fiscalPeriod);
-    const workPeriod = calculateWorkPeriod(fiscalPeriod);
-    setSelectedYear(workPeriod.year);
-    setSelectedQuarter(workPeriod.quarter);
-  };
-
   // 카테고리 드롭 핸들러
   const handleCategoryDrop = async (subsidiaryId: string, date: string, categoryId: string) => {
     console.log('🎯 카테고리 드롭:', { subsidiaryId, date, categoryId, quarter });
@@ -348,6 +410,7 @@ export default function SchedulePage() {
       return;
     }
 
+    // 해당 셀의 기존 항목들 찾기
     const existingItems = scheduleItems.filter(
       (item) =>
         item.subsidiary_id === subsidiaryId &&
@@ -355,9 +418,13 @@ export default function SchedulePage() {
         item.category === categoryId
     );
 
+    // 이미 존재하면 토글
     if (existingItems.length > 0) {
       const existingItem = existingItems[0];
       if (existingItem.status === 'planned') {
+        // 확정 날짜 선택 다이얼로그는 ScheduleGrid에서 처리
+        // 여기서는 바로 확정하지 않고, 사용자가 날짜를 선택할 수 있도록 함
+        // 실제로는 ScheduleGrid의 handleBadgeClick에서 처리됨
         toast.info('Badge를 클릭하여 확정 날짜를 선택하세요.');
       } else {
         toast.info('이미 확정된 일정입니다.');
@@ -365,12 +432,14 @@ export default function SchedulePage() {
       return;
     }
 
+    // 새 항목 추가
     const quarterId = await ensureQuarterExists();
     if (!quarterId) {
       toast.error('분기 데이터를 생성할 수 없습니다.');
       return;
     }
 
+    // @ts-ignore - schedule_items 타입 정의 필요
     const { error } = await (supabase as any)
       .from('schedule_items')
       .insert({
@@ -400,6 +469,7 @@ export default function SchedulePage() {
       return;
     }
 
+    // @ts-ignore - schedule_items 타입 정의 필요
     const { error } = await (supabase as any)
       .from('schedule_items')
       .delete()
@@ -413,8 +483,9 @@ export default function SchedulePage() {
     }
   };
 
-  // 항목 확정 핸들러
+  // 항목 확정 핸들러 (확정 날짜 포함)
   const handleItemConfirm = async (itemId: string, confirmedDate: string) => {
+    // @ts-ignore - schedule_items 타입 정의 필요
     const { error } = await (supabase as any)
       .from('schedule_items')
       .update({
@@ -431,20 +502,23 @@ export default function SchedulePage() {
     }
   };
 
-  // Calendar 탭용 엑셀 다운로드 핸들러
+  // 엑셀 다운로드 핸들러
   const handleExportExcel = () => {
     if (!quarter || subsidiaries.length === 0) {
       toast.error('다운로드할 데이터가 없습니다.');
       return;
     }
 
+    // 전체 분기 기간의 모든 날짜
     const allDates = eachDayOfInterval({
       start: parseISO(quarter.start_date),
       end: parseISO(quarter.end_date),
     });
 
+    // 헤더 행 생성
     const headers = ['Entity', ...allDates.map(date => format(date, 'MM/dd')), '성사율'];
 
+    // 데이터 행 생성
     const rows = subsidiaries.map((subsidiary) => {
       const achievementRate = calculateAchievementRate(
         scheduleItems.filter(item => item.subsidiary_id === subsidiary.id)
@@ -452,6 +526,7 @@ export default function SchedulePage() {
       
       const row: any[] = [subsidiary.name.replace('InBody ', '')];
       
+      // 각 날짜별로 카테고리 정보 수집
       allDates.forEach((date) => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const items = scheduleItems.filter(
@@ -476,15 +551,18 @@ export default function SchedulePage() {
       return row;
     });
 
+    // 워크북 생성
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     
+    // 열 너비 설정
     const colWidths = [
-      { wch: 20 },
-      ...allDates.map(() => ({ wch: 15 })),
-      { wch: 10 },
+      { wch: 20 }, // Entity
+      ...allDates.map(() => ({ wch: 15 })), // 날짜 열들
+      { wch: 10 }, // 성사율
     ];
     ws['!cols'] = colWidths;
 
+    // 워크북 생성 및 다운로드
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
     
@@ -492,60 +570,6 @@ export default function SchedulePage() {
     XLSX.writeFile(wb, fileName);
     
     toast.success('엑셀 파일이 다운로드되었습니다.');
-  };
-
-  // Overview 탭용 엑셀 다운로드 핸들러
-  const handleExportOverviewExcel = () => {
-    if (!quarter || subsidiaries.length === 0) {
-      toast.error('다운로드할 데이터가 없습니다.');
-      return;
-    }
-    
-    // 헤더: Entity + 각 카테고리
-    const headers = ['Entity', ...CLOSING_CATEGORIES.map((cat) => cat.label)];
-
-    // 각 Entity별로 행 생성
-    const rows = subsidiaries.map((subsidiary) => {
-      const row: any[] = [subsidiary.name.replace('InBody ', '')];
-      
-      // 각 카테고리별로 스케줄 항목 존재 여부 확인
-      CLOSING_CATEGORIES.forEach((category) => {
-        const hasItem = scheduleItems.some(
-          (item) =>
-            item.subsidiary_id === subsidiary.id &&
-            item.category === category.id &&
-            item.quarter_id === quarter.id
-        );
-        row.push(hasItem ? 'O' : 'X');
-      });
-      
-      return row;
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    
-    const colWidths = [
-      { wch: 20 }, // Entity
-      ...CLOSING_CATEGORIES.map(() => ({ wch: 15 })), // 각 카테고리
-    ];
-    ws['!cols'] = colWidths;
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Overview');
-    
-    const fileName = `Overview_${quarter.year}Q${quarter.quarter}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    
-    toast.success('엑셀 파일이 다운로드되었습니다.');
-  };
-
-  // 엑셀 다운로드 통합 핸들러
-  const handleExport = () => {
-    if (activeTab === 'overview') {
-      handleExportOverviewExcel();
-    } else {
-      handleExportExcel();
-    }
   };
 
   // 셀 클릭 핸들러
@@ -558,6 +582,7 @@ export default function SchedulePage() {
       return;
     }
 
+    // 해당 셀의 기존 항목들 찾기 (여러 개 가능)
     const existingItems = scheduleItems.filter(
       (item) =>
         item.subsidiary_id === subsidiaryId &&
@@ -566,17 +591,24 @@ export default function SchedulePage() {
 
     console.log('📋 기존 항목:', existingItems);
 
+    // 카테고리가 선택되어 있으면 새 항목 추가 또는 기존 항목 토글
     if (selectedCategory) {
       console.log('✅ 카테고리 선택됨:', selectedCategory);
+      // 해당 카테고리가 이미 존재하는지 확인
       const existingCategoryItem = existingItems.find(
         (item) => item.category === selectedCategory
       );
 
       if (existingCategoryItem) {
+        // 기존 항목이 있으면 상태 토글
         if (existingCategoryItem.status === 'planned') {
+          // 확정 날짜 선택 다이얼로그는 ScheduleGrid에서 처리
+          // 여기서는 바로 확정하지 않고, 사용자가 날짜를 선택할 수 있도록 함
           toast.info('Badge를 클릭하여 확정 날짜를 선택하세요.');
         } else {
+          // 확정된 항목 삭제
           if (confirm('확정된 일정을 삭제하시겠습니까?')) {
+            // @ts-ignore - schedule_items 타입 정의 필요
             const { error } = await (supabase as any)
               .from('schedule_items')
               .delete()
@@ -591,6 +623,7 @@ export default function SchedulePage() {
           }
         }
       } else {
+        // 새 항목 추가 - 먼저 quarter가 존재하는지 확인
         console.log('🔄 Quarter 확인 시작...');
         const quarterId = await ensureQuarterExists();
         console.log('📌 Quarter ID:', quarterId);
@@ -609,6 +642,7 @@ export default function SchedulePage() {
           status: 'planned',
         });
 
+        // @ts-ignore - schedule_items 타입 정의 필요
         const { data: insertedData, error } = await (supabase as any)
           .from('schedule_items')
           .insert({
@@ -622,6 +656,9 @@ export default function SchedulePage() {
 
         if (error) {
           console.error('❌ Schedule item 추가 실패:', error);
+          console.error('에러 코드:', error.code);
+          console.error('에러 상세:', error.details);
+          console.error('에러 힌트:', error.hint);
           if (error.code === '23505') {
             toast.error('이미 해당 카테고리가 추가되어 있습니다.');
           } else {
@@ -634,66 +671,16 @@ export default function SchedulePage() {
         }
       }
     } else if (existingItems.length > 0) {
+      // 카테고리가 선택되지 않았지만 항목이 있는 경우
       console.log('ℹ️ 카테고리 미선택 (항목 있음)');
       toast.info('좌측에서 카테고리를 선택하여 일정을 추가하거나 수정하세요.');
     } else {
+      // 카테고리도 선택 안 되고 항목도 없음
       console.log('ℹ️ 카테고리 미선택 (항목 없음)');
       toast.info('좌측에서 카테고리를 먼저 선택하세요.');
     }
   };
 
-  // 상태 변경 시 저장
-  useEffect(() => {
-    saveState({
-      selectedYear,
-      selectedQuarter,
-    });
-  }, [selectedYear, selectedQuarter]);
-
-  // 데이터 로드
-  useEffect(() => {
-    loadData();
-  }, [selectedYear, selectedQuarter]);
-
-  // 필터링된 스케줄 항목
-  const filteredScheduleItems = selectedCategory
-    ? scheduleItems.filter((item) => item.category === selectedCategory)
-    : scheduleItems;
-
-  const achievementRate = calculateAchievementRate(filteredScheduleItems);
-
-  // 귀속연도 계산 (20254Q 형식)
-  // selectedFiscalPeriod가 있으면 그것을 사용, 없으면 quarter에서 계산
-  const fiscalPeriod = useMemo(() => {
-    if (selectedFiscalPeriod) return selectedFiscalPeriod;
-    if (!quarter) return '';
-    return `${quarter.year}${quarter.quarter}Q`;
-  }, [selectedFiscalPeriod, quarter]);
-  
-  // quarter가 변경될 때 selectedFiscalPeriod 초기화 (직접 선택한 경우가 아닐 때)
-  // 초기 로드 시에만 설정하고, 사용자가 선택한 후에는 유지
-  useEffect(() => {
-    if (quarter && !selectedFiscalPeriod) {
-      // 초기 로드 시에만 자동 계산
-      const calculated = `${quarter.year}${quarter.quarter}Q`;
-      setSelectedFiscalPeriod(calculated);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quarter?.id]); // quarter.id가 변경될 때만 실행 (초기 로드 시)
-
-  // 귀속연도에서 Year와 Quarter 추출 (20254Q -> Year: 2026, Quarter: 1Q)
-  const displayYearQuarter = useMemo(() => {
-    if (!quarter) {
-      return { year: parseInt(selectedYear), quarter: parseInt(selectedQuarter) };
-    }
-    
-    if (quarter.quarter === 4) {
-      return { year: quarter.year + 1, quarter: 1 };
-    }
-    return { year: quarter.year, quarter: quarter.quarter + 1 };
-  }, [quarter, selectedYear, selectedQuarter]);
-
-  // 로딩 상태
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -705,7 +692,6 @@ export default function SchedulePage() {
     );
   }
 
-  // Quarter 없을 때
   if (!quarter) {
     return (
       <div className="text-center py-12">
@@ -714,24 +700,55 @@ export default function SchedulePage() {
     );
   }
 
+  // 필터링된 스케줄 항목 (카테고리 필터 적용)
+  const filteredScheduleItems = selectedCategory
+    ? scheduleItems.filter((item) => item.category === selectedCategory)
+    : scheduleItems;
+
+  const achievementRate = calculateAchievementRate(filteredScheduleItems);
+
+  // 귀속연도 계산 (20254Q 형식)
+  const fiscalPeriod = useMemo(() => {
+    if (!quarter) return '';
+    const year = quarter.year;
+    const q = quarter.quarter;
+    return `${year}${q}Q`;
+  }, [quarter]);
+
+  // 귀속연도에서 Year와 Quarter 추출 (20254Q -> Year: 2026, Quarter: 1Q)
+  const displayYearQuarter = useMemo(() => {
+    if (!quarter) {
+      return { year: parseInt(selectedYear), quarter: parseInt(selectedQuarter) };
+    }
+    
+    // 4Q인 경우 다음 해 1Q로 표시
+    if (quarter.quarter === 4) {
+      return { year: quarter.year + 1, quarter: 1 };
+    }
+    return { year: quarter.year, quarter: quarter.quarter + 1 };
+  }, [quarter, selectedYear, selectedQuarter]);
+
   return (
     <div className="flex h-[calc(100vh-12rem)]">
-      {/* 좌측 사이드바 - Overview 탭에서는 숨김 */}
-      {activeTab === 'calendar' && (
-        <CategorySidebar
-          selectedCategory={selectedCategory}
-          onCategorySelect={handleCategorySelect}
-          onItemDelete={handleItemDelete}
-        />
-      )}
+      {/* 좌측 사이드바 */}
+      <CategorySidebar
+        selectedCategory={selectedCategory}
+        onCategorySelect={handleCategorySelect}
+        onItemDelete={handleItemDelete}
+      />
 
       {/* 메인 영역 */}
       <div className="flex-1 p-6 overflow-auto">
         {/* 상단 헤더 */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Schedule</h2>
+              {quarter && (
+                <p className="text-sm text-gray-600 mt-1">
+                  귀속연도: <span className="font-semibold text-blue-600">{fiscalPeriod}</span>
+                </p>
+              )}
               {selectedCategory && (
                 <p className="text-sm text-gray-600 mt-1">
                   필터: {getCategoryById(selectedCategory as any)?.label || selectedCategory}
@@ -758,7 +775,7 @@ export default function SchedulePage() {
 
               <Button 
                 variant="outline" 
-                onClick={handleExport}
+                onClick={handleExportExcel}
               >
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -766,56 +783,22 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          {/* Overview 탭용 귀속연도 선택 */}
-          {activeTab === 'overview' && (
-            <div className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg mb-2">
-              <label className="text-sm font-medium text-gray-700">귀속연도:</label>
-              <Select value={fiscalPeriod} onValueChange={handleFiscalPeriodChange}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="20251Q">20251Q</SelectItem>
-                  <SelectItem value="20252Q">20252Q</SelectItem>
-                  <SelectItem value="20253Q">20253Q</SelectItem>
-                  <SelectItem value="20254Q">20254Q</SelectItem>
-                  <SelectItem value="20261Q">20261Q</SelectItem>
-                  <SelectItem value="20262Q">20262Q</SelectItem>
-                  <SelectItem value="20263Q">20263Q</SelectItem>
-                  <SelectItem value="20264Q">20264Q</SelectItem>
-                  <SelectItem value="20271Q">20271Q</SelectItem>
-                  <SelectItem value="20272Q">20272Q</SelectItem>
-                  <SelectItem value="20273Q">20273Q</SelectItem>
-                  <SelectItem value="20274Q">20274Q</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Calendar 탭용 귀속연도 선택 */}
-          {activeTab === 'calendar' && (
-            <div className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg mb-2">
-              <label className="text-sm font-medium text-gray-700">귀속연도:</label>
-              <Select value={fiscalPeriod} onValueChange={handleCalendarFiscalPeriodChange}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="20251Q">20251Q</SelectItem>
-                  <SelectItem value="20252Q">20252Q</SelectItem>
-                  <SelectItem value="20253Q">20253Q</SelectItem>
-                  <SelectItem value="20254Q">20254Q</SelectItem>
-                  <SelectItem value="20261Q">20261Q</SelectItem>
-                  <SelectItem value="20262Q">20262Q</SelectItem>
-                  <SelectItem value="20263Q">20263Q</SelectItem>
-                  <SelectItem value="20264Q">20264Q</SelectItem>
-                  <SelectItem value="20271Q">20271Q</SelectItem>
-                  <SelectItem value="20272Q">20272Q</SelectItem>
-                  <SelectItem value="20273Q">20273Q</SelectItem>
-                  <SelectItem value="20274Q">20274Q</SelectItem>
-                </SelectContent>
-              </Select>
-              <span className="text-sm text-gray-500">|</span>
+          {/* 필터 영역 */}
+          <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-lg">
+            {/* 귀속연도 표시 */}
+            {quarter && (
+              <div className="flex items-center gap-2 mb-2">
+                <label className="text-sm font-medium text-gray-700">귀속연도:</label>
+                <span className="text-lg font-bold text-blue-600">{fiscalPeriod}</span>
+                {quarter.quarter === 4 && (
+                  <span className="text-sm text-gray-500 ml-2">
+                    (Year: {displayYearQuarter.year}, Quarter: {displayYearQuarter.quarter}Q)
+                  </span>
+                )}
+              </div>
+            )}
+            
+            <div className="flex items-center gap-3">
               {/* Year 선택 */}
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-gray-700">Year</label>
@@ -849,13 +832,68 @@ export default function SchedulePage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Date Range 선택 */}
+              <div className="flex items-center gap-2 flex-1">
+              <label className="text-sm font-medium text-gray-700">Date Range</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'justify-start text-left font-normal flex-1 max-w-md',
+                      !dateRange && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, 'yyyy-MM-dd')} -{' '}
+                          {format(dateRange.to, 'yyyy-MM-dd')}
+                        </>
+                      ) : (
+                        format(dateRange.from, 'yyyy-MM-dd')
+                      )
+                    ) : (
+                      <span>시작일 ~ 종료일 선택 (최대 60일)</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={handleDateRangeChange}
+                    numberOfMonths={2}
+                    disabled={(date) => date > new Date() || date < new Date('2025-01-01')}
+                  />
+                </PopoverContent>
+              </Popover>
+              
+              {/* 필터 모드 전환 버튼 */}
+              <Button
+                variant={filterMode === 'quarter' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterMode('quarter')}
+              >
+                Quarter
+              </Button>
+              <Button
+                variant={filterMode === 'custom' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterMode('custom')}
+                disabled={!dateRange?.from}
+              >
+                Custom
+              </Button>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Overview / Calendar 탭 */}
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'overview' | 'calendar')}>
-          <TabsList className="mb-2">
+          <TabsList className="mb-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
           </TabsList>
@@ -868,7 +906,6 @@ export default function SchedulePage() {
                   subsidiaries={subsidiaries}
                   scheduleItems={scheduleItems}
                   submissions={submissions}
-                  onEntityOrderChange={handleEntityOrderChange}
                 />
               </div>
             )}
@@ -893,3 +930,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+

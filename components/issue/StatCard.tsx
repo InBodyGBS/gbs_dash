@@ -6,6 +6,7 @@ interface StatCardProps {
   icon: React.ReactNode;
   color?: 'blue' | 'orange' | 'green' | 'purple';
   onClick?: () => void;
+  isActive?: boolean;
 }
 
 const colorClasses = {
@@ -15,12 +16,13 @@ const colorClasses = {
   purple: 'bg-purple-50 text-purple-600',
 };
 
-export function StatCard({ title, value, icon, color = 'blue', onClick }: StatCardProps) {
+export function StatCard({ title, value, icon, color = 'blue', onClick, isActive = false }: StatCardProps) {
   return (
     <div
       className={cn(
         'bg-white rounded-lg border p-6 transition-all',
-        onClick && 'cursor-pointer hover:shadow-md'
+        onClick && 'cursor-pointer hover:shadow-md',
+        isActive && 'ring-2 ring-blue-500 border-blue-500'
       )}
       onClick={onClick}
     >
