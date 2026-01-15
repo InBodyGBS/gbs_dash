@@ -54,6 +54,7 @@
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.70.0",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.2.2",
     "react-simple-maps": "^3.0.0",
     "reactflow": "^11.11.4",

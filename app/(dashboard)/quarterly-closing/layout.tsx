@@ -35,9 +35,9 @@ export default function QuarterlyClosingLayout({ children }: QuarterlyClosingLay
   const activeTab = getActiveTab();
 
   return (
-    <div className="space-y-6">
-      {/* 탭 네비게이션 */}
-      <div className="border-b border-gray-200">
+    <div className="h-full flex flex-col">
+      {/* 탭 네비게이션 - Fixed */}
+      <div className="flex-shrink-0 border-b border-gray-200">
         <nav className="flex gap-2 px-6">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -62,8 +62,8 @@ export default function QuarterlyClosingLayout({ children }: QuarterlyClosingLay
         </nav>
       </div>
 
-      {/* 페이지 컨텐츠 */}
-      <div className="px-6">
+      {/* 페이지 컨텐츠 - Scrollable */}
+      <div className="flex-1 overflow-hidden px-6">
         {children}
       </div>
     </div>
