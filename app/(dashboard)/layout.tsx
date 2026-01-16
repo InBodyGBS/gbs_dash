@@ -20,7 +20,6 @@ interface DashboardLayoutProps {
 
 function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { sidebarOpen, toggleSidebar } = useSidebar();
 
   // 인증 체크 제거 - 로그인 없이도 접근 가능
