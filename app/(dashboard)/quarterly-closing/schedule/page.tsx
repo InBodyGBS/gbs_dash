@@ -698,7 +698,7 @@ export default function SchedulePage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#971B2F' }} />
           <p className="text-gray-500">Loading...</p>
         </div>
       </div>
@@ -753,7 +753,7 @@ export default function SchedulePage() {
                 <p className="text-sm text-gray-500">
                   {selectedCategory ? '필터된 성사율' : '전체 성사율'}
                 </p>
-                <p className="text-3xl font-bold text-blue-600">{achievementRate}%</p>
+                <p className="text-3xl font-bold" style={{ color: '#971B2F' }}>{achievementRate}%</p>
               </div>
 
               <Button 

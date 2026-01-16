@@ -109,7 +109,7 @@ export default function ReferencePage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#971B2F' }}></div>
           <p className="text-gray-600">Loading topics...</p>
         </div>
       </div>
@@ -163,11 +163,11 @@ export default function ReferencePage() {
                   <p className="text-sm text-gray-600 mb-4">
                     The closing topics table has not been created yet. Please run the database migration to set up the reference page.
                   </p>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-                    <p className="text-sm font-medium text-blue-900 mb-2">To set up:</p>
-                    <ol className="text-xs text-blue-800 list-decimal list-inside space-y-1">
+                  <div className="rounded-lg p-4 text-left border" style={{ backgroundColor: 'rgba(151, 27, 47, 0.1)', borderColor: 'rgba(151, 27, 47, 0.3)' }}>
+                    <p className="text-sm font-medium mb-2" style={{ color: '#971B2F' }}>To set up:</p>
+                    <ol className="text-xs list-decimal list-inside space-y-1" style={{ color: '#971B2F' }}>
                       <li>Go to Supabase SQL Editor</li>
-                      <li>Run the SQL from <code className="bg-blue-100 px-1 rounded">docs/reference-schema.sql</code></li>
+                      <li>Run the SQL from <code className="px-1 rounded" style={{ backgroundColor: 'rgba(151, 27, 47, 0.2)' }}>docs/reference-schema.sql</code></li>
                       <li>Refresh this page</li>
                     </ol>
                   </div>

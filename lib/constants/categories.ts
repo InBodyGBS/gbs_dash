@@ -11,6 +11,7 @@ import {
   Settings,
   FileCheck,
   FolderOpen,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -73,6 +74,13 @@ export const CATEGORIES: Category[] = [
     path: '/p-file',
     icon: FolderOpen,
     description: '문서 보관함',
+  },
+  {
+    id: 'gbs',
+    label: 'GBS',
+    path: '/gbs',
+    icon: Users,
+    description: 'GBS 업무 관리',
   },
 ] as const;
 

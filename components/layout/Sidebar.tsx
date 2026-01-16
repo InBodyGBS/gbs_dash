@@ -28,7 +28,7 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
           href="/" 
           className="flex items-center gap-3 hover:opacity-80 transition-opacity"
         >
-          <Building2 className="h-8 w-8 text-blue-500" />
+          <Building2 className="h-8 w-8" style={{ color: '#971B2F' }} />
           <span className="text-xl font-bold">InBody</span>
         </Link>
       </div>
@@ -46,11 +46,10 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
                 <Button
                   asChild
                   className={cn(
-                    'w-full h-auto flex flex-col items-center justify-center gap-3 p-4 rounded-lg transition-all',
-                    isActive
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    'w-full h-auto flex flex-col items-center justify-center gap-3 p-4 rounded-lg transition-all text-white hover:opacity-90',
+                    isActive ? 'opacity-100' : 'opacity-90'
                   )}
+                  style={{ backgroundColor: '#971B2F' }}
                 >
                   <Link href={category.path}>
                     <Icon className="w-8 h-8" />
@@ -69,8 +68,9 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
               key={category.id}
               className={cn(
                 'relative',
-                isActive && 'border-l-4 border-blue-500'
+                isActive && 'border-l-4'
               )}
+              style={isActive ? { borderLeftColor: '#971B2F' } : undefined}
             >
               <Button
                 asChild

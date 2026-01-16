@@ -1,35 +1,34 @@
 'use client';
 
 /**
- * Quarterly Closing 레이아웃
- * 3개 탭 네비게이션: Schedule, Submission, Reference
+ * GBS 레이아웃
+ * 3개 탭 네비게이션: 업무기술서, 업무분장표, Calendar
  */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Calendar, Upload, BookOpen } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FileText, Users, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface QuarterlyClosingLayoutProps {
+interface GBSLayoutProps {
   children: React.ReactNode;
 }
 
 const TABS = [
-  { value: 'schedule', label: 'Schedule', icon: Calendar, href: '/quarterly-closing/schedule' },
-  { value: 'submission', label: 'Submission', icon: Upload, href: '/quarterly-closing/submission' },
-  { value: 'reference', label: 'Reference', icon: BookOpen, href: '/quarterly-closing/reference' },
+  { value: 'work-manual', label: '업무기술서', icon: FileText, href: '/gbs/work-manual' },
+  { value: 'work-assignment', label: '업무분장표', icon: Users, href: '/gbs/work-assignment' },
+  { value: 'calendar', label: 'Calendar', icon: Calendar, href: '/gbs/calendar' },
 ] as const;
 
-export default function QuarterlyClosingLayout({ children }: QuarterlyClosingLayoutProps) {
+export default function GBSLayout({ children }: GBSLayoutProps) {
   const pathname = usePathname();
 
   // 현재 활성 탭 결정
   const getActiveTab = () => {
-    if (pathname.includes('/schedule')) return 'schedule';
-    if (pathname.includes('/submission')) return 'submission';
-    if (pathname.includes('/reference')) return 'reference';
-    return 'schedule';
+    if (pathname.includes('/work-manual')) return 'work-manual';
+    if (pathname.includes('/work-assignment')) return 'work-assignment';
+    if (pathname.includes('/calendar')) return 'calendar';
+    return 'work-manual';
   };
 
   const activeTab = getActiveTab();
@@ -47,7 +46,7 @@ export default function QuarterlyClosingLayout({ children }: QuarterlyClosingLay
               <Link
                 key={tab.value}
                 href={tab.href}
-                  className={cn(
+                className={cn(
                   'flex items-center gap-2 px-4 py-3 border-b-2 transition-colors',
                   isActive
                     ? 'font-semibold'
@@ -70,4 +69,3 @@ export default function QuarterlyClosingLayout({ children }: QuarterlyClosingLay
     </div>
   );
 }
-
