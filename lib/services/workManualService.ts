@@ -17,13 +17,9 @@ export async function uploadWorkManual(
   fileType: '업무기술서' | '업무분장표'
 ): Promise<WorkManual> {
   try {
-    // 사용자 정보 가져오기
+    // 사용자 정보 가져오기 (선택적 - 로그인하지 않아도 업로드 가능)
     const { data: { user } } = await supabase.auth.getUser();
     console.log('Current user:', user);
-    
-    if (!user) {
-      throw new Error('로그인이 필요합니다.');
-    }
 
     const fileExt = file.name.split('.').pop();
     const filePath = `${uuidv4()}.${fileExt}`;
@@ -47,7 +43,7 @@ export async function uploadWorkManual(
         file_path: filePath,
         file_size: file.size,
         file_type: fileType, // 선택한 유형 저장
-        uploaded_by: user.id,
+        uploaded_by: user?.id || null, // 로그인하지 않은 경우 null
       })
       .select()
       .single();
