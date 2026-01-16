@@ -5,7 +5,7 @@
  * GBS 일정 관리 및 캘린더
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,32 +22,55 @@ import {
 import { CalendarGrid } from '@/components/gbs/CalendarGrid';
 import { EventDialog } from '@/components/gbs/EventDialog';
 import type { GBSCalendarEvent } from '@/lib/types/gbs-calendar';
+import {
+  getGBSCalendarEvents,
+  createGBSCalendarEvent,
+  updateGBSCalendarEvent,
+  deleteGBSCalendarEvent,
+  deleteAllGBSCalendarEvents,
+} from '@/lib/services/gbsCalendarService';
+import { toast } from 'sonner';
 
 export default function GBSCalendarPage() {
-  const [events, setEvents] = useState<GBSCalendarEvent[]>([
-    // 샘플 데이터 (이미지 참고)
-    { id: '1', date: '2025-12-29', time: '10:00', title: '베트는' },
-    { id: '2', date: '2025-12-29', time: '10:00', title: '과제' },
-    { id: '3', date: '2025-12-29', time: '10:30', title: 'IVI' },
-    { id: '4', date: '2025-12-30', time: '10:00', title: '베트는' },
-    { id: '5', date: '2025-12-30', time: '16:00', title: '터키 A' },
-    { id: '6', date: '2025-12-31', time: '10:00', title: '베트는' },
-    { id: '7', date: '2026-01-02', time: '09:00', title: 'InBc' },
-    { id: '8', date: '2026-01-08', time: '10:30', title: '터' },
-    { id: '9', date: '2026-01-08', time: '16:00', title: '터키 미' },
-    { id: '10', date: '2026-01-09', time: '09:00', title: 'BWA_' },
-    { id: '11', date: '2026-01-09', time: '16:30', title: '미팅' },
-    { id: '12', date: '2026-01-09', time: '16:30', title: '방우' },
-    { id: '13', date: '2026-01-12', time: '13:00', title: 'GBD고' },
-    { id: '14', date: '2026-01-12', time: '16:00', title: 'GBD과' },
-    { id: '15', date: '2026-01-13', time: '14:00', title: '업무 논' },
-    { id: '16', date: '2026-01-15', time: '10:00', title: '(제목' },
-    { id: '17', date: '2026-01-15', time: '14:30', title: 'Indi' },
-  ]);
-
+  const [events, setEvents] = useState<GBSCalendarEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<GBSCalendarEvent | null>(null);
+
+  // 페이지 로드 시 일정 불러오기
+  useEffect(() => {
+    loadEvents();
+  }, []);
+
+  const loadEvents = async () => {
+    try {
+      setLoading(true);
+      const data = await getGBSCalendarEvents();
+      setEvents(data);
+      
+      // 테이블이 없을 경우 콘솔에 안내 메시지 표시 (사용자에게는 빈 캘린더 표시)
+      if (data.length === 0) {
+        console.info('일정이 없습니다. 일정을 추가하려면 Supabase SQL Editor에서 docs/gbs-calendar-schema.sql을 실행하여 테이블을 생성하세요.');
+      }
+    } catch (error: any) {
+      console.error('Failed to load calendar events:', error);
+      
+      // 테이블이 없는 경우 사용자에게 안내
+      if (error.message?.includes('테이블이 없습니다') || error.message?.includes('Could not find the table')) {
+        toast.error('데이터베이스 테이블이 없습니다', {
+          description: 'Supabase SQL Editor에서 docs/gbs-calendar-schema.sql을 실행하여 테이블을 생성하세요.',
+          duration: 10000,
+        });
+      } else {
+        toast.error('일정 로드 실패', {
+          description: error.message || '일정을 불러오는 중 오류가 발생했습니다.',
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
@@ -71,26 +94,59 @@ export default function GBSCalendarPage() {
     setEventDialogOpen(true);
   };
 
-  const handleSaveEvent = (eventData: Omit<GBSCalendarEvent, 'id' | 'created_at' | 'updated_at'>) => {
-    if (selectedEvent) {
-      // 수정
-      setEvents(events.map((e) => (e.id === selectedEvent.id ? { ...selectedEvent, ...eventData } : e)));
-    } else {
-      // 추가
-      const newEvent: GBSCalendarEvent = {
-        ...eventData,
-        id: Date.now().toString(),
-      };
-      setEvents([...events, newEvent]);
+  const handleSaveEvent = async (eventData: Omit<GBSCalendarEvent, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+      if (selectedEvent) {
+        // 수정
+        const updatedEvent = await updateGBSCalendarEvent(selectedEvent.id, eventData);
+        setEvents(events.map((e) => (e.id === selectedEvent.id ? updatedEvent : e)));
+        toast.success('일정 수정 완료', {
+          description: '일정이 성공적으로 수정되었습니다.',
+        });
+      } else {
+        // 추가
+        const newEvent = await createGBSCalendarEvent(eventData);
+        setEvents([...events, newEvent]);
+        toast.success('일정 추가 완료', {
+          description: '일정이 성공적으로 추가되었습니다.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to save event:', error);
+      toast.error('일정 저장 실패', {
+        description: error.message || '일정을 저장하는 중 오류가 발생했습니다.',
+      });
     }
   };
 
-  const handleDeleteEvent = (eventId: string) => {
-    setEvents(events.filter((e) => e.id !== eventId));
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      await deleteGBSCalendarEvent(eventId);
+      setEvents(events.filter((e) => e.id !== eventId));
+      toast.success('일정 삭제 완료', {
+        description: '일정이 성공적으로 삭제되었습니다.',
+      });
+    } catch (error: any) {
+      console.error('Failed to delete event:', error);
+      toast.error('일정 삭제 실패', {
+        description: error.message || '일정을 삭제하는 중 오류가 발생했습니다.',
+      });
+    }
   };
 
-  const handleDeleteAllEvents = () => {
-    setEvents([]);
+  const handleDeleteAllEvents = async () => {
+    try {
+      await deleteAllGBSCalendarEvents();
+      setEvents([]);
+      toast.success('전체 일정 삭제 완료', {
+        description: '모든 일정이 성공적으로 삭제되었습니다.',
+      });
+    } catch (error: any) {
+      console.error('Failed to delete all events:', error);
+      toast.error('전체 일정 삭제 실패', {
+        description: error.message || '일정을 삭제하는 중 오류가 발생했습니다.',
+      });
+    }
   };
 
   return (
@@ -147,12 +203,21 @@ export default function GBSCalendarPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto pb-6">
-        <CalendarGrid
-          events={events}
-          onDateClick={handleDateClick}
-          onEventClick={handleEventClick}
-          onAddEvent={handleAddEvent}
-        />
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: '#971B2F' }}></div>
+              <p className="text-gray-600">일정을 불러오는 중...</p>
+            </div>
+          </div>
+        ) : (
+          <CalendarGrid
+            events={events}
+            onDateClick={handleDateClick}
+            onEventClick={handleEventClick}
+            onAddEvent={handleAddEvent}
+          />
+        )}
       </div>
 
       {/* Event Dialog */}
