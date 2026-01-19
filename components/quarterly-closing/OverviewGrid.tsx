@@ -3,7 +3,7 @@
 /**
  * Overview 그리드 컴포넌트
  * Entity가 행, 카테고리가 열로 표시
- * 제출 여부에 따라 초록불/빨간불 표시
+ * 제출 여부에 따라 파란색(제출)/빨간색(미제출)/회색(검토중) 원형 표시
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -22,6 +22,7 @@ interface OverviewGridProps {
   subsidiaries: Subsidiary[];
   scheduleItems: ScheduleItem[];
   submissions: DocumentSubmission[];
+  selectedCategory?: string | null;
   onEntityOrderChange?: (newOrder: Subsidiary[]) => void;
   onCategoryOrderChange?: (newOrder: typeof CLOSING_CATEGORIES) => void;
 }
@@ -31,9 +32,27 @@ export const OverviewGrid = ({
   subsidiaries,
   scheduleItems,
   submissions,
+  selectedCategory,
   onEntityOrderChange,
   onCategoryOrderChange,
 }: OverviewGridProps) => {
+  // 디버깅: submissions 데이터 확인
+  useEffect(() => {
+    if (submissions.length > 0) {
+      console.log(`📊 OverviewGrid submissions:`, {
+        totalCount: submissions.length,
+        submissions: submissions.map(s => ({
+          id: s.id,
+          category: s.category,
+          subsidiary_id: s.subsidiary_id,
+          file_name: s.file_name,
+        })),
+        subsidiaries: subsidiaries.map(s => ({ id: s.id, name: s.name })),
+      });
+    } else {
+      console.log(`⚠️ OverviewGrid submissions: 빈 배열`);
+    }
+  }, [submissions, subsidiaries]);
   // Entity 순서 관리
   const [orderedSubsidiaries, setOrderedSubsidiaries] = useState<Subsidiary[]>(subsidiaries);
   const [draggedEntityIndex, setDraggedEntityIndex] = useState<number | null>(null);
@@ -91,6 +110,36 @@ export const OverviewGrid = ({
         item.category === categoryId &&
         item.quarter_id === quarter.id
     );
+  };
+
+  // 제출 여부 확인 (submissions에 항목이 있는지)
+  const hasSubmission = (subsidiaryId: string, categoryId: string): boolean => {
+    const found = submissions.some(
+      (sub) =>
+        sub.subsidiary_id === subsidiaryId &&
+        sub.category === categoryId
+    );
+    
+    // 디버깅 로그 (첫 번째 호출 시만)
+    if (subsidiaryId && categoryId && submissions.length > 0) {
+      const matchingSubs = submissions.filter(
+        (sub) => sub.subsidiary_id === subsidiaryId && sub.category === categoryId
+      );
+      if (matchingSubs.length > 0) {
+        console.log(`✅ 제출 발견:`, {
+          subsidiaryId,
+          categoryId,
+          submissions: matchingSubs.map(s => ({
+            id: s.id,
+            category: s.category,
+            subsidiary_id: s.subsidiary_id,
+            file_name: s.file_name,
+          })),
+        });
+      }
+    }
+    
+    return found;
   };
 
   // Entity 드래그 핸들러
@@ -177,6 +226,11 @@ export const OverviewGrid = ({
     setDraggedCategoryIndex(null);
   };
 
+  // 필터링된 카테고리 목록
+  const filteredCategories = selectedCategory
+    ? orderedCategories.filter((cat) => cat.id === selectedCategory)
+    : orderedCategories;
+
   return (
     <div className="overflow-auto">
       <div className="min-w-full inline-block">
@@ -186,17 +240,20 @@ export const OverviewGrid = ({
               <th className="sticky left-0 z-10 bg-white border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900 min-w-[200px]">
                 Entity
               </th>
-              {orderedCategories.map((category, index) => (
+              {filteredCategories.map((category, index) => {
+                const originalIndex = orderedCategories.findIndex((c) => c.id === category.id);
+                return (
                 <th
                   key={category.id}
                   draggable
-                  onDragStart={(e) => handleCategoryDragStart(e, index)}
+                  onDragStart={(e) => handleCategoryDragStart(e, originalIndex)}
                   onDragEnd={handleCategoryDragEnd}
-                  onDragOver={(e) => handleCategoryDragOver(e, index)}
-                  onDrop={(e) => handleCategoryDrop(e, index)}
+                  onDragOver={(e) => handleCategoryDragOver(e, originalIndex)}
+                  onDrop={(e) => handleCategoryDrop(e, originalIndex)}
                   className={cn(
                     'border border-gray-300 px-4 py-3 text-center font-semibold text-gray-900 min-w-[120px] cursor-move',
-                    draggedCategoryIndex === index && 'opacity-50'
+                    draggedCategoryIndex === originalIndex && 'opacity-50',
+                    selectedCategory === category.id && 'bg-blue-50 border-blue-300'
                   )}
                 >
                   <div className="flex flex-col items-center gap-1">
@@ -210,7 +267,8 @@ export const OverviewGrid = ({
                     <span className="text-xs">{category.label}</span>
                   </div>
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -235,20 +293,28 @@ export const OverviewGrid = ({
                     <span>{subsidiary.name}</span>
                   </div>
                 </td>
-                {orderedCategories.map((category) => {
+                {filteredCategories.map((category) => {
                   const hasItem = hasScheduleItem(subsidiary.id, category.id);
+                  const hasSub = hasSubmission(subsidiary.id, category.id);
                   return (
                     <td
                       key={category.id}
                       className="border border-gray-300 px-4 py-3 text-center"
                     >
-                      {hasItem ? (
+                      {hasSub ? (
+                        // 제출됨: 파란색 원형
                         <div className="flex items-center justify-center">
-                          <div className="w-4 h-4 rounded-full bg-red-600" />
+                          <div className="w-4 h-4 rounded-full bg-blue-600" title="제출 완료" />
+                        </div>
+                      ) : hasItem ? (
+                        // 미제출: 빨간색 원형
+                        <div className="flex items-center justify-center">
+                          <div className="w-4 h-4 rounded-full bg-red-600" title="미제출" />
                         </div>
                       ) : (
+                        // 검토중: 회색 원형
                         <div className="flex items-center justify-center">
-                          <div className="w-4 h-4 rounded-full bg-gray-400" />
+                          <div className="w-4 h-4 rounded-full bg-gray-400" title="검토중" />
                         </div>
                       )}
                     </td>

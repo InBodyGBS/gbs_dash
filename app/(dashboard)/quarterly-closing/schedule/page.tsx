@@ -17,8 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { CategorySidebar } from '@/components/quarterly-closing/CategorySidebar';
+import { CategoryBar } from '@/components/quarterly-closing/CategoryBar';
 import { ScheduleGrid } from '@/components/quarterly-closing/ScheduleGrid';
 import { calculateAchievementRate } from '@/lib/utils/achievement-rate';
 import { format, eachDayOfInterval, parseISO } from 'date-fns';
@@ -27,6 +28,8 @@ import { cn } from '@/lib/utils';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quarterly-closing';
 import { OverviewGrid } from '@/components/quarterly-closing/OverviewGrid';
+import { SubmissionLogTable } from '@/components/quarterly-closing/SubmissionLogTable';
+import { SubmissionSummary } from '@/components/quarterly-closing/SubmissionSummary';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const STORAGE_KEY = 'quarterly-closing-schedule-state';
@@ -71,11 +74,9 @@ export default function SchedulePage() {
   
   // 필터 상태
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
   const [selectedQuarter, setSelectedQuarter] = useState<string>(savedState?.selectedQuarter || '1');
-  
-  // 귀속연도 상태 (선택한 값 유지)
-  const [selectedFiscalPeriod, setSelectedFiscalPeriod] = useState<string>('');
   
   // 데이터 상태
   const [quarter, setQuarter] = useState<Quarter | null>(null);
@@ -83,7 +84,7 @@ export default function SchedulePage() {
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [submissions, setSubmissions] = useState<DocumentSubmission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'calendar'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'submissions'>('overview');
 
   // Entity 순서 적용
   const applyEntityOrder = (subs: Subsidiary[]): Subsidiary[] => {
@@ -118,32 +119,54 @@ export default function SchedulePage() {
     }
   };
 
+  // 귀속연도에서 업무 기간(Year/Quarter) 계산
+  // 귀속연도가 2025년 4Q → 업무 기간: 2026년 1Q
+  // 귀속연도가 2026년 1Q → 업무 기간: 2026년 2Q
+  // 귀속연도가 2026년 2Q → 업무 기간: 2026년 3Q
+  // 귀속연도가 2026년 3Q → 업무 기간: 2026년 4Q
+  // 귀속연도가 2026년 4Q → 업무 기간: 2027년 1Q
+  const calculateWorkPeriod = (fiscalYear: string, fiscalQuarter: string): { year: number; quarter: number } => {
+    const year = parseInt(fiscalYear);
+    const quarter = parseInt(fiscalQuarter);
+    
+    if (quarter === 4) {
+      return { year: year + 1, quarter: 1 };
+    } else {
+      return { year, quarter: quarter + 1 };
+    }
+  };
+
   // 데이터 로드
   const loadData = async () => {
     setLoading(true);
     try {
-      console.log('🔍 데이터 로딩 시작...', { selectedYear, selectedQuarter });
+      // 귀속연도에서 업무 기간 계산
+      const workPeriod = calculateWorkPeriod(selectedYear, selectedQuarter);
+      console.log('🔍 데이터 로딩 시작...', { 
+        fiscalPeriod: `${selectedYear}년 ${selectedQuarter}Q`,
+        workPeriod: `${workPeriod.year}년 ${workPeriod.quarter}Q`
+      });
 
       let quarterData: Quarter | null = null;
 
       const { data, error: quarterError } = await supabase
         .from('quarters')
         .select('*')
-        .eq('year', parseInt(selectedYear))
-        .eq('quarter', parseInt(selectedQuarter))
+        .eq('year', workPeriod.year)
+        .eq('quarter', workPeriod.quarter)
         .maybeSingle();
 
       if (data) {
         quarterData = data;
         console.log('✅ 분기 데이터 조회 성공:', quarterData);
       } else {
-        const quarterStartDate = new Date(parseInt(selectedYear), (parseInt(selectedQuarter) - 1) * 3, 1);
-        const quarterEndDate = new Date(parseInt(selectedYear), parseInt(selectedQuarter) * 3, 0);
+        const quarterStartDate = new Date(workPeriod.year, (workPeriod.quarter - 1) * 3, 1);
+        const quarterEndDate = new Date(workPeriod.year, workPeriod.quarter * 3, 0);
         
         quarterData = {
-          id: `temp-${selectedYear}-${selectedQuarter}`,
-          year: parseInt(selectedYear),
-          quarter: parseInt(selectedQuarter),
+          id: `temp-${workPeriod.year}-${workPeriod.quarter}`,
+          year: workPeriod.year,
+          quarter: workPeriod.quarter,
           start_date: format(quarterStartDate, 'yyyy-MM-dd'),
           end_date: format(quarterEndDate, 'yyyy-MM-dd'),
           created_at: new Date().toISOString(),
@@ -156,7 +179,7 @@ export default function SchedulePage() {
       }
 
       if (!quarterData) {
-        console.error('❌ quarterData가 생성되지 않음', { selectedYear, selectedQuarter });
+        console.error('❌ quarterData가 생성되지 않음', { selectedYear, selectedQuarter, workPeriod });
         throw new Error('날짜 범위를 선택해주세요.');
       }
       
@@ -174,12 +197,177 @@ export default function SchedulePage() {
       const orderedSubsidiaries = applyEntityOrder(subsData || []);
       setSubsidiaries(orderedSubsidiaries);
 
+      // 귀속연도에 해당하는 quarter_id 찾기 (Submission 페이지에서 사용하는 quarter_id)
+      // quarterData가 temp-여도 submissions는 조회해야 함
+      const fiscalYear = parseInt(selectedYear);
+      const fiscalQuarter = parseInt(selectedQuarter);
+      
+      let fiscalQuarterId: string | null = null;
+      
+      // Quarter 조회
+      const { data: fiscalQuarterData, error: fiscalQuarterError } = await supabase
+        .from('quarters')
+        .select('id')
+        .eq('year', fiscalYear)
+        .eq('quarter', fiscalQuarter)
+        .maybeSingle();
+
+      if (fiscalQuarterData) {
+        fiscalQuarterId = (fiscalQuarterData as any).id;
+        console.log(`✅ 귀속연도 Quarter 조회 성공:`, {
+          fiscalYear,
+          fiscalQuarter,
+          fiscalQuarterId,
+        });
+      } else {
+        // Quarter가 없으면 생성 시도
+        console.log(`⚠️ 귀속연도 ${fiscalYear}년 ${fiscalQuarter}Q의 quarter가 없습니다. 생성 시도...`);
+        const quarterStartDate = new Date(fiscalYear, (fiscalQuarter - 1) * 3, 1);
+        const quarterEndDate = new Date(fiscalYear, fiscalQuarter * 3, 0);
+        
+        const { data: newFiscalQuarter, error: insertError } = await (supabase as any)
+          .from('quarters')
+          .insert({
+            year: fiscalYear,
+            quarter: fiscalQuarter,
+            start_date: format(quarterStartDate, 'yyyy-MM-dd'),
+            end_date: format(quarterEndDate, 'yyyy-MM-dd'),
+          })
+          .select('id')
+          .single();
+
+        if (insertError) {
+          console.warn('Quarter 생성 실패:', insertError);
+          // 생성 실패해도 계속 진행 (quarter_id가 null인 submissions도 조회)
+        } else {
+          fiscalQuarterId = (newFiscalQuarter as any)?.id;
+          console.log(`✅ Quarter 생성 성공: ${fiscalQuarterId}`);
+        }
+      }
+
+      // submissions 조회 쿼리 구성 (quarterData가 temp-여도 조회해야 함)
+      // fiscalQuarterId가 있으면 해당 ID와 일치하는 것만 조회
+      // null인 것은 제외 (다른 귀속연도와 혼동 방지)
+      let submissionsQuery = supabase
+        .from('submissions')
+        .select('*');
+      
+      if (fiscalQuarterId) {
+        // fiscalQuarterId가 있으면 해당 ID와 일치하는 것만 조회
+        submissionsQuery = submissionsQuery.eq('quarter_id', fiscalQuarterId);
+      } else {
+        // fiscalQuarterId가 없으면 null인 경우만 조회 (제출 시 quarter가 없었던 경우)
+        submissionsQuery = submissionsQuery.is('quarter_id', null);
+      }
+
+      // Preliminary Sales/SG&A 데이터 조회 (preliminary-sales 카테고리용)
+      let preliminarySalesSGAQuery = supabase
+        .from('preliminary_sales_sga')
+        .select('*');
+      
+      if (fiscalQuarterId) {
+        preliminarySalesSGAQuery = preliminarySalesSGAQuery.eq('quarter_id', fiscalQuarterId);
+      } else {
+        preliminarySalesSGAQuery = preliminarySalesSGAQuery.is('quarter_id', null);
+      }
+
       // 스케줄 항목 (quarter_id가 실제로 존재하는 경우만)
       if (quarterData.id.startsWith('temp-') || quarterData.id.startsWith('custom-')) {
         setScheduleItems([]);
-        setSubmissions([]);
+        // submissions는 별도로 조회
+        const [submissionsResult, preliminarySalesSGAResult] = await Promise.all([
+          submissionsQuery,
+          preliminarySalesSGAQuery,
+        ]);
+
+        if (submissionsResult.error) {
+          console.warn('submissions 테이블 조회 실패 (무시):', submissionsResult.error);
+        }
+        if (preliminarySalesSGAResult.error) {
+          console.warn('preliminary_sales_sga 테이블 조회 실패 (무시):', preliminarySalesSGAResult.error);
+        }
+
+        // submissions 처리
+        const submissionDocuments = ((submissionsResult.data || []) as any[])
+          .filter((item: any) => {
+            if (!item.quarter_id) {
+              return !fiscalQuarterId;
+            }
+            return item.quarter_id === fiscalQuarterId;
+          })
+          .map((item: any) => ({
+            id: item.id,
+            quarter_id: item.quarter_id || fiscalQuarterId,
+            subsidiary_id: item.subsidiary_id,
+            category: item.category,
+            file_name: item.file_name,
+            file_path: item.file_path,
+            file_size: item.file_size,
+            version: item.version,
+            submitted_by: item.submitted_by,
+            submitted_at: item.submitted_at,
+          }));
+
+        // Preliminary Sales/SG&A 처리
+        const preliminarySalesSGAData = (preliminarySalesSGAResult.data || []) as any[];
+        const preliminarySalesSubmissions = new Map<string, any>();
+        
+        preliminarySalesSGAData.forEach((item: any) => {
+          const key = `${item.subsidiary_id}_preliminary-sales`;
+          if (!preliminarySalesSubmissions.has(key)) {
+            const sameSubsidiary = preliminarySalesSGAData.filter(
+              (d: any) => d.subsidiary_id === item.subsidiary_id
+            );
+            const latestUpdate = sameSubsidiary.reduce((latest: string, current: any) => {
+              return new Date(current.updated_at) > new Date(latest) ? current.updated_at : latest;
+            }, item.updated_at);
+            
+            preliminarySalesSubmissions.set(key, {
+              id: `preliminary-sales-${item.subsidiary_id}`,
+              quarter_id: item.quarter_id || fiscalQuarterId,
+              subsidiary_id: item.subsidiary_id,
+              category: 'preliminary-sales',
+              file_name: 'Preliminary Sales/SG&A',
+              file_path: '',
+              file_size: 0,
+              version: 1,
+              submitted_by: null,
+              submitted_at: latestUpdate,
+            });
+          }
+        });
+
+        const mergedSubmissions = [...submissionDocuments];
+        preliminarySalesSubmissions.forEach((sub) => {
+          const existingIndex = mergedSubmissions.findIndex(
+            (d) => d.subsidiary_id === sub.subsidiary_id && d.category === sub.category
+          );
+          if (existingIndex >= 0) {
+            if (new Date(sub.submitted_at) > new Date(mergedSubmissions[existingIndex].submitted_at)) {
+              mergedSubmissions[existingIndex] = sub;
+            }
+          } else {
+            mergedSubmissions.push(sub);
+          }
+        });
+
+        console.log(`📊 최종 merged submissions (temp quarter):`, {
+          totalCount: mergedSubmissions.length,
+          fiscalYear,
+          fiscalQuarter,
+          fiscalQuarterId,
+          submissions: mergedSubmissions.map(s => ({
+            id: s.id,
+            category: s.category,
+            subsidiary_id: s.subsidiary_id,
+            quarter_id: s.quarter_id,
+            file_name: s.file_name,
+          })),
+        });
+
+        setSubmissions(mergedSubmissions);
       } else {
-        const [itemsResult, submissionsResult] = await Promise.all([
+        const [itemsResult, documentSubmissionsResult, submissionsResult, preliminarySalesSGAResult] = await Promise.all([
           supabase
             .from('schedule_items')
             .select('*')
@@ -188,13 +376,166 @@ export default function SchedulePage() {
             .from('document_submissions')
             .select('*')
             .eq('quarter_id', quarterData.id),
+          // Submission 페이지에서 제출한 데이터 조회
+          submissionsQuery,
+          // Preliminary Sales/SG&A 데이터 조회
+          preliminarySalesSGAQuery,
         ]);
 
         if (itemsResult.error) throw itemsResult.error;
-        if (submissionsResult.error) throw submissionsResult.error;
+        if (documentSubmissionsResult.error) throw documentSubmissionsResult.error;
+        if (submissionsResult.error) {
+          // submissions 테이블이 없을 수 있으므로 에러는 무시
+          console.warn('submissions 테이블 조회 실패 (무시):', submissionsResult.error);
+        }
+        if (preliminarySalesSGAResult.error) {
+          // preliminary_sales_sga 테이블이 없을 수 있으므로 에러는 무시
+          console.warn('preliminary_sales_sga 테이블 조회 실패 (무시):', preliminarySalesSGAResult.error);
+        }
         
         setScheduleItems(itemsResult.data || []);
-        setSubmissions(submissionsResult.data || []);
+        
+        // document_submissions와 submissions를 합쳐서 DocumentSubmission 형식으로 변환
+        const documentSubmissions = (documentSubmissionsResult.data || []).map((item: any) => ({
+          id: item.id,
+          quarter_id: item.quarter_id,
+          subsidiary_id: item.subsidiary_id,
+          category: item.category,
+          file_name: item.file_name,
+          file_path: item.file_path,
+          file_size: item.file_size,
+          version: item.version,
+          submitted_by: item.submitted_by,
+          submitted_at: item.submitted_at,
+        }));
+        
+        // submissions를 DocumentSubmission 형식으로 변환
+        // quarter_id가 null인 경우는 제외 (다른 귀속연도와 혼동 방지)
+        // 단, fiscalQuarterId가 null인 경우는 포함 (제출 시 quarter가 없었던 경우)
+        const submissionDocuments = ((submissionsResult.data || []) as any[])
+          .filter((item: any) => {
+            // quarter_id가 null이면 fiscalQuarterId도 null인 경우만 포함
+            if (!item.quarter_id) {
+              return !fiscalQuarterId;
+            }
+            // quarter_id가 있으면 fiscalQuarterId와 일치하는 경우만 포함
+            return item.quarter_id === fiscalQuarterId;
+          })
+          .map((item: any) => ({
+            id: item.id,
+            quarter_id: item.quarter_id || fiscalQuarterId, // null이면 fiscalQuarterId로 설정
+            subsidiary_id: item.subsidiary_id,
+            category: item.category,
+            file_name: item.file_name,
+            file_path: item.file_path,
+            file_size: item.file_size,
+            version: item.version,
+            submitted_by: item.submitted_by,
+            submitted_at: item.submitted_at,
+          }));
+        
+        console.log(`📊 submissions 조회 결과:`, {
+          fiscalYear,
+          fiscalQuarter,
+          fiscalQuarterId,
+          rawSubmissionsCount: (submissionsResult.data || []).length,
+          filteredSubmissionsCount: submissionDocuments.length,
+          rawSubmissions: (submissionsResult.data || []).map((s: any) => ({
+            id: s.id,
+            category: s.category,
+            subsidiary_id: s.subsidiary_id,
+            quarter_id: s.quarter_id,
+            file_name: s.file_name,
+          })),
+          filteredSubmissions: submissionDocuments.map(s => ({
+            id: s.id,
+            category: s.category,
+            subsidiary_id: s.subsidiary_id,
+            quarter_id: s.quarter_id,
+            file_name: s.file_name,
+          })),
+        });
+        
+        // Preliminary Sales/SG&A 데이터를 submissions 형식으로 변환
+        // 각 subsidiary별로 데이터가 하나라도 있으면 제출된 것으로 간주
+        const preliminarySalesSGAData = (preliminarySalesSGAResult.data || []) as any[];
+        const preliminarySalesSubmissions = new Map<string, any>();
+        
+        preliminarySalesSGAData.forEach((item: any) => {
+          const key = `${item.subsidiary_id}_preliminary-sales`;
+          if (!preliminarySalesSubmissions.has(key)) {
+            // 가장 최근 업데이트 시간을 찾기
+            const sameSubsidiary = preliminarySalesSGAData.filter(
+              (d: any) => d.subsidiary_id === item.subsidiary_id
+            );
+            const latestUpdate = sameSubsidiary.reduce((latest: string, current: any) => {
+              return new Date(current.updated_at) > new Date(latest) ? current.updated_at : latest;
+            }, item.updated_at);
+            
+            preliminarySalesSubmissions.set(key, {
+              id: `preliminary-sales-${item.subsidiary_id}`,
+              quarter_id: item.quarter_id || fiscalQuarterId,
+              subsidiary_id: item.subsidiary_id,
+              category: 'preliminary-sales',
+              file_name: 'Preliminary Sales/SG&A',
+              file_path: '',
+              file_size: 0,
+              version: 1,
+              submitted_by: null,
+              submitted_at: latestUpdate,
+            });
+          }
+        });
+        
+        // 두 배열을 합치되, 같은 (subsidiary_id, category) 조합이면 submissions를 우선
+        const mergedSubmissions = [...documentSubmissions];
+        
+        // submissions 추가
+        submissionDocuments.forEach((sub) => {
+          const existingIndex = mergedSubmissions.findIndex(
+            (d) => d.subsidiary_id === sub.subsidiary_id && d.category === sub.category
+          );
+          if (existingIndex >= 0) {
+            // submissions가 더 최신이면 교체
+            if (new Date(sub.submitted_at) > new Date(mergedSubmissions[existingIndex].submitted_at)) {
+              mergedSubmissions[existingIndex] = sub;
+            }
+          } else {
+            mergedSubmissions.push(sub);
+          }
+        });
+        
+        // Preliminary Sales/SG&A 추가
+        preliminarySalesSubmissions.forEach((sub) => {
+          const existingIndex = mergedSubmissions.findIndex(
+            (d) => d.subsidiary_id === sub.subsidiary_id && d.category === sub.category
+          );
+          if (existingIndex >= 0) {
+            // preliminary-sales가 더 최신이면 교체
+            if (new Date(sub.submitted_at) > new Date(mergedSubmissions[existingIndex].submitted_at)) {
+              mergedSubmissions[existingIndex] = sub;
+            }
+          } else {
+            mergedSubmissions.push(sub);
+          }
+        });
+        
+        console.log(`📊 최종 merged submissions:`, {
+          totalCount: mergedSubmissions.length,
+          fiscalYear,
+          fiscalQuarter,
+          fiscalQuarterId,
+          quarterDataId: quarterData.id,
+          submissions: mergedSubmissions.map(s => ({
+            id: s.id,
+            category: s.category,
+            subsidiary_id: s.subsidiary_id,
+            quarter_id: s.quarter_id,
+            file_name: s.file_name,
+          })),
+        });
+        
+        setSubmissions(mergedSubmissions);
       }
     } catch (error: any) {
       console.error('Failed to load data:', error);
@@ -299,45 +640,6 @@ export default function SchedulePage() {
     toast.success('Entity 순서가 저장되었습니다.');
   };
 
-  // 귀속연도에서 업무 기간(Year/Quarter) 계산
-  const calculateWorkPeriod = (fiscalPeriod: string): { year: string; quarter: string } => {
-    const match = fiscalPeriod.match(/^(\d{4})(\d)Q$/);
-    if (!match) {
-      return { year: selectedYear, quarter: selectedQuarter };
-    }
-    
-    const fiscalYear = parseInt(match[1]);
-    const fiscalQuarter = parseInt(match[2]);
-    
-    // 귀속연도 규칙:
-    // 20254Q → Year: 2026, Quarter: 1Q
-    // 20261Q → Year: 2026, Quarter: 2Q
-    // 20262Q → Year: 2026, Quarter: 3Q
-    // 20263Q → Year: 2026, Quarter: 4Q
-    // 20264Q → Year: 2027, Quarter: 1Q
-    
-    if (fiscalQuarter === 4) {
-      return { year: (fiscalYear + 1).toString(), quarter: '1' };
-    } else {
-      return { year: fiscalYear.toString(), quarter: (fiscalQuarter + 1).toString() };
-    }
-  };
-
-  // Overview 탭용 귀속연도 선택 핸들러
-  const handleFiscalPeriodChange = (fiscalPeriod: string) => {
-    setSelectedFiscalPeriod(fiscalPeriod);
-    const workPeriod = calculateWorkPeriod(fiscalPeriod);
-    setSelectedYear(workPeriod.year);
-    setSelectedQuarter(workPeriod.quarter);
-  };
-
-  // Calendar 탭용 귀속연도 선택 핸들러
-  const handleCalendarFiscalPeriodChange = (fiscalPeriod: string) => {
-    setSelectedFiscalPeriod(fiscalPeriod);
-    const workPeriod = calculateWorkPeriod(fiscalPeriod);
-    setSelectedYear(workPeriod.year);
-    setSelectedQuarter(workPeriod.quarter);
-  };
 
   // 카테고리 드롭 핸들러
   const handleCategoryDrop = async (subsidiaryId: string, date: string, categoryId: string) => {
@@ -662,36 +964,11 @@ export default function SchedulePage() {
 
   const achievementRate = calculateAchievementRate(filteredScheduleItems);
 
-  // 귀속연도 계산 (20254Q 형식)
-  // selectedFiscalPeriod가 있으면 그것을 사용, 없으면 quarter에서 계산
-  const fiscalPeriod = useMemo(() => {
-    if (selectedFiscalPeriod) return selectedFiscalPeriod;
-    if (!quarter) return '';
-    return `${quarter.year}${quarter.quarter}Q`;
-  }, [selectedFiscalPeriod, quarter]);
-  
-  // quarter가 변경될 때 selectedFiscalPeriod 초기화 (직접 선택한 경우가 아닐 때)
-  // 초기 로드 시에만 설정하고, 사용자가 선택한 후에는 유지
-  useEffect(() => {
-    if (quarter && !selectedFiscalPeriod) {
-      // 초기 로드 시에만 자동 계산
-      const calculated = `${quarter.year}${quarter.quarter}Q`;
-      setSelectedFiscalPeriod(calculated);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quarter?.id]); // quarter.id가 변경될 때만 실행 (초기 로드 시)
+  // 업무 기간 계산 (귀속연도에서 다음 분기)
+  const workPeriod = useMemo(() => {
+    return calculateWorkPeriod(selectedYear, selectedQuarter);
+  }, [selectedYear, selectedQuarter]);
 
-  // 귀속연도에서 Year와 Quarter 추출 (20254Q -> Year: 2026, Quarter: 1Q)
-  const displayYearQuarter = useMemo(() => {
-    if (!quarter) {
-      return { year: parseInt(selectedYear), quarter: parseInt(selectedQuarter) };
-    }
-    
-    if (quarter.quarter === 4) {
-      return { year: quarter.year + 1, quarter: 1 };
-    }
-    return { year: quarter.year, quarter: quarter.quarter + 1 };
-  }, [quarter, selectedYear, selectedQuarter]);
 
   // 로딩 상태
   if (loading) {
@@ -715,16 +992,7 @@ export default function SchedulePage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-12rem)]">
-      {/* 좌측 사이드바 - Overview 탭에서는 숨김 */}
-      {activeTab === 'calendar' && (
-        <CategorySidebar
-          selectedCategory={selectedCategory}
-          onCategorySelect={handleCategorySelect}
-          onItemDelete={handleItemDelete}
-        />
-      )}
-
+    <div className="flex flex-col h-[calc(100vh-12rem)]">
       {/* 메인 영역 */}
       <div className="flex-1 p-6 overflow-auto">
         {/* 상단 헤더 */}
@@ -766,108 +1034,95 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          {/* Overview 탭용 귀속연도 선택 */}
-          {activeTab === 'overview' && (
-            <div className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg mb-2">
-              <label className="text-sm font-medium text-gray-700">귀속연도:</label>
-              <Select value={fiscalPeriod} onValueChange={handleFiscalPeriodChange}>
-                <SelectTrigger className="w-32">
+          {/* 귀속연도 선택 및 카테고리 (Overview 및 Calendar 탭 공통) */}
+          <div className="flex items-center gap-4 p-2 bg-gray-50 rounded-lg mb-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">귀속연도:</Label>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-24">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="20251Q">20251Q</SelectItem>
-                  <SelectItem value="20252Q">20252Q</SelectItem>
-                  <SelectItem value="20253Q">20253Q</SelectItem>
-                  <SelectItem value="20254Q">20254Q</SelectItem>
-                  <SelectItem value="20261Q">20261Q</SelectItem>
-                  <SelectItem value="20262Q">20262Q</SelectItem>
-                  <SelectItem value="20263Q">20263Q</SelectItem>
-                  <SelectItem value="20264Q">20264Q</SelectItem>
-                  <SelectItem value="20271Q">20271Q</SelectItem>
-                  <SelectItem value="20272Q">20272Q</SelectItem>
-                  <SelectItem value="20273Q">20273Q</SelectItem>
-                  <SelectItem value="20274Q">20274Q</SelectItem>
+                  {Array.from({ length: 10 }, (_, i) => 2020 + i).map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            </div>
-          )}
-
-          {/* Calendar 탭용 귀속연도 선택 */}
-          {activeTab === 'calendar' && (
-            <div className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg mb-2">
-              <label className="text-sm font-medium text-gray-700">귀속연도:</label>
-              <Select value={fiscalPeriod} onValueChange={handleCalendarFiscalPeriodChange}>
-                <SelectTrigger className="w-32">
+              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+                <SelectTrigger className="w-20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="20251Q">20251Q</SelectItem>
-                  <SelectItem value="20252Q">20252Q</SelectItem>
-                  <SelectItem value="20253Q">20253Q</SelectItem>
-                  <SelectItem value="20254Q">20254Q</SelectItem>
-                  <SelectItem value="20261Q">20261Q</SelectItem>
-                  <SelectItem value="20262Q">20262Q</SelectItem>
-                  <SelectItem value="20263Q">20263Q</SelectItem>
-                  <SelectItem value="20264Q">20264Q</SelectItem>
-                  <SelectItem value="20271Q">20271Q</SelectItem>
-                  <SelectItem value="20272Q">20272Q</SelectItem>
-                  <SelectItem value="20273Q">20273Q</SelectItem>
-                  <SelectItem value="20274Q">20274Q</SelectItem>
+                  <SelectItem value="1">1Q</SelectItem>
+                  <SelectItem value="2">2Q</SelectItem>
+                  <SelectItem value="3">3Q</SelectItem>
+                  <SelectItem value="4">4Q</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="text-sm text-gray-500">|</span>
-              {/* Year 선택 */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Year</label>
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2025">2025</SelectItem>
-                    <SelectItem value="2026">2026</SelectItem>
-                    <SelectItem value="2027">2027</SelectItem>
-                    <SelectItem value="2028">2028</SelectItem>
-                    <SelectItem value="2029">2029</SelectItem>
-                    <SelectItem value="2030">2030</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Quarter 선택 */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Quarter</label>
-                <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1Q</SelectItem>
-                    <SelectItem value="2">2Q</SelectItem>
-                    <SelectItem value="3">3Q</SelectItem>
-                    <SelectItem value="4">4Q</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
-          )}
+            
+            {/* 카테고리 바 - Calendar 탭에서만 표시 */}
+            {activeTab === 'calendar' && (
+              <CategoryBar
+                selectedCategory={selectedCategory}
+                onCategorySelect={handleCategorySelect}
+                onItemDelete={handleItemDelete}
+              />
+            )}
+          </div>
         </div>
 
-        {/* Overview / Calendar 탭 */}
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'overview' | 'calendar')}>
+        {/* Overview / Calendar / Submissions 탭 */}
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'overview' | 'calendar' | 'submissions')}>
           <TabsList className="mb-2">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            <TabsTrigger value="submissions">Submissions</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="mt-0">
+          <TabsContent value="overview" className="mt-0 space-y-6">
+            {/* 제출 현황 필터 */}
+            {submissions.length > 0 && (
+              <div className="space-y-4">
+                <SubmissionSummary 
+                  submissions={submissions} 
+                  subsidiaries={subsidiaries}
+                  onEntityFilter={setSelectedEntityId}
+                  onCategoryFilter={setSelectedCategory}
+                  selectedEntityId={selectedEntityId}
+                  selectedCategoryId={selectedCategory}
+                />
+                {/* 필터 초기화 버튼 */}
+                {(selectedEntityId || selectedCategory) && (
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedEntityId(null);
+                        setSelectedCategory(null);
+                      }}
+                    >
+                      필터 초기화
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Overview 그리드 */}
             {quarter && (
               <div className="bg-white rounded-lg border p-4">
                 <OverviewGrid
                   quarter={quarter}
-                  subsidiaries={subsidiaries}
+                  subsidiaries={selectedEntityId 
+                    ? subsidiaries.filter(s => s.id === selectedEntityId)
+                    : subsidiaries}
                   scheduleItems={scheduleItems}
                   submissions={submissions}
+                  selectedCategory={selectedCategory}
                   onEntityOrderChange={handleEntityOrderChange}
                 />
               </div>
@@ -880,12 +1135,21 @@ export default function SchedulePage() {
               quarter={quarter}
               subsidiaries={subsidiaries}
               scheduleItems={filteredScheduleItems}
+              submissions={submissions}
               selectedCategory={selectedCategory}
               onCellClick={handleCellClick}
               onCategoryDrop={handleCategoryDrop}
               onItemDelete={handleItemDelete}
               onItemConfirm={handleItemConfirm}
               onEntityOrderChange={handleEntityOrderChange}
+            />
+          </TabsContent>
+
+          <TabsContent value="submissions" className="mt-0">
+            {/* 제출 로그 테이블 */}
+            <SubmissionLogTable
+              selectedYear={selectedYear}
+              selectedQuarter={selectedQuarter}
             />
           </TabsContent>
         </Tabs>

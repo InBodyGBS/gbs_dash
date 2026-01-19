@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import type { Subsidiary } from '@/lib/supabase/types';
-import type { ScheduleItem, Quarter } from '@/lib/types/quarterly-closing';
+import type { ScheduleItem, Quarter, DocumentSubmission } from '@/lib/types/quarterly-closing';
 import { getCategoryById } from '@/lib/constants/closing-categories';
 import { calculateBySubsidiary } from '@/lib/utils/achievement-rate';
 
@@ -22,6 +22,7 @@ interface ScheduleGridProps {
   quarter: Quarter;
   subsidiaries: Subsidiary[];
   scheduleItems: ScheduleItem[];
+  submissions?: DocumentSubmission[];
   selectedCategory: string | null;
   onCellClick: (subsidiaryId: string, date: string) => void;
   onCategoryDrop?: (subsidiaryId: string, date: string, categoryId: string) => void;
@@ -34,6 +35,7 @@ export const ScheduleGrid = ({
   quarter,
   subsidiaries,
   scheduleItems,
+  submissions = [],
   selectedCategory,
   onCellClick,
   onCategoryDrop,
@@ -135,6 +137,15 @@ export const ScheduleGrid = ({
         item.subsidiary_id === subsidiaryId &&
         format(parseISO(item.planned_date), 'yyyy-MM-dd') === dateStr
     );
+  };
+
+  // 특정 법인과 날짜의 제출 자료 가져오기
+  const getSubmissions = (subsidiaryId: string, date: Date): DocumentSubmission[] => {
+    return submissions.filter((sub) => {
+      if (sub.subsidiary_id !== subsidiaryId) return false;
+      const submittedDate = new Date(sub.submitted_at);
+      return format(submittedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
+    });
   };
 
   // 드롭 핸들러
@@ -349,6 +360,7 @@ export const ScheduleGrid = ({
                 {/* 날짜별 셀 */}
                 {dates.map((date) => {
                   const items = getScheduleItems(subsidiary.id, date);
+                  const dateSubmissions = getSubmissions(subsidiary.id, date);
 
                   return (
                     <td
@@ -356,7 +368,8 @@ export const ScheduleGrid = ({
                       className={cn(
                         'border border-gray-200 px-1 py-1 cursor-pointer transition-colors align-top',
                         items.length === 0 && selectedCategory && 'hover:bg-blue-50',
-                        items.length === 0 && !selectedCategory && 'bg-gray-50'
+                        items.length === 0 && !selectedCategory && 'bg-gray-50',
+                        dateSubmissions.length > 0 && 'bg-blue-50'
                       )}
                       onDrop={(e) => handleDrop(e, subsidiary.id, date)}
                       onDragOver={handleDragOver}
@@ -371,13 +384,17 @@ export const ScheduleGrid = ({
                         // 레이블 축약 (첫 단어의 첫 3글자)
                         const shortLabel = category.label.split(' ')[0].substring(0, 3).toUpperCase();
 
+                        // 해당 카테고리의 제출 자료가 있는지 확인
+                        const hasSubmission = dateSubmissions.some(sub => sub.category === item.category);
+
                         return (
                           <Badge
                             key={item.id}
                             variant={item.status === 'confirmed' ? 'default' : 'secondary'}
                             className={cn(
                               "text-[10px] px-1 py-0 h-5 whitespace-nowrap",
-                              item.status === 'planned' ? 'cursor-pointer hover:ring-2 hover:ring-blue-400' : 'cursor-move'
+                              item.status === 'planned' ? 'cursor-pointer hover:ring-2 hover:ring-blue-400' : 'cursor-move',
+                              hasSubmission && 'ring-2 ring-blue-500'
                             )}
                             draggable
                             onDragStart={(e) => handleBadgeDragStart(e, item.id)}
@@ -389,11 +406,48 @@ export const ScheduleGrid = ({
                             }}
                             title={
                               item.status === 'confirmed' 
-                                ? `${category.label} - 확정 (드래그하여 삭제)` 
-                                : `${category.label} - 예정 (클릭하여 확정 또는 드래그하여 삭제)`
+                                ? `${category.label} - 확정${hasSubmission ? ' (제출됨)' : ''} (드래그하여 삭제)` 
+                                : `${category.label} - 예정${hasSubmission ? ' (제출됨)' : ''} (클릭하여 확정 또는 드래그하여 삭제)`
                             }
                           >
                             {item.status === 'confirmed' ? '✓' : '○'} {shortLabel}
+                          </Badge>
+                        );
+                      })}
+                      {/* 제출된 자료가 있지만 스케줄 항목이 없는 경우 */}
+                      {dateSubmissions
+                        .filter(sub => !items.some(item => item.category === sub.category))
+                        .map((sub) => {
+                          const category = getCategoryById(sub.category as any);
+                          if (!category) return null;
+                          const shortLabel = category.label.split(' ')[0].substring(0, 3).toUpperCase();
+                          return (
+                            <Badge
+                              key={sub.id}
+                              variant="default"
+                              className="text-[10px] px-1 py-0 h-5 whitespace-nowrap bg-blue-600 text-white"
+                              title={`${category.label} - 제출 완료`}
+                            >
+                              ✓ {shortLabel}
+                            </Badge>
+                          );
+                        })}
+                    </div>
+                  ) : dateSubmissions.length > 0 ? (
+                    // 스케줄 항목은 없지만 제출 자료가 있는 경우
+                    <div className="flex flex-col gap-0.5 min-h-[2rem] max-h-[6rem] overflow-y-auto">
+                      {dateSubmissions.map((sub) => {
+                        const category = getCategoryById(sub.category as any);
+                        if (!category) return null;
+                        const shortLabel = category.label.split(' ')[0].substring(0, 3).toUpperCase();
+                        return (
+                          <Badge
+                            key={sub.id}
+                            variant="default"
+                            className="text-[10px] px-1 py-0 h-5 whitespace-nowrap bg-blue-600 text-white"
+                            title={`${category.label} - 제출 완료`}
+                          >
+                            ✓ {shortLabel}
                           </Badge>
                         );
                       })}
