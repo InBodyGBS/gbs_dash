@@ -151,25 +151,9 @@ export async function createArapSubmission(
       }
     }
 
-    // 2. 기존 제출 확인 및 삭제
-    console.log('🔍 Checking for existing submission...');
-    const { data: existingSubmissions } = await supabase
-      .from('arap_submissions')
-      .select('id')
-      .eq('entity_id', entityId)
-      .eq('fiscal_year', fiscal_year)
-      .eq('fiscal_month', fiscal_month);
-
-    if (existingSubmissions && existingSubmissions.length > 0) {
-      console.log('🗑️ Deleting existing submission(s)...', existingSubmissions.length);
-      for (const existing of existingSubmissions) {
-        try {
-          await deleteArapSubmission(existing.id);
-        } catch (deleteError) {
-          console.warn('⚠️ Failed to delete existing submission:', deleteError);
-        }
-      }
-    }
+    // 2. 기존 제출은 삭제하지 않고 새로 추가 (로그 누적)
+    // 제약 조건이 있어도 여러 번 저장하면 로그가 쌓이도록 함
+    console.log('🔍 Creating new submission (keeping history)...');
 
     // 3. Submission 생성
     console.log('💾 Creating submission record...');
@@ -284,6 +268,12 @@ export async function getArapSubmissions(
   fiscalMonth?: number
 ): Promise<ArapSubmissionWithDetails[]> {
   try {
+    console.log('🔍 Fetching ARAP submissions:', {
+      entityId,
+      fiscalYear,
+      fiscalMonth,
+    });
+    
     let query = supabase
       .from('arap_submissions')
       .select(`
@@ -305,6 +295,13 @@ export async function getArapSubmissions(
     const { data, error } = await query;
 
     if (error) {
+      console.error('❌ Error fetching submissions:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+      
       // 테이블이 없을 경우 빈 배열 반환
       if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
         console.warn('ARAP tables not found. Please run the schema migration first.');
@@ -312,6 +309,22 @@ export async function getArapSubmissions(
       }
       throw error;
     }
+
+    console.log('✅ Fetched submissions:', {
+      count: data?.length || 0,
+      submissions: data?.map((sub: any) => ({
+        id: sub.id,
+        entity_id: sub.entity_id,
+        fiscal_year: sub.fiscal_year,
+        fiscal_month: sub.fiscal_month,
+        submission_date: sub.submission_date,
+        submission_type: sub.submission_type,
+        total_items: sub.total_items,
+        details_count: Array.isArray(sub.submission_details) 
+          ? sub.submission_details.length 
+          : (sub.submission_details ? 1 : 0),
+      })),
+    });
 
     // submission_details가 배열이 아닌 경우 처리
     const submissions = (data || []).map((sub: any) => ({
@@ -323,7 +336,7 @@ export async function getArapSubmissions(
 
     return submissions as ArapSubmissionWithDetails[];
   } catch (error: any) {
-    console.error('Error fetching ARAP submissions:', {
+    console.error('❌ Error fetching ARAP submissions:', {
       message: error?.message,
       code: error?.code,
       details: error?.details,
@@ -409,7 +422,7 @@ export async function getMonthlyStatus(
         try {
           const { data: submissions, error } = await supabase
             .from('arap_submissions')
-            .select('id')
+            .select('id, match_status')
             .eq('entity_id', entity.id)
             .eq('fiscal_year', fiscalYear)
             .eq('fiscal_month', month);
@@ -471,60 +484,25 @@ export async function getMonthlyStatus(
             continue;
           }
           
-          // 실시간으로 매칭 상태 계산 (실제로 거래가 있는 상대방만 확인)
+          // DB에 저장된 match_status 사용 (성능 최적화)
+          // recalculateMatchStatus가 저장 시 업데이트하므로 최신 상태 반영
+          const hasMatched = submissions?.some((s: any) => s.match_status === 'matched');
+          const hasPending = submissions?.some((s: any) => s.match_status === 'pending');
+          const hasMismatched = submissions?.some((s: any) => s.match_status === 'mismatched');
+
           let status: MatchStatus = 'no_data';
-          
-          // 이 Entity가 제출한 데이터에서 실제 거래 상대방 목록 추출
-          const { data: submissionDetails, error: detailsError } = await supabase
-            .from('arap_submission_details')
-            .select('counterparty_entity_id')
-            .in('submission_id', (submissions || []).map((s: any) => s.id));
-          
-          if (detailsError) {
-            console.warn(`Error fetching submission details for ${entity.entity_name}:`, detailsError);
-            // 에러가 나도 pending으로 처리
-            status = 'pending';
-          } else {
-            // 실제 거래가 있는 상대방 Entity ID 목록 (중복 제거)
-            const counterpartyIds = Array.from(
-              new Set((submissionDetails || []).map((d: any) => d.counterparty_entity_id))
-            );
-            
-            if (counterpartyIds.length === 0) {
-              // 거래 상대방이 없으면 pending
+          if (submissionCount > 0) {
+            if (hasMatched && !hasMismatched) {
+              // 모든 거래 상대방과 matched (mismatched가 없음)
+              status = 'matched';
+            } else if (hasMismatched) {
+              // 하나라도 mismatched
+              status = 'mismatched';
+            } else if (hasPending) {
               status = 'pending';
             } else {
-              // 실제 거래가 있는 상대방과의 매칭 상태만 확인
-              const matchStatuses: MatchStatus[] = [];
-              
-              for (const counterpartyId of counterpartyIds) {
-                try {
-                  const matchSummary = await calculateMatchStatus(
-                    entity.id,
-                    counterpartyId,
-                    fiscalYear,
-                    month
-                  );
-                  matchStatuses.push(matchSummary.status);
-                } catch (matchError) {
-                  // 개별 매칭 계산 실패는 무시하고 계속 진행
-                  console.warn(`Failed to calculate match status for ${entity.entity_name} vs counterparty ${counterpartyId}:`, matchError);
-                }
-              }
-              
-              // 상태 결정: 실제 거래 상대방 모두와의 매칭 상태를 종합
-              // - 모든 거래 상대방과 matched면 matched
-              // - 하나라도 mismatched면 mismatched
-              // - 그 외는 pending
-              if (matchStatuses.length === 0) {
-                status = 'pending';
-              } else if (matchStatuses.every(s => s === 'matched')) {
-                status = 'matched';
-              } else if (matchStatuses.some(s => s === 'mismatched')) {
-                status = 'mismatched';
-              } else {
-                status = 'pending';
-              }
+              // match_status가 없거나 no_data인 경우 pending으로 처리
+              status = 'pending';
             }
           }
 

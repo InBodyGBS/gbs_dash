@@ -3,7 +3,7 @@
 /**
  * Overview 그리드 컴포넌트
  * Entity가 행, 카테고리가 열로 표시
- * 제출 여부에 따라 파란색(제출)/빨간색(미제출)/회색(검토중) 원형 표시
+ * 제출 여부에 따라 회색(미제출)/파란색(검토중)/초록색(확정) 원형 표시
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -36,23 +36,40 @@ export const OverviewGrid = ({
   onEntityOrderChange,
   onCategoryOrderChange,
 }: OverviewGridProps) => {
-  // 디버깅: submissions 데이터 확인
+  // 디버깅: scheduleItems와 submissions 데이터 확인
   useEffect(() => {
-    if (submissions.length > 0) {
-      console.log(`📊 OverviewGrid submissions:`, {
-        totalCount: submissions.length,
-        submissions: submissions.map(s => ({
-          id: s.id,
-          category: s.category,
-          subsidiary_id: s.subsidiary_id,
-          file_name: s.file_name,
-        })),
-        subsidiaries: subsidiaries.map(s => ({ id: s.id, name: s.name })),
-      });
-    } else {
-      console.log(`⚠️ OverviewGrid submissions: 빈 배열`);
-    }
-  }, [submissions, subsidiaries]);
+    const employeeJdItems = scheduleItems.filter(item => item.category === 'employee-jd');
+    const employeeJdSubmissions = submissions.filter(sub => sub.category === 'employee-jd');
+    
+    console.log(`📊 OverviewGrid 데이터 확인:`, {
+      quarterId: quarter.id,
+      scheduleItemsCount: scheduleItems.length,
+      submissionsCount: submissions.length,
+      employeeJdItemsCount: employeeJdItems.length,
+      employeeJdSubmissionsCount: employeeJdSubmissions.length,
+      employeeJdItems: employeeJdItems.map(item => ({
+        id: item.id,
+        quarter_id: item.quarter_id,
+        subsidiary_id: item.subsidiary_id,
+        category: item.category,
+        status: item.status,
+      })),
+      employeeJdSubmissions: employeeJdSubmissions.map(s => ({
+        id: s.id,
+        quarter_id: s.quarter_id,
+        subsidiary_id: s.subsidiary_id,
+        category: s.category,
+      })),
+      allScheduleItems: scheduleItems.map(item => ({
+        id: item.id,
+        quarter_id: item.quarter_id,
+        subsidiary_id: item.subsidiary_id,
+        category: item.category,
+        status: item.status,
+      })),
+      subsidiaries: subsidiaries.map(s => ({ id: s.id, name: s.name })),
+    });
+  }, [scheduleItems, submissions, subsidiaries, quarter]);
   // Entity 순서 관리
   const [orderedSubsidiaries, setOrderedSubsidiaries] = useState<Subsidiary[]>(subsidiaries);
   const [draggedEntityIndex, setDraggedEntityIndex] = useState<number | null>(null);
@@ -107,9 +124,51 @@ export const OverviewGrid = ({
     return scheduleItems.some(
       (item) =>
         item.subsidiary_id === subsidiaryId &&
-        item.category === categoryId &&
-        item.quarter_id === quarter.id
+        item.category === categoryId
+        // quarter_id 비교 제거: Submissions는 fiscalQuarterId를, ScheduleItems는 workPeriod의 quarter_id를 사용하므로
     );
+  };
+
+  // ScheduleItem의 status 확인 (Calendar 로직과 동일)
+  const getScheduleItemStatus = (subsidiaryId: string, categoryId: string): 'confirmed' | 'planned' | null => {
+    // 모든 ScheduleItem 확인 (quarter_id 무관)
+    const matchingItems = scheduleItems.filter(
+      (item) =>
+        item.subsidiary_id === subsidiaryId &&
+        item.category === categoryId
+    );
+    
+    if (matchingItems.length === 0) {
+      return null;
+    }
+    
+    // 여러 개가 있을 경우, 'confirmed' 상태인 항목을 우선 선택
+    // 없으면 가장 최근 항목 사용 (updated_at 기준)
+    const confirmedItem = matchingItems.find(item => item.status === 'confirmed');
+    const item = confirmedItem || matchingItems[0];
+    
+    // 디버깅 로그 (employee-jd 카테고리만)
+    if (categoryId === 'employee-jd' && matchingItems.length > 0) {
+      console.log(`🔍 OverviewGrid getScheduleItemStatus [${categoryId}]:`, {
+        subsidiaryId,
+        categoryId,
+        quarterId: quarter.id,
+        totalScheduleItems: scheduleItems.length,
+        matchingItemsCount: matchingItems.length,
+        matchingItems: matchingItems.map(i => ({
+          id: i.id,
+          quarter_id: i.quarter_id,
+          status: i.status,
+          subsidiary_id: i.subsidiary_id,
+          category: i.category,
+          updated_at: i.updated_at,
+        })),
+        foundItem: item ? { id: item.id, status: item.status } : null,
+        hasConfirmed: !!confirmedItem,
+      });
+    }
+    
+    return item.status === 'confirmed' ? 'confirmed' : 'planned';
   };
 
   // 제출 여부 확인 (submissions에 항목이 있는지)
@@ -294,29 +353,87 @@ export const OverviewGrid = ({
                   </div>
                 </td>
                 {filteredCategories.map((category) => {
-                  const hasItem = hasScheduleItem(subsidiary.id, category.id);
-                  const hasSub = hasSubmission(subsidiary.id, category.id);
+                  // Calendar 로직과 동일: ScheduleItem의 status를 확인
+                  const itemStatus = getScheduleItemStatus(subsidiary.id, category.id);
+                  
+                  // 디버깅: 특정 케이스 로깅 (employee-jd 카테고리만)
+                  if (category.id === 'employee-jd' && (subsidiary.name.includes('BWA') || subsidiary.name.includes('Asia') || subsidiary.name.includes('Turkey'))) {
+                    const allEmployeeJdItems = scheduleItems.filter(item => item.category === 'employee-jd');
+                    const matchingItems = scheduleItems.filter(
+                      item => item.subsidiary_id === subsidiary.id && item.category === category.id
+                    );
+                    
+                    console.log(`🔍 OverviewGrid 상태 확인 [${subsidiary.name} - ${category.id}]:`, {
+                      subsidiaryId: subsidiary.id,
+                      subsidiaryName: subsidiary.name,
+                      categoryId: category.id,
+                      itemStatus,
+                      totalScheduleItems: scheduleItems.length,
+                      allEmployeeJdItemsCount: allEmployeeJdItems.length,
+                      allEmployeeJdItems: allEmployeeJdItems.map(item => ({
+                        id: item.id,
+                        quarter_id: item.quarter_id,
+                        subsidiary_id: item.subsidiary_id,
+                        status: item.status,
+                      })),
+                      matchingItemsCount: matchingItems.length,
+                      matchingItems: matchingItems.map(item => ({
+                        id: item.id,
+                        quarter_id: item.quarter_id,
+                        subsidiary_id: item.subsidiary_id,
+                        status: item.status,
+                      })),
+                      matchingSubmissions: submissions.filter(
+                        sub => sub.subsidiary_id === subsidiary.id && sub.category === category.id
+                      ).map(sub => ({
+                        id: sub.id,
+                        quarter_id: sub.quarter_id,
+                        subsidiary_id: sub.subsidiary_id,
+                      })),
+                    });
+                  }
+                  
+                  // 렌더링 시점에 실제 itemStatus 값 확인 (디버깅)
+                  const actualStatus = itemStatus;
+                  
+                  // 상태에 따른 색상 결정 (인라인 스타일 사용)
+                  let backgroundColor: string;
+                  let statusTitle: string;
+                  
+                  if (actualStatus === 'confirmed') {
+                    backgroundColor = '#16a34a'; // green-600
+                    statusTitle = '확정';
+                  } else if (actualStatus === 'planned') {
+                    backgroundColor = '#2563eb'; // blue-600
+                    statusTitle = '검토중';
+                  } else {
+                    backgroundColor = '#9ca3af'; // gray-400
+                    statusTitle = '미제출';
+                  }
+                  
+                  if (category.id === 'employee-jd' && (subsidiary.name.includes('BWA') || subsidiary.name.includes('Asia') || subsidiary.name.includes('Turkey'))) {
+                    console.log(`🎨 OverviewGrid 렌더링 [${subsidiary.name} - ${category.id}]:`, {
+                      itemStatus: actualStatus,
+                      backgroundColor,
+                      statusTitle,
+                      willRenderGreen: actualStatus === 'confirmed',
+                      willRenderBlue: actualStatus === 'planned',
+                      willRenderGray: actualStatus === null,
+                    });
+                  }
+                  
                   return (
                     <td
                       key={category.id}
                       className="border border-gray-300 px-4 py-3 text-center"
                     >
-                      {hasSub ? (
-                        // 제출됨: 파란색 원형
-                        <div className="flex items-center justify-center">
-                          <div className="w-4 h-4 rounded-full bg-blue-600" title="제출 완료" />
-                        </div>
-                      ) : hasItem ? (
-                        // 미제출: 빨간색 원형
-                        <div className="flex items-center justify-center">
-                          <div className="w-4 h-4 rounded-full bg-red-600" title="미제출" />
-                        </div>
-                      ) : (
-                        // 검토중: 회색 원형
-                        <div className="flex items-center justify-center">
-                          <div className="w-4 h-4 rounded-full bg-gray-400" title="검토중" />
-                        </div>
-                      )}
+                      <div className="flex items-center justify-center">
+                        <div 
+                          className="w-4 h-4 rounded-full" 
+                          style={{ backgroundColor }}
+                          title={statusTitle}
+                        />
+                      </div>
                     </td>
                   );
                 })}

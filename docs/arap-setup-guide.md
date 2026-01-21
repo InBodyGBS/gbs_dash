@@ -46,7 +46,30 @@ Supabase Dashboard → SQL Editor에서 다음 파일을 실행하세요:
 2. `docs/arap-rls-policies.sql` 파일의 내용을 복사하여 붙여넣기
 3. "Run" 버튼 클릭
 
-### 3단계: Storage 버킷 생성 (선택사항)
+### 3단계: 제출 로그 누적을 위한 제약 조건 제거 (선택사항)
+
+여러 번 저장 시 로그가 쌓이도록 하려면 다음 SQL을 실행하세요:
+
+**파일**: `docs/arap-remove-unique-constraint.sql`
+
+**실행 방법**:
+1. Supabase Dashboard → SQL Editor
+2. `docs/arap-remove-unique-constraint.sql` 파일의 내용을 복사하여 붙여넣기
+3. "Run" 버튼 클릭
+
+**주의**: 이 작업을 수행하면 같은 entity_id, fiscal_year, fiscal_month 조합에 여러 제출이 가능합니다. Review 페이지에서 모든 제출 이력을 확인할 수 있습니다.
+
+**확인**:
+```sql
+-- 제약 조건이 제거되었는지 확인
+SELECT constraint_name 
+FROM information_schema.table_constraints 
+WHERE table_name = 'arap_submissions' 
+AND constraint_name = 'unique_arap_submission';
+-- 결과가 없으면 제거된 것입니다.
+```
+
+### 4단계: Storage 버킷 생성 (선택사항)
 
 파일 업로드 기능을 사용하려면 Storage 버킷을 생성해야 합니다.
 
@@ -103,6 +126,7 @@ AND policyname LIKE '%arap-submissions%';
 - [ ] `arap_submission_details` 테이블 생성됨
 - [ ] `arap_audit_logs` 테이블 생성됨
 - [ ] RLS 정책 설정됨
+- [ ] 제출 로그 누적 제약 조건 제거됨 (로그 누적 사용 시)
 - [ ] Storage 버킷 생성됨 (파일 업로드 사용 시)
 - [ ] Storage RLS 정책 설정됨 (파일 업로드 사용 시)
 

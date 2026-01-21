@@ -393,7 +393,7 @@ export default function SchedulePage() {
           console.warn('preliminary_sales_sga 테이블 조회 실패 (무시):', preliminarySalesSGAResult.error);
         }
         
-        setScheduleItems(itemsResult.data || []);
+        let scheduleItemsData = itemsResult.data || [];
         
         // document_submissions와 submissions를 합쳐서 DocumentSubmission 형식으로 변환
         const documentSubmissions = (documentSubmissionsResult.data || []).map((item: any) => ({
@@ -535,6 +535,180 @@ export default function SchedulePage() {
           })),
         });
         
+        // Submissions가 있으면 해당 ScheduleItem의 status를 'confirmed'로 업데이트
+        // Submissions → Schedule 반영 로직
+        // 주의: Submissions는 fiscalQuarterId를 사용하고, ScheduleItems는 workPeriod의 quarter_id를 사용하므로
+        // quarter_id 비교는 하지 않고 subsidiary_id와 category만 확인
+        console.log(`🔄 Submissions → Schedule 반영 시작:`, {
+          scheduleItemsCount: scheduleItemsData.length,
+          submissionsCount: mergedSubmissions.length,
+          scheduleItems: scheduleItemsData.map(item => ({
+            id: item.id,
+            quarter_id: item.quarter_id,
+            subsidiary_id: item.subsidiary_id,
+            category: item.category,
+            status: item.status,
+          })),
+          submissions: mergedSubmissions.map(sub => ({
+            id: sub.id,
+            quarter_id: sub.quarter_id,
+            subsidiary_id: sub.subsidiary_id,
+            category: sub.category,
+          })),
+        });
+        
+        // 1. 기존 ScheduleItems 업데이트
+        const updatedScheduleItems = scheduleItemsData.map((item: ScheduleItem) => {
+          // 해당 item에 대한 submission이 있는지 확인 (quarter_id는 비교하지 않음)
+          const matchingSubmissions = mergedSubmissions.filter(
+            (sub) =>
+              sub.subsidiary_id === item.subsidiary_id &&
+              sub.category === item.category
+          );
+          
+          const hasSubmission = matchingSubmissions.length > 0;
+          
+          // submission이 있고 현재 status가 'planned'이면 'confirmed'로 업데이트
+          if (hasSubmission && item.status === 'planned') {
+            console.log(`🔄 ScheduleItem 자동 확정:`, {
+              itemId: item.id,
+              quarter_id: item.quarter_id,
+              subsidiary_id: item.subsidiary_id,
+              category: item.category,
+              previousStatus: item.status,
+              matchingSubmissions: matchingSubmissions.map(s => ({
+                id: s.id,
+                quarter_id: s.quarter_id,
+              })),
+            });
+            return {
+              ...item,
+              status: 'confirmed' as const,
+              confirmed_date: item.confirmed_date || new Date().toISOString().split('T')[0],
+            };
+          }
+          return item;
+        });
+        
+        // 2. Submissions가 있지만 ScheduleItem이 없는 경우, ScheduleItem 자동 생성
+        const itemsToCreate: Array<{
+          quarter_id: string;
+          subsidiary_id: string;
+          category: string;
+          planned_date: string;
+          status: 'confirmed';
+          confirmed_date: string;
+        }> = [];
+        
+        mergedSubmissions.forEach((sub) => {
+          // 해당 submission에 대한 ScheduleItem이 있는지 확인
+          const hasScheduleItem = updatedScheduleItems.some(
+            (item) =>
+              item.subsidiary_id === sub.subsidiary_id &&
+              item.category === sub.category
+          );
+          
+          // ScheduleItem이 없으면 생성
+          if (!hasScheduleItem) {
+            // 제출일을 planned_date로 사용 (없으면 오늘 날짜)
+            const plannedDate = sub.submitted_at 
+              ? new Date(sub.submitted_at).toISOString().split('T')[0]
+              : new Date().toISOString().split('T')[0];
+            
+            itemsToCreate.push({
+              quarter_id: quarterData.id, // workPeriod의 quarter_id 사용
+              subsidiary_id: sub.subsidiary_id,
+              category: sub.category,
+              planned_date: plannedDate,
+              status: 'confirmed',
+              confirmed_date: plannedDate,
+            });
+          }
+        });
+        
+        // 3. DB에 업데이트 (기존 항목)
+        const itemsToUpdate = updatedScheduleItems.filter(
+          (item, index) => item.status !== scheduleItemsData[index]?.status
+        );
+        
+        if (itemsToUpdate.length > 0) {
+          console.log(`💾 ${itemsToUpdate.length}개의 ScheduleItem을 confirmed로 업데이트합니다.`);
+          try {
+            // 병렬로 업데이트
+            const updatePromises = itemsToUpdate.map((item) =>
+              supabase
+                .from('schedule_items')
+                .update({
+                  status: 'confirmed',
+                  confirmed_date: item.confirmed_date || new Date().toISOString().split('T')[0],
+                })
+                .eq('id', item.id)
+            );
+            
+            const updateResults = await Promise.all(updatePromises);
+            const errors = updateResults.filter((result) => result.error);
+            
+            if (errors.length > 0) {
+              console.warn('⚠️ 일부 ScheduleItem 업데이트 실패:', errors);
+            } else {
+              console.log(`✅ ${itemsToUpdate.length}개의 ScheduleItem이 성공적으로 업데이트되었습니다.`);
+            }
+          } catch (error) {
+            console.error('❌ ScheduleItem 업데이트 중 오류:', error);
+          }
+        }
+        
+        // 4. DB에 생성 (새 항목)
+        if (itemsToCreate.length > 0) {
+          console.log(`➕ ${itemsToCreate.length}개의 ScheduleItem을 자동 생성합니다.`, itemsToCreate);
+          try {
+            const { data: createdItems, error: createError } = await supabase
+              .from('schedule_items')
+              .insert(itemsToCreate)
+              .select();
+            
+            if (createError) {
+              console.error('❌ ScheduleItem 생성 실패:', createError);
+              // UNIQUE 제약 조건 위반은 무시 (이미 존재하는 경우)
+              if (createError.code !== '23505') {
+                console.warn('⚠️ ScheduleItem 생성 중 오류:', createError);
+              }
+            } else {
+              console.log(`✅ ${createdItems?.length || 0}개의 ScheduleItem이 성공적으로 생성되었습니다.`, {
+                createdItems: createdItems?.map(item => ({
+                  id: item.id,
+                  quarter_id: item.quarter_id,
+                  subsidiary_id: item.subsidiary_id,
+                  category: item.category,
+                  status: item.status,
+                })),
+              });
+              // 생성된 항목을 updatedScheduleItems에 추가
+              if (createdItems) {
+                updatedScheduleItems.push(...(createdItems as ScheduleItem[]));
+              }
+            }
+          } catch (error) {
+            console.error('❌ ScheduleItem 생성 중 오류:', error);
+          }
+        }
+        
+        console.log(`📋 최종 ScheduleItems 상태:`, {
+          totalCount: updatedScheduleItems.length,
+          confirmedCount: updatedScheduleItems.filter(item => item.status === 'confirmed').length,
+          plannedCount: updatedScheduleItems.filter(item => item.status === 'planned').length,
+          employeeJdItems: updatedScheduleItems
+            .filter(item => item.category === 'employee-jd')
+            .map(item => ({
+              id: item.id,
+              quarter_id: item.quarter_id,
+              subsidiary_id: item.subsidiary_id,
+              category: item.category,
+              status: item.status,
+            })),
+        });
+        
+        setScheduleItems(updatedScheduleItems);
         setSubmissions(mergedSubmissions);
       }
     } catch (error: any) {

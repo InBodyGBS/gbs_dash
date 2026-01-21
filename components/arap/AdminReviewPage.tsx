@@ -100,12 +100,25 @@ export function AdminReviewPage({
 
   const handleDownload = async (submission: ArapSubmissionWithDetails) => {
     try {
-      if (!submission.file_path) {
-        // 수동 입력 데이터는 Excel로 내보내기
-        console.log('📊 Exporting manual submission to Excel:', submission);
+      // 같은 entity_id, fiscal_year, fiscal_month의 최신 제출 데이터 가져오기
+      const { getArapSubmissions } = await import('@/lib/services/arapService');
+      const latestSubmissions = await getArapSubmissions(
+        submission.entity_id,
+        submission.fiscal_year,
+        submission.fiscal_month
+      );
+      
+      // 최신 제출 찾기 (submission_date 기준 내림차순 정렬되어 있음)
+      const latestSubmission = latestSubmissions && latestSubmissions.length > 0 
+        ? latestSubmissions[0] 
+        : submission;
+
+      if (!latestSubmission.file_path) {
+        // 수동 입력 데이터는 Excel로 내보내기 (최신 데이터 사용)
+        console.log('📊 Exporting latest manual submission to Excel:', latestSubmission);
         
-        // Excel 데이터 준비
-        const exportData = (submission.submission_details || []).map((detail: any) => {
+        // Excel 데이터 준비 (최신 제출 데이터 사용)
+        const exportData = (latestSubmission.submission_details || []).map((detail: any) => {
           const counterparty = entities.find((e) => e.id === detail.counterparty_entity_id);
           return {
             'Invoice Date': detail.invoice_date || '',
@@ -129,7 +142,7 @@ export function AdminReviewPage({
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'ARAP Data');
 
-        // 파일명 생성
+        // 파일명 생성 (원래 제출 일자 표시)
         const entity = entities.find((e) => e.id === submission.entity_id);
         const entityName = entity?.entity_name.replace(/\s+/g, '_') || 'Entity';
         const fileName = `ARAP_${entityName}_${submission.fiscal_year}_${submission.fiscal_month}_${new Date(submission.submission_date).toISOString().split('T')[0]}.xlsx`;
@@ -139,12 +152,17 @@ export function AdminReviewPage({
         return;
       }
 
-      // 파일이 있는 경우 다운로드
-      console.log('📥 Downloading file:', submission.file_path);
-      const url = await getSubmissionFileUrl(submission.file_path);
+      // 파일이 있는 경우 최신 파일 다운로드
+      console.log('📥 Downloading latest file:', latestSubmission.file_path);
+      const url = await getSubmissionFileUrl(latestSubmission.file_path);
       const link = document.createElement('a');
       link.href = url;
-      link.download = submission.file_path.split('/').pop() || 'download';
+      // 원래 제출 일자를 파일명에 포함
+      const entity = entities.find((e) => e.id === submission.entity_id);
+      const entityName = entity?.entity_name.replace(/\s+/g, '_') || 'Entity';
+      const originalDate = new Date(submission.submission_date).toISOString().split('T')[0];
+      const fileExtension = latestSubmission.file_path.split('.').pop() || 'xlsx';
+      link.download = `ARAP_${entityName}_${submission.fiscal_year}_${submission.fiscal_month}_${originalDate}.${fileExtension}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

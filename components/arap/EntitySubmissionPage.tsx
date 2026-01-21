@@ -48,9 +48,28 @@ export function EntitySubmissionPage({
       setEntities(entitiesData);
 
       // 기존 제출 데이터 로드
+      console.log('📥 Loading submission data...', {
+        entityId,
+        selectedYear,
+        selectedMonth,
+      });
+      
       const submissions = await getArapSubmissions(entityId, selectedYear, selectedMonth);
+      
+      console.log('📋 Loaded submissions:', {
+        count: submissions?.length || 0,
+        submissions: submissions?.map(s => ({
+          id: s.id,
+          submission_date: s.submission_date,
+          submission_type: s.submission_type,
+          total_items: s.total_items,
+          details_count: s.submission_details?.length || 0,
+        })),
+      });
+      
       if (submissions && submissions.length > 0) {
-        const submission = submissions[0]; // 같은 연도/월에는 하나만 있어야 함
+        // submission_date 기준으로 내림차순 정렬되어 있으므로, 가장 최신 제출 사용
+        const submission = submissions[0];
         setExistingSubmission(submission);
         
         // 저장된 데이터를 폼에 로드
@@ -64,6 +83,7 @@ export function EntitySubmissionPage({
           description: detail.description || null,
         }));
         
+        console.log('✅ Loaded items:', loadedItems.length);
         setItems(loadedItems);
         setSubmissionType(submission.submission_type);
         
@@ -74,14 +94,25 @@ export function EntitySubmissionPage({
         }
       } else {
         // 기존 데이터가 없으면 초기화
+        console.log('⚠️ No existing submission found');
         setExistingSubmission(null);
         setItems([]);
         setSubmissionType('manual');
         setUploadedFile(null);
       }
-    } catch (error) {
-      console.error('Failed to load data:', error);
+    } catch (error: any) {
+      console.error('❌ Failed to load data:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      });
       // 에러가 나도 계속 진행
+      setExistingSubmission(null);
+      setItems([]);
+      setSubmissionType('manual');
+      setUploadedFile(null);
     }
   };
 
