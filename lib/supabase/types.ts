@@ -28,7 +28,11 @@ export interface FinancialData {
   quarter: number;
   revenue_krw: number;
   operating_profit_krw: number | null;
-  target_revenue_krw: number | null;
+  currency: string | null;
+  revenue_fcy: number | null;
+  operating_profit_fcy: number | null;
+  sga_krw: number | null;
+  sga_fcy: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -99,7 +99,7 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
         {/* 법인 정보 카드 (전체 탭: 우측 패널) */}
         {filterType === 'all' && selectedSubsidiaryId && (
           <div
-            className="absolute right-0 top-0 bottom-0 z-10"
+            className="absolute right-0 top-0 bottom-0 z-10 h-full"
             style={{ width: `${popupWidth}px` }}
           >
             <SubsidiaryCard
@@ -113,12 +113,14 @@ export const DashboardClient = ({ subsidiaries }: DashboardClientProps) => {
       {/* 법인 정보 카드 (국내/해외 탭: 가운데 팝업) */}
       {filterType !== 'all' && (
         <Dialog open={!!selectedSubsidiaryId} onOpenChange={(open) => !open && setSelectedSubsidiaryId(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+          <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col">
             {selectedSubsidiaryId && (
-              <SubsidiaryCard
-                subsidiaryId={selectedSubsidiaryId}
-                onClose={() => setSelectedSubsidiaryId(null)}
-              />
+              <div className="h-full flex flex-col min-h-0">
+                <SubsidiaryCard
+                  subsidiaryId={selectedSubsidiaryId}
+                  onClose={() => setSelectedSubsidiaryId(null)}
+                />
+              </div>
             )}
           </DialogContent>
         </Dialog>

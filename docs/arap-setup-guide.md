@@ -40,11 +40,17 @@ Supabase Dashboard → SQL Editor에서 다음 파일을 실행하세요:
 **파일**: `docs/arap-rls-policies.sql`
 
 이 스크립트는 Row Level Security 정책을 설정합니다.
+- **Public 접근 허용**: Inter-co Transaction 페이지가 sessionStorage 기반 로그인을 사용하므로, 인증 없이도 모든 사용자가 데이터를 볼 수 있도록 설정합니다.
+- 다른 PC에서도 데이터를 볼 수 있도록 하려면 이 정책이 필요합니다.
 
 **실행 방법**:
 1. 1단계가 완료되었는지 확인
 2. `docs/arap-rls-policies.sql` 파일의 내용을 복사하여 붙여넣기
 3. "Run" 버튼 클릭
+
+**기존 정책 업데이트**:
+- 이미 RLS 정책을 설정했다면, 이 파일을 다시 실행하면 기존 정책이 업데이트됩니다.
+- `TO authenticated`에서 `TO public`으로 변경되어 인증 없이도 접근 가능합니다.
 
 ### 3단계: 제출 로그 누적을 위한 제약 조건 제거 (선택사항)
 

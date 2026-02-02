@@ -426,7 +426,7 @@ export function EntitySubmissionPage({
         hasExisting: !!existingSubmission,
       });
       
-      await createArapSubmission(
+      const savedSubmission = await createArapSubmission(
         {
           fiscal_year: selectedYear,
           fiscal_month: selectedMonth,
@@ -437,6 +437,15 @@ export function EntitySubmissionPage({
         entityId
       );
       
+      console.log('✅ Submission saved successfully:', {
+        submissionId: savedSubmission.id,
+        entityId,
+        fiscalYear: selectedYear,
+        fiscalMonth: selectedMonth,
+        itemsCount: savedSubmission.submission_details?.length || 0,
+        submissionDate: savedSubmission.submission_date,
+      });
+      
       // 저장 후 데이터 다시 로드하여 변경사항 초기화
       await loadData();
       
@@ -445,7 +454,7 @@ export function EntitySubmissionPage({
       
       // Save success 팝업 표시
       toast.success('Save success', {
-        description: 'Your submission has been saved successfully.',
+        description: 'Your submission has been saved successfully. It will be visible on all devices.',
         duration: 3000,
       });
       

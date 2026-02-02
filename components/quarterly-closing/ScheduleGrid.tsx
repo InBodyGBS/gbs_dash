@@ -133,9 +133,12 @@ export const ScheduleGrid = ({
   const getScheduleItems = (subsidiaryId: string, date: Date): ScheduleItem[] => {
     const dateStr = format(date, 'yyyy-MM-dd');
     return scheduleItems.filter(
-      (item) =>
-        item.subsidiary_id === subsidiaryId &&
-        format(parseISO(item.planned_date), 'yyyy-MM-dd') === dateStr
+      (item) => {
+        if (item.subsidiary_id !== subsidiaryId) return false;
+        // selectedCategory 필터가 있으면 해당 카테고리만 반환
+        if (selectedCategory && item.category !== selectedCategory) return false;
+        return format(parseISO(item.planned_date), 'yyyy-MM-dd') === dateStr;
+      }
     );
   };
 
@@ -143,6 +146,8 @@ export const ScheduleGrid = ({
   const getSubmissions = (subsidiaryId: string, date: Date): DocumentSubmission[] => {
     return submissions.filter((sub) => {
       if (sub.subsidiary_id !== subsidiaryId) return false;
+      // selectedCategory 필터가 있으면 해당 카테고리만 반환
+      if (selectedCategory && sub.category !== selectedCategory) return false;
       const submittedDate = new Date(sub.submitted_at);
       return format(submittedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd');
     });

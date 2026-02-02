@@ -97,3 +97,52 @@ export const getAllLatestFinancialData = async (): Promise<FinancialDataWithSubs
   }
 };
 
+/**
+ * 특정 법인의 특정 연도 재무 데이터 조회 (연도별 집계용)
+ * @param subsidiaryId - 법인 ID
+ * @param fiscalYear - 회계 연도
+ * @returns 해당 연도의 모든 분기 재무 데이터 배열
+ */
+export const getFinancialDataByYear = async (
+  subsidiaryId: string,
+  fiscalYear: number
+): Promise<FinancialData[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('financial_data')
+      .select('*')
+      .eq('subsidiary_id', subsidiaryId)
+      .eq('fiscal_year', fiscalYear)
+      .order('quarter', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Failed to fetch financial data by year:', error);
+    return [];
+  }
+};
+
+/**
+ * 특정 법인의 사용 가능한 연도 목록 조회
+ * @param subsidiaryId - 법인 ID
+ * @returns 연도 배열 (내림차순)
+ */
+export const getAvailableYears = async (subsidiaryId: string): Promise<number[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('financial_data')
+      .select('fiscal_year')
+      .eq('subsidiary_id', subsidiaryId)
+      .order('fiscal_year', { ascending: false });
+
+    if (error) throw error;
+
+    // 중복 제거 및 정렬
+    const uniqueYears = Array.from(new Set((data || []).map((d: any) => d.fiscal_year)));
+    return uniqueYears.sort((a, b) => b - a);
+  } catch (error) {
+    console.error('Failed to fetch available years:', error);
+    return [];
+  }
+};

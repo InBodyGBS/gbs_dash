@@ -1136,6 +1136,11 @@ export default function SchedulePage() {
     ? scheduleItems.filter((item) => item.category === selectedCategory)
     : scheduleItems;
 
+  // 필터링된 제출 자료 (selectedCategory가 있으면 해당 카테고리만)
+  const filteredSubmissions = selectedCategory
+    ? submissions.filter((sub) => sub.category === selectedCategory)
+    : submissions;
+
   const achievementRate = calculateAchievementRate(filteredScheduleItems);
 
   // 업무 기간 계산 (귀속연도에서 다음 분기)
@@ -1294,8 +1299,8 @@ export default function SchedulePage() {
                   subsidiaries={selectedEntityId 
                     ? subsidiaries.filter(s => s.id === selectedEntityId)
                     : subsidiaries}
-                  scheduleItems={scheduleItems}
-                  submissions={submissions}
+                  scheduleItems={filteredScheduleItems}
+                  submissions={filteredSubmissions}
                   selectedCategory={selectedCategory}
                   onEntityOrderChange={handleEntityOrderChange}
                 />
@@ -1309,7 +1314,7 @@ export default function SchedulePage() {
               quarter={quarter}
               subsidiaries={subsidiaries}
               scheduleItems={filteredScheduleItems}
-              submissions={submissions}
+              submissions={filteredSubmissions}
               selectedCategory={selectedCategory}
               onCellClick={handleCellClick}
               onCategoryDrop={handleCategoryDrop}
