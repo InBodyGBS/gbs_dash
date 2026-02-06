@@ -68,6 +68,17 @@ export interface Task {
   updated_at: string;
 }
 
+export interface TaskHistory {
+  id: string;
+  task_id: string;
+  request_date: string | null;
+  response_date: string | null;
+  description: string | null;
+  completion_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ProcessCategory = '회계' | '구매' | '판매' | '비용' | '자금' | 'FOC' | '결산';
 export type ProcessStatus = '작성중' | '검토중' | '승인완료' | '보관';
 

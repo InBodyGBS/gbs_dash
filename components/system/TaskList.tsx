@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Task 리스트 컴포넌트 (WBS)
+ * Task 리스트 컴포넌트
  */
 
 import { useState, useEffect } from 'react';
@@ -23,10 +23,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { CheckCircle, Clock, AlertCircle, Pause, Plus, Trash2, Edit, Download } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Pause, Plus, Trash2, Edit, Download, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Task, TaskStatus, Project } from '@/lib/types/system';
-import { createTask, updateTask, deleteTask, getProject } from '@/lib/services/projectService';
+import type { Task, TaskStatus, Project, TaskHistory } from '@/lib/types/system';
+import {
+  createTask,
+  updateTask,
+  deleteTask,
+  getProject,
+  getTaskHistories,
+  createTaskHistory,
+  updateTaskHistory,
+  deleteTaskHistory,
+} from '@/lib/services/projectService';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { exportWBSToExcel } from '@/lib/utils/exportExcel';
@@ -51,6 +60,11 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [histories, setHistories] = useState<TaskHistory[]>([]);
+  const [historyFormOpen, setHistoryFormOpen] = useState(false);
+  const [editingHistory, setEditingHistory] = useState<TaskHistory | null>(null);
 
   // 프로젝트 정보 로드
   useEffect(() => {
@@ -196,21 +210,102 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
 
     try {
       exportWBSToExcel(project, tasks);
-      toast.success('WBS Excel 파일이 다운로드되었습니다');
+      toast.success('Task Excel 파일이 다운로드되었습니다');
     } catch (error) {
-      console.error('Failed to export WBS:', error);
-      toast.error('WBS 다운로드 실패');
+      console.error('Failed to export Task:', error);
+      toast.error('Task 다운로드 실패');
+    }
+  };
+
+  const handleOpenHistoryDialog = async (task: Task) => {
+    setSelectedTask(task);
+    setHistoryDialogOpen(true);
+    try {
+      const taskHistories = await getTaskHistories(task.id);
+      setHistories(taskHistories);
+    } catch (error) {
+      console.error('Failed to load histories:', error);
+      toast.error('히스토리 조회 실패');
+    }
+  };
+
+  const handleCloseHistoryDialog = () => {
+    setHistoryDialogOpen(false);
+    setSelectedTask(null);
+    setHistories([]);
+    setHistoryFormOpen(false);
+    setEditingHistory(null);
+  };
+
+  const handleOpenHistoryForm = (history?: TaskHistory) => {
+    if (history) {
+      setEditingHistory(history);
+    } else {
+      setEditingHistory(null);
+    }
+    setHistoryFormOpen(true);
+  };
+
+  const handleCloseHistoryForm = () => {
+    setHistoryFormOpen(false);
+    setEditingHistory(null);
+  };
+
+  const handleSaveHistory = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedTask) return;
+
+    const formData = new FormData(e.currentTarget);
+    const historyData = {
+      task_id: selectedTask.id,
+      request_date: formData.get('request_date')?.toString() || null,
+      response_date: formData.get('response_date')?.toString() || null,
+      description: formData.get('description')?.toString() || null,
+      completion_date: formData.get('completion_date')?.toString() || null,
+    };
+
+    try {
+      if (editingHistory) {
+        await updateTaskHistory(editingHistory.id, historyData);
+        toast.success('히스토리가 수정되었습니다');
+      } else {
+        await createTaskHistory(historyData);
+        toast.success('히스토리가 추가되었습니다');
+      }
+      handleCloseHistoryForm();
+      // 히스토리 목록 새로고침
+      const taskHistories = await getTaskHistories(selectedTask.id);
+      setHistories(taskHistories);
+    } catch (error) {
+      console.error('Failed to save history:', error);
+      toast.error('저장 실패');
+    }
+  };
+
+  const handleDeleteHistory = async (historyId: string) => {
+    if (!confirm('이 히스토리를 삭제하시겠습니까?')) return;
+
+    try {
+      await deleteTaskHistory(historyId);
+      toast.success('히스토리가 삭제되었습니다');
+      if (selectedTask) {
+        const taskHistories = await getTaskHistories(selectedTask.id);
+        setHistories(taskHistories);
+      }
+    } catch (error) {
+      console.error('Failed to delete history:', error);
+      toast.error('삭제 실패');
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">📋 WBS (Work Breakdown Structure)</h3>
+        <h3 className="text-lg font-semibold">📋 Task</h3>
         <div className="flex items-center gap-2">
           <Button onClick={handleExportWBS} variant="outline" size="sm" disabled={!project || tasks.length === 0}>
             <Download className="w-4 h-4 mr-2" />
-            Export WBS
+            Export Task
           </Button>
           <Button onClick={() => handleOpenDialog()} size="sm">
             <Plus className="w-4 h-4 mr-2" />
@@ -234,7 +329,7 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 w-24">담당자</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 w-32">Due Date</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 w-20">D-DAY</th>
-                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 w-24">작업</th>
+                      <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 min-w-[140px]">작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -291,22 +386,34 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
                               )}
                             </td>
                             <td className="px-4 py-2">
-                              <div className="flex items-center justify-center gap-1">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenHistoryDialog(task)}
+                                  className="h-7 px-2 text-xs whitespace-nowrap"
+                                  title="히스토리"
+                                >
+                                  <FileText className="w-3 h-3 mr-1" />
+                                  히스토리
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleOpenDialog(task)}
                                   className="h-7 w-7 p-0"
+                                  title="수정"
                                 >
-                                  <Edit className="w-3 h-3" />
+                                  <Edit className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleDelete(task.id)}
                                   className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                                  title="삭제"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </div>
                             </td>
@@ -432,6 +539,158 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
                 취소
               </Button>
               <Button type="submit">{editingTask ? '수정' : '생성'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task History Dialog */}
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedTask ? `${selectedTask.task_number} - ${selectedTask.title} 히스토리` : 'Task 히스토리'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => handleOpenHistoryForm()} size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                히스토리 추가
+              </Button>
+            </div>
+
+            {histories.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <p>히스토리가 없습니다.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {histories.map((history) => (
+                  <div key={history.id} className="border rounded-lg p-4 space-y-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-500">요청일자:</span>
+                        <p className="font-medium">
+                          {history.request_date ? format(new Date(history.request_date), 'yyyy-MM-dd') : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">회신일자:</span>
+                        <p className="font-medium">
+                          {history.response_date ? format(new Date(history.response_date), 'yyyy-MM-dd') : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">완료일자:</span>
+                        <p className="font-medium">
+                          {history.completion_date ? format(new Date(history.completion_date), 'yyyy-MM-dd') : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">생성일:</span>
+                        <p className="font-medium text-xs">
+                          {format(new Date(history.created_at), 'yyyy-MM-dd HH:mm')}
+                        </p>
+                      </div>
+                    </div>
+                    {history.description && (
+                      <div>
+                        <span className="text-gray-500 text-sm">설명:</span>
+                        <p className="text-sm mt-1 whitespace-pre-line">{history.description}</p>
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleOpenHistoryForm(history)}
+                        className="h-7"
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        수정
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteHistory(history.id)}
+                        className="h-7 text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        삭제
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleCloseHistoryDialog}>
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Form Dialog */}
+      <Dialog open={historyFormOpen} onOpenChange={setHistoryFormOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingHistory ? '히스토리 수정' : '히스토리 추가'}</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveHistory} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="request_date">요청일자</Label>
+                <Input
+                  id="request_date"
+                  name="request_date"
+                  type="date"
+                  defaultValue={editingHistory?.request_date ? format(new Date(editingHistory.request_date), 'yyyy-MM-dd') : ''}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="response_date">회신일자</Label>
+                <Input
+                  id="response_date"
+                  name="response_date"
+                  type="date"
+                  defaultValue={editingHistory?.response_date ? format(new Date(editingHistory.response_date), 'yyyy-MM-dd') : ''}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="completion_date">완료일자</Label>
+              <Input
+                id="completion_date"
+                name="completion_date"
+                type="date"
+                defaultValue={editingHistory?.completion_date ? format(new Date(editingHistory.completion_date), 'yyyy-MM-dd') : ''}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="description">설명</Label>
+              <Textarea
+                id="description"
+                name="description"
+                rows={4}
+                defaultValue={editingHistory?.description || ''}
+                placeholder="히스토리 설명을 입력하세요"
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCloseHistoryForm}>
+                취소
+              </Button>
+              <Button type="submit">{editingHistory ? '수정' : '추가'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

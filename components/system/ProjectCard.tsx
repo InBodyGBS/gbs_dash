@@ -165,7 +165,7 @@ export function ProjectCard({ project, subsidiary, onClick, onDelete }: ProjectC
         {/* 진행률 */}
         <div className="mb-4">
           <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-            <span>WBS Progress</span>
+            <span>Task Progress</span>
             <span className="font-semibold">{progress}%</span>
           </div>
           <Progress value={progress} className="h-2" />

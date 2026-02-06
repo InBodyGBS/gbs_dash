@@ -2,7 +2,7 @@
 
 /**
  * 프로젝트 관리 페이지
- * 시스템 구축/개선 프로젝트 WBS 관리
+ * 시스템 구축/개선 프로젝트 Task 관리
  */
 
 import { useEffect, useState } from 'react';
@@ -120,7 +120,7 @@ export default function ProjectPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">System Projects</h1>
-            <p className="text-sm text-gray-600 mt-1">시스템 구축/개선 프로젝트 WBS 관리</p>
+            <p className="text-sm text-gray-600 mt-1">시스템 구축/개선 프로젝트 Task 관리</p>
           </div>
           <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />

@@ -218,7 +218,7 @@ export function ProjectDialog({
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="overview">개요</TabsTrigger>
-              <TabsTrigger value="wbs">WBS</TabsTrigger>
+              <TabsTrigger value="wbs">Task</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="mt-4">

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import type { Project, ProjectStatus, Task, TaskStatus } from '@/lib/types/system';
+import type { Project, ProjectStatus, Task, TaskStatus, TaskHistory } from '@/lib/types/system';
 
 /**
  * 프로젝트 목록 조회
@@ -208,3 +208,68 @@ export async function updateProjectProgress(projectId: string): Promise<void> {
   await updateProject(projectId, { progress });
 }
 
+/**
+ * Task 히스토리 목록 조회
+ */
+export async function getTaskHistories(taskId: string): Promise<TaskHistory[]> {
+  const { data, error } = await supabase
+    .from('task_histories')
+    .select('*')
+    .eq('task_id', taskId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Task 히스토리 생성
+ */
+export async function createTaskHistory(historyData: {
+  task_id: string;
+  request_date?: string | null;
+  response_date?: string | null;
+  description?: string | null;
+  completion_date?: string | null;
+}): Promise<TaskHistory> {
+  const { data, error } = await supabase
+    .from('task_histories')
+    .insert(historyData)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Task 히스토리 수정
+ */
+export async function updateTaskHistory(
+  id: string,
+  updates: Partial<{
+    request_date: string | null;
+    response_date: string | null;
+    description: string | null;
+    completion_date: string | null;
+  }>
+): Promise<TaskHistory> {
+  const { data, error } = await supabase
+    .from('task_histories')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Task 히스토리 삭제
+ */
+export async function deleteTaskHistory(id: string): Promise<void> {
+  const { error } = await supabase.from('task_histories').delete().eq('id', id);
+
+  if (error) throw error;
+}
