@@ -66,7 +66,7 @@ export function IssueCreateDialog({
       category: formData.category!,
       entity_id: formData.entity_id!,
       description: formData.description!,
-      created_by: formData.created_by || '',
+      created_by: formData.created_by?.trim() || '시스템', // 빈 값이면 기본값 사용
     };
 
     // 선택적 필드: 값이 있을 때만 추가
@@ -115,15 +115,29 @@ export function IssueCreateDialog({
         inquired_by: '',
         type: undefined,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Detailed Error:', error);
-      // error 객체 전체를 출력
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as any;
-        console.error('Response data:', axiosError.response?.data);
-        console.error('Response status:', axiosError.response?.status);
+      
+      // Supabase 에러 메시지 추출
+      let errorMessage = '이슈 등록 실패';
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.details) {
+        errorMessage = error.details;
+      } else if (error?.hint) {
+        errorMessage = error.hint;
       }
-      toast.error('이슈 등록 실패');
+      
+      console.error('Error details:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+      });
+      
+      toast.error('이슈 등록 실패', {
+        description: errorMessage,
+      });
     } finally {
       setLoading(false);
     }
