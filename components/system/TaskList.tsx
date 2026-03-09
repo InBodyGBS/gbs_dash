@@ -38,7 +38,7 @@ import {
 } from '@/lib/services/projectService';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { exportWBSToExcel } from '@/lib/utils/exportExcel';
+import { exportWBSToExcel, exportTaskHistoriesToExcel } from '@/lib/utils/exportExcel';
 
 interface TaskListProps {
   projectId: string;
@@ -554,7 +554,23 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                onClick={() => {
+                  if (selectedTask && histories.length > 0) {
+                    exportTaskHistoriesToExcel(selectedTask, histories);
+                    toast.success('Task 히스토리 Excel 파일이 다운로드되었습니다');
+                  } else {
+                    toast.error('다운로드할 히스토리가 없습니다');
+                  }
+                }}
+                variant="outline"
+                size="sm"
+                disabled={!selectedTask || histories.length === 0}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Excel 다운로드
+              </Button>
               <Button onClick={() => handleOpenHistoryForm()} size="sm">
                 <Plus className="w-4 h-4 mr-2" />
                 히스토리 추가

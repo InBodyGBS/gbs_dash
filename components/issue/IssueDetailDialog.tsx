@@ -55,6 +55,8 @@ export function IssueDetailDialog({
     response: issue.response || '',
     status: issue.status,
     period: issue.period || '',
+    inquired_by: issue.inquired_by || '',
+    type: issue.type || undefined,
   });
 
   // issue prop이 변경될 때 formData 업데이트
@@ -66,6 +68,8 @@ export function IssueDetailDialog({
       response: issue.response || '',
       status: issue.status,
       period: issue.period || '',
+      inquired_by: issue.inquired_by || '',
+      type: issue.type || undefined,
     });
     // 수정 모드가 열려있으면 닫기
     setIsEditing(false);
@@ -209,6 +213,36 @@ export function IssueDetailDialog({
               </div>
             </div>
 
+            {/* 문의자 & Type */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-inquired_by">문의자</Label>
+                <Input
+                  id="edit-inquired_by"
+                  placeholder="문의자 이름을 입력하세요"
+                  value={formData.inquired_by}
+                  onChange={(e) => setFormData({ ...formData, inquired_by: e.target.value })}
+                  maxLength={100}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="edit-type">Type</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value) => setFormData({ ...formData, type: value as 'Daily' | 'Q Closing' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Type 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Daily">Daily</SelectItem>
+                    <SelectItem value="Q Closing">Q Closing</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="edit-description">설명</Label>
               <Textarea
@@ -293,6 +327,18 @@ export function IssueDetailDialog({
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-medium text-gray-700">📆 기간:</span>
                   <span className="text-gray-900">{issue.period}</span>
+                </div>
+              )}
+              {issue.inquired_by && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-gray-700">📞 문의자:</span>
+                  <span className="text-gray-900">{issue.inquired_by}</span>
+                </div>
+              )}
+              {issue.type && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium text-gray-700">🏷️ Type:</span>
+                  <span className="text-gray-900">{issue.type}</span>
                 </div>
               )}
             </div>

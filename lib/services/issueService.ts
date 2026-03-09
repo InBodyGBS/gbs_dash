@@ -9,6 +9,8 @@ export interface IssueFormData {
   response?: string;
   status?: string;
   period?: string; // Year+Quarter 형식 (예: 20254Q), 필수 아님
+  inquired_by?: string; // 문의자
+  type?: 'Daily' | 'Q Closing'; // Type
 }
 
 export async function createIssue(issueData: IssueFormData): Promise<Issue> {

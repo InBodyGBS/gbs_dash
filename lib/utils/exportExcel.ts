@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import type { Issue } from '@/lib/types/issue';
 import type { Subsidiary } from '@/lib/supabase/types';
-import type { System, SystemCategory, Task, Project } from '@/lib/types/system';
+import type { System, SystemCategory, Task, Project, TaskHistory } from '@/lib/types/system';
 
 /**
  * 이슈 목록을 Excel 파일로 다운로드
@@ -200,3 +200,60 @@ export function exportWBSToExcel(
   XLSX.writeFile(workbook, fileName);
 }
 
+/**
+ * Task 히스토리를 Excel 파일로 다운로드
+ */
+export function exportTaskHistoriesToExcel(
+  task: Task,
+  histories: TaskHistory[],
+  filename?: string
+) {
+  // Excel 데이터 생성
+  const excelData = histories.map((history, index) => {
+    return {
+      '순번': index + 1,
+      '요청일자': history.request_date ? format(new Date(history.request_date), 'yyyy-MM-dd') : '-',
+      '회신일자': history.response_date ? format(new Date(history.response_date), 'yyyy-MM-dd') : '-',
+      '완료일자': history.completion_date ? format(new Date(history.completion_date), 'yyyy-MM-dd') : '-',
+      '설명': history.description || '-',
+      '생성일': format(new Date(history.created_at), 'yyyy-MM-dd HH:mm'),
+      '수정일': format(new Date(history.updated_at), 'yyyy-MM-dd HH:mm'),
+    };
+  });
+
+  // 워크북 생성
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  
+  // Task 정보 시트 추가
+  const taskInfo = [
+    { 항목: 'Task 번호', 내용: task.task_number },
+    { 항목: 'Task 명', 내용: task.title },
+    { 항목: '담당자', 내용: task.assignee },
+    { 항목: '상태', 내용: task.status },
+    { 항목: 'Due Date', 내용: task.due_date ? format(new Date(task.due_date), 'yyyy-MM-dd') : '-' },
+    { 항목: '완료일', 내용: task.completed_date ? format(new Date(task.completed_date), 'yyyy-MM-dd') : '-' },
+    { 항목: '진행률 (%)', 내용: `${task.progress}%` },
+    { 항목: '상세 설명', 내용: task.description || '-' },
+  ];
+  const infoSheet = XLSX.utils.json_to_sheet(taskInfo);
+  
+  XLSX.utils.book_append_sheet(workbook, infoSheet, 'Task 정보');
+  XLSX.utils.book_append_sheet(workbook, worksheet, '히스토리');
+
+  // 컬럼 너비 설정
+  const columnWidths = [
+    { wch: 5 },   // 순번
+    { wch: 12 },  // 요청일자
+    { wch: 12 },  // 회신일자
+    { wch: 12 },  // 완료일자
+    { wch: 50 },  // 설명
+    { wch: 18 },  // 생성일
+    { wch: 18 },  // 수정일
+  ];
+  worksheet['!cols'] = columnWidths;
+
+  // 파일 다운로드
+  const fileName = filename || `Task_History_${task.task_number}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}

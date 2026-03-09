@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { createIssue } from '@/lib/services/issueService';
 import type { Subsidiary } from '@/lib/supabase/types';
@@ -41,8 +39,6 @@ export function IssueCreateDialog({
   onSuccess,
 }: IssueCreateDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiInput, setAiInput] = useState('');
   const [formData, setFormData] = useState<Partial<IssueFormData>>({
     title: '',
     category: undefined,
@@ -50,67 +46,11 @@ export function IssueCreateDialog({
     description: '',
     response: '',
     period: '',
-    created_by: '조승현', // TODO: 실제 사용자 인증 연동
+    created_by: '',
+    inquired_by: '',
+    type: undefined,
   });
 
-  // AI로 자연어 입력 파싱
-  const handleAIParse = async () => {
-    if (!aiInput.trim()) {
-      toast.error('내용을 입력해주세요');
-      return;
-    }
-
-    try {
-      setAiLoading(true);
-      toast.loading('AI가 분석 중입니다...');
-
-      // API 호출
-      const response = await fetch('/api/ai/parse-issue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userInput: aiInput,
-          subsidiaries: subsidiaries,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('AI 파싱 실패');
-      }
-
-      const result = await response.json();
-      console.log('✅ AI 파싱 결과:', result);
-
-      // 새로운 응답 형식 처리: { success: true, data: {...} }
-      const parsed = result.data || result;
-
-      // 법인 ID 찾기
-      const subsidiary = subsidiaries.find(
-        (s) =>
-          s.code.toLowerCase() === parsed.entity.toLowerCase() ||
-          s.name.toLowerCase().includes(parsed.entity.toLowerCase())
-      );
-
-      // 폼 자동 채우기
-      setFormData({
-        ...formData,
-        title: parsed.title,
-        category: parsed.category as IssueCategory,
-        entity_id: subsidiary?.id || subsidiaries.find((s) => s.code === 'HQ')?.id || '',
-        description: parsed.description,
-        period: parsed.period || '',
-      });
-
-      toast.dismiss();
-      toast.success('AI 분석 완료! 내용을 확인하고 수정하세요');
-    } catch (error) {
-      console.error('AI 파싱 에러:', error);
-      toast.dismiss();
-      toast.error('AI 분석에 실패했습니다. 수동으로 입력해주세요');
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,7 +66,7 @@ export function IssueCreateDialog({
       category: formData.category!,
       entity_id: formData.entity_id!,
       description: formData.description!,
-      created_by: formData.created_by || '조승현',
+      created_by: formData.created_by || '',
     };
 
     // 선택적 필드: 값이 있을 때만 추가
@@ -135,6 +75,12 @@ export function IssueCreateDialog({
     }
     if (formData.period && formData.period.trim()) {
       issueData.period = formData.period.trim();
+    }
+    if (formData.inquired_by && formData.inquired_by.trim()) {
+      issueData.inquired_by = formData.inquired_by.trim();
+    }
+    if (formData.type) {
+      issueData.type = formData.type;
     }
 
     // 디버깅용
@@ -165,9 +111,10 @@ export function IssueCreateDialog({
         description: '',
         response: '',
         period: '',
-        created_by: '조승현',
+        created_by: '',
+        inquired_by: '',
+        type: undefined,
       });
-      setAiInput('');
     } catch (error) {
       console.error('❌ Detailed Error:', error);
       // error 객체 전체를 출력
@@ -190,39 +137,8 @@ export function IssueCreateDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* AI Issue Writer */}
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-5 h-5 text-purple-600" />
-              <h3 className="font-semibold text-purple-900">AI Issue Writer</h3>
-            </div>
-            <Textarea
-              placeholder="자연어로 이슈를 입력하세요...&#10;&#10;예: USA 법인의 리스 회계 처리가 K-IFRS와 다르게 되어있어요. 재작성이 필요합니다."
-              value={aiInput}
-              onChange={(e) => setAiInput(e.target.value)}
-              rows={4}
-              className="mb-3"
-            />
-            <Button
-              type="button"
-              onClick={handleAIParse}
-              disabled={aiLoading || !aiInput.trim()}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              {aiLoading ? 'AI 분석 중...' : '✨ AI로 변환하기'}
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Separator className="flex-1" />
-            <span className="text-sm text-gray-500">OR</span>
-            <Separator className="flex-1" />
-          </div>
-
           {/* 수동 입력 폼 */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">📝 수동 입력</h3>
 
             {/* 제목 */}
             <div>
@@ -239,8 +155,35 @@ export function IssueCreateDialog({
               />
             </div>
 
-            {/* 카테고리 & Entity & 기간 */}
+            {/* 등록자 & Type & 카테고리 */}
             <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="created_by">등록자</Label>
+                <Input
+                  id="created_by"
+                  placeholder="등록자 이름"
+                  value={formData.created_by || ''}
+                  onChange={(e) => setFormData({ ...formData, created_by: e.target.value })}
+                  maxLength={100}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="type">Type</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value) => setFormData({ ...formData, type: value as 'Daily' | 'Q Closing' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Type 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Daily">Daily</SelectItem>
+                    <SelectItem value="Q Closing">Q Closing</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div>
                 <Label htmlFor="category">
                   카테고리 <span className="text-red-500">*</span>
@@ -261,6 +204,20 @@ export function IssueCreateDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* 문의자 & Entity & 기간 */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="inquired_by">문의자</Label>
+                <Input
+                  id="inquired_by"
+                  placeholder="문의자 이름"
+                  value={formData.inquired_by || ''}
+                  onChange={(e) => setFormData({ ...formData, inquired_by: e.target.value })}
+                  maxLength={100}
+                />
               </div>
 
               <div>

@@ -15,6 +15,8 @@ export interface Issue {
   updated_at: string;
   completed_at: string | null;
   period?: string | null; // Year+Quarter 형식 (예: 20254Q)
+  inquired_by?: string | null; // 문의자
+  type?: 'Daily' | 'Q Closing' | null; // Type
 }
 
 export type IssueCategory =
@@ -46,6 +48,8 @@ export interface IssueFormData {
   status?: IssueStatus;
   created_by: string;
   period?: string; // Year+Quarter 형식 (예: 20254Q), 필수 아님
+  inquired_by?: string; // 문의자
+  type?: 'Daily' | 'Q Closing'; // Type
 }
 
 export interface IssueFilters {
