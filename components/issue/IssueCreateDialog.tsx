@@ -191,7 +191,7 @@ export function IssueCreateDialog({
                   <SelectTrigger>
                     <SelectValue placeholder="Type 선택" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectItem value="Daily">Daily</SelectItem>
                     <SelectItem value="Q Closing">Q Closing</SelectItem>
                   </SelectContent>
@@ -210,7 +210,7 @@ export function IssueCreateDialog({
                   <SelectTrigger>
                     <SelectValue placeholder="카테고리 선택" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     {ISSUE_CATEGORIES.map((category) => (
                       <SelectItem key={category} value={category}>
                         {category}
@@ -246,7 +246,7 @@ export function IssueCreateDialog({
                   <SelectTrigger>
                     <SelectValue placeholder="법인 선택" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     {subsidiaries.map((subsidiary) => {
                       // 괄호 안 코드 커스터마이징
                       let displayCode = subsidiary.code;
