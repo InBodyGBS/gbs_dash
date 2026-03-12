@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { FileText, Clock, CheckCircle, TrendingUp, Plus, Tag, Building2, Download } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { FileText, Clock, CheckCircle, TrendingUp, Plus, Tag, Building2, Download, User, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +18,7 @@ import { StatCard } from '@/components/issue/StatCard';
 import { FilterCard } from '@/components/issue/FilterCard';
 import { CategoryFilterDialog } from '@/components/issue/CategoryFilterDialog';
 import { EntityFilterDialog } from '@/components/issue/EntityFilterDialog';
+import { AuthorFilterDialog } from '@/components/issue/AuthorFilterDialog';
 import { exportIssuesToExcel } from '@/lib/utils/exportExcel';
 
 export default function IssuePage() {
@@ -30,6 +31,7 @@ export default function IssuePage() {
   // 필터 다이얼로그 상태
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [entityDialogOpen, setEntityDialogOpen] = useState(false);
+  const [authorDialogOpen, setAuthorDialogOpen] = useState(false);
 
   // 필터 및 정렬 상태
   const [filters, setFilters] = useState<IssueFilters>({
@@ -37,8 +39,14 @@ export default function IssuePage() {
     categories: [],
     entities: [],
     statuses: [],
+    authors: [],
+    dateRange: {
+      startDate: null,
+      endDate: null,
+    },
   });
   const [sortBy, setSortBy] = useState<IssueSortOption>('created_desc');
+  const dateRangeRef = useRef<HTMLDivElement>(null);
 
   // 데이터 로드
   const loadData = async () => {
@@ -68,6 +76,17 @@ export default function IssuePage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // 날짜 포맷팅 헬퍼 함수 (YYYY.MM.DD)
+  const formatDateInput = (value: string): string => {
+    // 숫자만 추출
+    const numbers = value.replace(/\D/g, '');
+    
+    if (numbers.length === 0) return '';
+    if (numbers.length <= 4) return numbers;
+    if (numbers.length <= 6) return `${numbers.slice(0, 4)}.${numbers.slice(4)}`;
+    return `${numbers.slice(0, 4)}.${numbers.slice(4, 6)}.${numbers.slice(6, 8)}`;
+  };
 
   // 필터링 및 정렬
   const filteredAndSortedIssues = () => {
@@ -99,6 +118,33 @@ export default function IssuePage() {
     // 상태 필터
     if (filters.statuses.length > 0) {
       result = result.filter((issue) => filters.statuses.includes(issue.status));
+    }
+
+    // 작성자 필터
+    if (filters.authors.length > 0) {
+      result = result.filter((issue) => filters.authors.includes(issue.created_by));
+    }
+
+    // 날짜 범위 필터
+    if (filters.dateRange.startDate || filters.dateRange.endDate) {
+      result = result.filter((issue) => {
+        const issueDate = new Date(issue.created_at);
+        issueDate.setHours(0, 0, 0, 0);
+
+        if (filters.dateRange.startDate) {
+          const startDate = new Date(filters.dateRange.startDate.replace(/\./g, '-'));
+          startDate.setHours(0, 0, 0, 0);
+          if (issueDate < startDate) return false;
+        }
+
+        if (filters.dateRange.endDate) {
+          const endDate = new Date(filters.dateRange.endDate.replace(/\./g, '-'));
+          endDate.setHours(23, 59, 59, 999);
+          if (issueDate > endDate) return false;
+        }
+
+        return true;
+      });
     }
 
     // 정렬
@@ -142,6 +188,11 @@ export default function IssuePage() {
       categories: [],
       entities: [],
       statuses: [],
+      authors: [],
+      dateRange: {
+        startDate: null,
+        endDate: null,
+      },
     });
     toast.success('모든 필터가 해제되었습니다');
   };
@@ -195,7 +246,7 @@ export default function IssuePage() {
         </div>
 
         {/* 통계 및 필터 카드 */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
           <StatCard
             title="전체 이슈"
             value={stats.total}
@@ -231,12 +282,6 @@ export default function IssuePage() {
             }}
             isActive={filters.statuses.includes('완료')}
           />
-          <StatCard
-            title="완료율"
-            value={`${stats.completionRate}%`}
-            icon={<TrendingUp className="w-5 h-5" />}
-            color="purple"
-          />
           <FilterCard
             title="카테고리"
             value={filters.categories.length > 0 ? `${filters.categories.length}개` : '전체'}
@@ -253,11 +298,37 @@ export default function IssuePage() {
             onClick={() => setEntityDialogOpen(true)}
             isActive={filters.entities.length > 0}
           />
+          <FilterCard
+            title="작성자"
+            value={filters.authors.length > 0 ? `${filters.authors.length}개` : '전체'}
+            icon={<User className="w-5 h-5" />}
+            color="gray"
+            onClick={() => setAuthorDialogOpen(true)}
+            isActive={filters.authors.length > 0}
+          />
+          <FilterCard
+            title="작성 기간"
+            value={
+              filters.dateRange.startDate || filters.dateRange.endDate
+                ? `${filters.dateRange.startDate || '시작'} ~ ${filters.dateRange.endDate || '종료'}`
+                : '전체'
+            }
+            icon={<Calendar className="w-5 h-5" />}
+            color="gray"
+            onClick={() => {
+              dateRangeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setTimeout(() => {
+                const firstInput = dateRangeRef.current?.querySelector('input');
+                firstInput?.focus();
+              }, 300);
+            }}
+            isActive={!!(filters.dateRange.startDate || filters.dateRange.endDate)}
+          />
         </div>
 
         {/* 검색 및 필터 */}
         <div className="bg-white rounded-lg border p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {/* 검색 */}
             <div className="md:col-span-1">
               <Input
@@ -273,7 +344,7 @@ export default function IssuePage() {
               <SelectTrigger>
                 <SelectValue placeholder="정렬" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectItem value="created_desc">최신순</SelectItem>
                 <SelectItem value="created_asc">오래된순</SelectItem>
                 <SelectItem value="entity">Entity순</SelectItem>
@@ -294,7 +365,7 @@ export default function IssuePage() {
               <SelectTrigger>
                 <SelectValue placeholder="상태" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectItem value="all">전체 상태</SelectItem>
                 {ISSUE_STATUS_LIST.map((status) => (
                   <SelectItem key={status} value={status}>
@@ -303,6 +374,75 @@ export default function IssuePage() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* 작성 기간 필터 */}
+            <div ref={dateRangeRef} className="flex items-center gap-2">
+              <Input
+                type="text"
+                placeholder="YYYY.MM.DD"
+                value={filters.dateRange.startDate || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // 백스페이스로 삭제하는 경우
+                  if (value.length < (filters.dateRange.startDate || '').length) {
+                    setFilters({
+                      ...filters,
+                      dateRange: {
+                        ...filters.dateRange,
+                        startDate: value || null,
+                      },
+                    });
+                    return;
+                  }
+                  // 자동 포맷팅 적용
+                  const formatted = formatDateInput(value);
+                  if (formatted.length <= 10) {
+                    setFilters({
+                      ...filters,
+                      dateRange: {
+                        ...filters.dateRange,
+                        startDate: formatted || null,
+                      },
+                    });
+                  }
+                }}
+                className="flex-1"
+                maxLength={10}
+              />
+              <span className="text-gray-500">~</span>
+              <Input
+                type="text"
+                placeholder="YYYY.MM.DD"
+                value={filters.dateRange.endDate || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // 백스페이스로 삭제하는 경우
+                  if (value.length < (filters.dateRange.endDate || '').length) {
+                    setFilters({
+                      ...filters,
+                      dateRange: {
+                        ...filters.dateRange,
+                        endDate: value || null,
+                      },
+                    });
+                    return;
+                  }
+                  // 자동 포맷팅 적용
+                  const formatted = formatDateInput(value);
+                  if (formatted.length <= 10) {
+                    setFilters({
+                      ...filters,
+                      dateRange: {
+                        ...filters.dateRange,
+                        endDate: formatted || null,
+                      },
+                    });
+                  }
+                }}
+                className="flex-1"
+                maxLength={10}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -385,6 +525,15 @@ export default function IssuePage() {
         selectedEntities={filters.entities}
         subsidiaries={subsidiaries}
         onApply={(entities) => setFilters({ ...filters, entities })}
+      />
+
+      {/* 작성자 필터 다이얼로그 */}
+      <AuthorFilterDialog
+        open={authorDialogOpen}
+        onOpenChange={setAuthorDialogOpen}
+        selectedAuthors={filters.authors}
+        issues={issues}
+        onApply={(authors) => setFilters({ ...filters, authors })}
       />
     </div>
   );

@@ -57,6 +57,11 @@ export interface IssueFilters {
   categories: IssueCategory[];
   entities: string[];
   statuses: IssueStatus[];
+  authors: string[];
+  dateRange: {
+    startDate: string | null;
+    endDate: string | null;
+  };
 }
 
 export type IssueSortOption = 'created_desc' | 'created_asc' | 'entity' | 'category';
