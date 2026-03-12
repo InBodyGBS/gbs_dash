@@ -34,6 +34,14 @@ export const CATEGORIES: Category[] = [
     description: '분기별 마감 일정 관리',
   },
   {
+    id: 'monthly-closing',
+    label: 'Monthly Closing',
+    path: '/monthly-closing',
+    icon: Calendar,
+    featured: true,
+    description: '월별 마감 일정 관리',
+  },
+  {
     id: 'financial-result',
     label: 'Financial Result',
     path: '/financial-result',
