@@ -236,7 +236,8 @@ Net Income (Income before Tax - Corporate Income Tax)
 
 | BS Category | BS Code | BS Line |
 |------------|---------|---------|
-| **Current Assets** | 11101 | Cash |
+| **Current Assets** | 
+| Current Assets | 11101 | Cash |
 | Current Assets | 11102 | Checking Account |
 | Current Assets | 11103 | Foreign Currency Deposits |
 | Current Assets | 11201 | Accounts Receivable |
@@ -260,7 +261,8 @@ Net Income (Income before Tax - Corporate Income Tax)
 | Current Assets | 11501 | Merchandise |
 | Current Assets | 11502 | Merchandise - Valuation Allowance |
 | Current Assets | 11511 | Materials in Transit |
-| **Non-Current Assets** | 12101 | Land |
+| **Non-Current Assets** | 
+| Non-Current Assets | 12101 | Land |
 | Non-Current Assets | 12102 | Land - State Aid |
 | Non-Current Assets | 12103 | Buildings |
 | Non-Current Assets | 12104 | Buildings - Accumulated Depreciation |
@@ -294,10 +296,12 @@ Net Income (Income before Tax - Corporate Income Tax)
 | Non-Current Assets | 12609 | Long-term Trade Receivables - Allowance for Bad Debt |
 | Non-Current Assets | 12610 | Financial assets at FVPL |
 | Non-Current Assets | 12701 | Deferred Tax Assets - Noncurrent |
-| **Current Liabilities** | 21100 | Accounts Payable |
+| **Current Liabilities** | 
+| Current Liabilities | 21100 | Accounts Payable |
 | Current Liabilities | 21201 | A/P Nontrade |
 | Current Liabilities | 21202 | Accrued Expense |
 | Current Liabilities | 21203 | Guarantee Deposits Received |
+| Current Liabilities | 21301| Short-term Borrowings |
 | Current Liabilities | 21401 | Advance Received |
 | Current Liabilities | 21402 | Unearned Income |
 | Current Liabilities | 21403 | Withholdings |
@@ -307,7 +311,8 @@ Net Income (Income before Tax - Corporate Income Tax)
 | Current Liabilities | 21409 | Other Current Liabilities |
 | Current Liabilities | 21501 | Lease Liabilities - Current |
 | Current Liabilities | 21601 | Accrued Tax Expense |
-| **Non Current Liabilities** | 22101 | Long-term Borrowings |
+| **Non Current Liabilities** |
+| Non Current Liabilities | 22101 | Long-term Borrowings |
 | Non Current Liabilities | 22102 | Long-term Borrowings - Present Value Discounts |
 | Non Current Liabilities | 22103 | Debentures |
 | Non Current Liabilities | 22201 | Accrued Severance & Retirement Benefits |
@@ -322,7 +327,7 @@ Net Income (Income before Tax - Corporate Income Tax)
 | Non Current Liabilities | 22401 | Leasehold deposits received |
 | Non Current Liabilities | 22501 | Deferred Tax Liabilities - Noncurrent |
 | Non Current Liabilities | 22601 | Finance Lease Liabilities - Non Current |
-| **Shareholders of the Parent Company** 
+| **Shareholders of the Parent Company** |
 | Shareholders of the Parent Company | 31101 | Capital Stock - Common Stock |
 | Shareholders of the Parent Company | 31201 | Paid-In Capital in Excess of Par |
 | Shareholders of the Parent Company | 31202 | Other Additional Capital |

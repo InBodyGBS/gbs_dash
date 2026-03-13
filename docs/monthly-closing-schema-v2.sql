@@ -284,6 +284,7 @@ INSERT INTO std_bs_master (bs_code, bs_line, bs_category, display_order, is_calc
 ('21201', 'A/P Nontrade', 'Current Liabilities', 310, FALSE, 'Liability', FALSE, 'Current Liabilities'),
 ('21202', 'Accrued Expense', 'Current Liabilities', 311, FALSE, 'Liability', FALSE, 'Current Liabilities'),
 ('21203', 'Guarantee Deposits Received', 'Current Liabilities', 312, FALSE, 'Liability', FALSE, 'Current Liabilities'),
+('21301', 'Short-term Borrowings', 'Current Liabilities', 313, FALSE, 'Liability', FALSE, 'Current Liabilities'),
 ('21401', 'Advance Received', 'Current Liabilities', 320, FALSE, 'Liability', FALSE, 'Current Liabilities'),
 ('21402', 'Unearned Income', 'Current Liabilities', 321, FALSE, 'Liability', FALSE, 'Current Liabilities'),
 ('21403', 'Withholdings', 'Current Liabilities', 322, FALSE, 'Liability', FALSE, 'Current Liabilities'),

@@ -3,6 +3,7 @@
 /**
  * Monthly Closing - Dashboard 페이지
  * 전체 법인 재무성과 요약 & 인사이트 (PRD Section 3.4 기반)
+ * Entity별 Dashboard + 비교 탭 (전년도 동월, 전년도 동월 누적, 직전월)
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -43,17 +45,40 @@ import {
   Legend,
 } from 'recharts';
 
+type ComparisonType = 'mom' | 'yoy' | 'yoy_ytd';
+
 export default function DashboardPage() {
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() || 12));
+  const [selectedEntity, setSelectedEntity] = useState<string>('all'); // 'all' or entity code
+  const [comparisonType, setComparisonType] = useState<ComparisonType>('mom');
   const [summaries, setSummaries] = useState<PLSummary[]>([]);
   const [prevSummaries, setPrevSummaries] = useState<PLSummary[]>([]);
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
+  // Subsidiaries 로드
+  useEffect(() => {
+    loadSubsidiaries();
+  }, []);
+
   useEffect(() => {
     loadData();
-  }, [selectedYear, selectedMonth]);
+  }, [selectedYear, selectedMonth, selectedEntity, comparisonType]);
+
+  const loadSubsidiaries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('subsidiaries')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      setSubsidiaries(data || []);
+    } catch (error: any) {
+      console.error('Failed to load subsidiaries:', error);
+    }
+  };
 
   const loadData = async () => {
     setDataLoading(true);
@@ -62,16 +87,82 @@ export default function DashboardPage() {
       const month = parseInt(selectedMonth);
 
       // 현재 월 데이터
-      const currentData = await getAllEntityPLSummaries(year, month);
+      let currentData = await getAllEntityPLSummaries(year, month);
+      
+      // Entity 필터링
+      if (selectedEntity !== 'all') {
+        currentData = currentData.filter(s => s.entityCode === selectedEntity);
+      }
       setSummaries(currentData);
 
-      // 전월 데이터 (MoM 비교용)
-      const prevMonth = month === 1 ? 12 : month - 1;
-      const prevYear = month === 1 ? year - 1 : year;
-      const prevData = await getAllEntityPLSummaries(prevYear, prevMonth);
-      setPrevSummaries(prevData);
+      // 비교 데이터 로드
+      let compareData: PLSummary[] = [];
+      
+      if (comparisonType === 'mom') {
+        // 직전월
+        const prevMonth = month === 1 ? 12 : month - 1;
+        const prevYear = month === 1 ? year - 1 : year;
+        compareData = await getAllEntityPLSummaries(prevYear, prevMonth);
+      } else if (comparisonType === 'yoy') {
+        // 전년도 동월
+        compareData = await getAllEntityPLSummaries(year - 1, month);
+      } else if (comparisonType === 'yoy_ytd') {
+        // 전년도 동월(누적) - 1월부터 현재 월까지 합계
+        const allMonths: PLSummary[] = [];
+        for (let m = 1; m <= month; m++) {
+          const monthData = await getAllEntityPLSummaries(year - 1, m);
+          allMonths.push(...monthData);
+        }
+        
+        // Entity별로 누적 합계 계산
+        const entityMap = new Map<string, PLSummary>();
+        allMonths.forEach((summary) => {
+          const key = summary.entityCode;
+          if (!entityMap.has(key)) {
+            entityMap.set(key, {
+              ...summary,
+              periodMonth: month, // 누적이므로 현재 월로 표시
+            });
+          } else {
+            const existing = entityMap.get(key)!;
+            entityMap.set(key, {
+              ...existing,
+              sales: existing.sales + summary.sales,
+              costOfSales: existing.costOfSales + summary.costOfSales,
+              grossProfit: existing.grossProfit + summary.grossProfit,
+              sellingAndAdminExpense: existing.sellingAndAdminExpense + summary.sellingAndAdminExpense,
+              operatingIncome: existing.operatingIncome + summary.operatingIncome,
+              otherRevenue: existing.otherRevenue + summary.otherRevenue,
+              otherExpense: existing.otherExpense + summary.otherExpense,
+              financialRevenue: existing.financialRevenue + summary.financialRevenue,
+              financialExpense: existing.financialExpense + summary.financialExpense,
+              incomeBeforeTax: existing.incomeBeforeTax + summary.incomeBeforeTax,
+              corporateIncomeTax: existing.corporateIncomeTax + summary.corporateIncomeTax,
+              netIncome: existing.netIncome + summary.netIncome,
+              gpMargin: existing.sales + summary.sales !== 0 
+                ? ((existing.grossProfit + summary.grossProfit) / (existing.sales + summary.sales)) * 100 
+                : 0,
+              operatingMargin: existing.sales + summary.sales !== 0
+                ? ((existing.operatingIncome + summary.operatingIncome) / (existing.sales + summary.sales)) * 100
+                : 0,
+              netMargin: existing.sales + summary.sales !== 0
+                ? ((existing.netIncome + summary.netIncome) / (existing.sales + summary.sales)) * 100
+                : 0,
+            });
+          }
+        });
+        compareData = Array.from(entityMap.values());
+      }
+      
+      // Entity 필터링
+      if (selectedEntity !== 'all') {
+        compareData = compareData.filter(s => s.entityCode === selectedEntity);
+      }
+      
+      setPrevSummaries(compareData);
     } catch (error: any) {
       console.error('Failed to load dashboard:', error);
+      toast.error('데이터 로드 실패');
     } finally {
       setDataLoading(false);
       setLoading(false);
@@ -93,13 +184,21 @@ export default function DashboardPage() {
     const prevGPPercent = prevTotalSales !== 0 ? (prevTotalGP / prevTotalSales) * 100 : 0;
     const prevTotalNetIncome = prevSummaries.reduce((sum, s) => sum + s.netIncome, 0);
 
-    const salesMoM = prevTotalSales !== 0
+    const salesChange = prevTotalSales !== 0
       ? ((totalSales - prevTotalSales) / Math.abs(prevTotalSales)) * 100
       : null;
-    const gpPercentMoM = prevGPPercent !== 0 ? gpPercent - prevGPPercent : null;
-    const netIncomeMoM = prevTotalNetIncome !== 0
+    const gpPercentChange = prevGPPercent !== 0 ? gpPercent - prevGPPercent : null;
+    const netIncomeChange = prevTotalNetIncome !== 0
       ? ((totalNetIncome - prevTotalNetIncome) / Math.abs(prevTotalNetIncome)) * 100
       : null;
+
+    // 비교 타입에 따른 라벨
+    const getChangeLabel = () => {
+      if (comparisonType === 'mom') return 'MoM';
+      if (comparisonType === 'yoy') return 'YoY';
+      if (comparisonType === 'yoy_ytd') return 'YoY YTD';
+      return '';
+    };
 
     return {
       totalSales,
@@ -108,11 +207,12 @@ export default function DashboardPage() {
       totalOperatingIncome,
       opPercent,
       totalNetIncome,
-      salesMoM,
-      gpPercentMoM,
-      netIncomeMoM,
+      salesChange,
+      gpPercentChange,
+      netIncomeChange,
+      changeLabel: getChangeLabel(),
     };
-  }, [summaries, prevSummaries]);
+  }, [summaries, prevSummaries, comparisonType]);
 
   // 인사이트 생성
   const insights = useMemo(() => {
@@ -167,11 +267,11 @@ export default function DashboardPage() {
       }
     });
 
-    // MoM 변동
-    if (dashboardData.salesMoM !== null && Math.abs(dashboardData.salesMoM) >= 10) {
+    // 비교 변동
+    if (dashboardData.salesChange !== null && Math.abs(dashboardData.salesChange) >= 10) {
       items.push({
-        type: dashboardData.salesMoM > 0 ? 'success' : 'warning',
-        message: `전체 Sales ${dashboardData.salesMoM > 0 ? '+' : ''}${dashboardData.salesMoM.toFixed(1)}% MoM 변동`,
+        type: dashboardData.salesChange > 0 ? 'success' : 'warning',
+        message: `전체 Sales ${dashboardData.salesChange > 0 ? '+' : ''}${dashboardData.salesChange.toFixed(1)}% ${dashboardData.changeLabel} 변동`,
       });
     }
 
@@ -218,9 +318,29 @@ export default function DashboardPage() {
       <div className="flex-shrink-0 mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Monthly Dashboard</h1>
-          <p className="text-gray-600">전체 법인 재무성과 요약 및 인사이트</p>
+          <p className="text-gray-600">
+            {selectedEntity === 'all' 
+              ? '전체 법인 재무성과 요약 및 인사이트'
+              : `${subsidiaries.find(s => s.code === selectedEntity)?.name || selectedEntity} 재무성과`}
+          </p>
         </div>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="entity-select">Entity</Label>
+            <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+              <SelectTrigger id="entity-select" className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all">전체</SelectItem>
+                {subsidiaries.map((sub) => (
+                  <SelectItem key={sub.id} value={sub.code}>
+                    {sub.name.replace('InBody ', '')}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-2">
             <Select value={selectedYear} onValueChange={setSelectedYear}>
               <SelectTrigger className="w-[100px]">
@@ -246,6 +366,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 비교 탭 */}
+      <Tabs value={comparisonType} onValueChange={(v) => setComparisonType(v as ComparisonType)} className="mb-6">
+        <TabsList>
+          <TabsTrigger value="mom">직전월 (MoM)</TabsTrigger>
+          <TabsTrigger value="yoy">전년도 동월 (YoY)</TabsTrigger>
+          <TabsTrigger value="yoy_ytd">전년도 동월(누적) (YoY YTD)</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {dataLoading ? (
         <div className="flex items-center justify-center py-20">
           <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
@@ -265,8 +394,8 @@ export default function DashboardPage() {
             <SummaryCard
               title="Total Sales"
               value={formatCompact(dashboardData.totalSales)}
-              change={dashboardData.salesMoM}
-              changeLabel="MoM"
+              change={dashboardData.salesChange}
+              changeLabel={dashboardData.changeLabel}
               icon={DollarSign}
               iconColor="text-blue-600"
               bgColor="bg-blue-50"
@@ -274,8 +403,8 @@ export default function DashboardPage() {
             <SummaryCard
               title="Gross Profit %"
               value={`${dashboardData.gpPercent.toFixed(1)}%`}
-              change={dashboardData.gpPercentMoM}
-              changeLabel="MoM"
+              change={dashboardData.gpPercentChange}
+              changeLabel={dashboardData.changeLabel}
               changeSuffix="pp"
               icon={Activity}
               iconColor="text-green-600"
@@ -284,8 +413,8 @@ export default function DashboardPage() {
             <SummaryCard
               title="Net Income"
               value={formatCompact(dashboardData.totalNetIncome)}
-              change={dashboardData.netIncomeMoM}
-              changeLabel="MoM"
+              change={dashboardData.netIncomeChange}
+              changeLabel={dashboardData.changeLabel}
               icon={TrendingUp}
               iconColor="text-purple-600"
               bgColor="bg-purple-50"
