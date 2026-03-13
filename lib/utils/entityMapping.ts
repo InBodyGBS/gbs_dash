@@ -26,6 +26,10 @@ const ENTITY_TO_CODE_MAPPING: Record<string, string> = {
   '헬스케어': 'HEALTHCARE',
   '삼한정공': 'SAMHAN',
   'KOCP': 'KOCP',
+  'Netherlands': 'NLD',
+  'DE': 'DEU',
+  'UK': 'GBR',
+  'Singapore': 'SGP',
   '연결조정': null as any, // subsidiaries에 없음
   '합계': null as any, // 합계는 subsidiaries에 없음
 };
@@ -137,6 +141,10 @@ export function normalizeEntityName(entityName: string): string {
     '주식회사 인바디': 'HQ',
     '케이오씨피 프로젝트 제2호 벤처투자조합': 'KOCP',
     'InBody Vietnam': 'Vietnam',
+    'InBody Netherlands': 'Netherlands',
+    'InBody DE': 'DE',
+    'InBody UK': 'UK',
+    'InBody Singapore': 'Singapore',
     'ADJ': '연결조정',
   };
 

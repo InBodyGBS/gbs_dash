@@ -450,6 +450,10 @@ export async function getAllFinancialEntities(): Promise<Array<{ entity: string;
       '헬스케어': 'HEALTHCARE',
       '삼한정공': 'SAMHAN',
       'KOCP': 'KOCP',
+      'Netherlands': 'NLD',
+      'DE': 'DEU',
+      'UK': 'GBR',
+      'Singapore': 'SGP',
       '연결조정': null, // subsidiaries에 없음
       '합계': null, // 합계는 subsidiaries에 없음
     };

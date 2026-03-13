@@ -74,6 +74,71 @@ export const WorldMap = ({ subsidiaries, selectedId, onSubsidiaryClick }: WorldM
     return Array.from(groups.values());
   }, [subsidiaries]);
 
+  // 레이블 위치 offset 계산 (겹침 방지 - 위아래로 분리)
+  const labelOffsets = useMemo(() => {
+    const offsets: Array<{ x: number; y: number; yOffset: number }> = [];
+    const threshold = 3.0; // 약 3도 이내면 가까운 것으로 간주
+    const verticalSpacing = 1.2; // 위아래 간격 (도 단위)
+
+    // 가까운 그룹들을 클러스터로 묶기
+    const clusters: number[][] = [];
+    const assigned = new Set<number>();
+
+    countryGroups.forEach((group, index) => {
+      if (assigned.has(index)) return;
+
+      const cluster = [index];
+      assigned.add(index);
+
+      // 같은 클러스터에 속하는 그룹 찾기
+      countryGroups.forEach((otherGroup, otherIndex) => {
+        if (index === otherIndex || assigned.has(otherIndex)) return;
+
+        const latDiff = Math.abs(group.latitude - otherGroup.latitude);
+        const lngDiff = Math.abs(group.longitude - otherGroup.longitude);
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+        if (distance < threshold) {
+          cluster.push(otherIndex);
+          assigned.add(otherIndex);
+        }
+      });
+
+      if (cluster.length > 1) {
+        clusters.push(cluster);
+      }
+    });
+
+    // 각 그룹에 offset 적용
+    countryGroups.forEach((group, index) => {
+      let offsetX = 0;
+      let offsetY = 0;
+      let yOffset = 0; // 레이블 y 위치 offset (픽셀 단위)
+
+      // 클러스터 내에서의 위치 찾기
+      for (const cluster of clusters) {
+        const clusterIndex = cluster.indexOf(index);
+        if (clusterIndex !== -1) {
+          // 클러스터 내에서 위아래로 순차 배치
+          const totalInCluster = cluster.length;
+          const position = clusterIndex - (totalInCluster - 1) / 2; // 중앙 기준 위치
+          
+          // 위아래로 분리 (y축 offset만 적용)
+          offsetY = position * verticalSpacing;
+          yOffset = position * 8; // 레이블 y 위치도 조정 (픽셀 단위)
+          
+          // 약간의 좌우 offset도 추가하여 더 명확하게 분리
+          offsetX = position % 2 === 0 ? 0.3 : -0.3;
+          break;
+        }
+      }
+
+      offsets.push({ x: offsetX, y: offsetY, yOffset });
+    });
+
+    return offsets;
+  }, [countryGroups]);
+
   // ✅ 훨씬 더 타이트한 지도 비율 + 팝업 열릴 때 동적 조정
   const mapConfig = useMemo(() => {
     if (countryGroups.length === 0) {
@@ -285,12 +350,39 @@ export const WorldMap = ({ subsidiaries, selectedId, onSubsidiaryClick }: WorldM
             const hasMultiple = group.subsidiaries.length > 1;
             const isAnySelected = group.subsidiaries.some((sub) => sub.id === selectedId);
             const groupKey = `label-${groupIndex}`;
+            const offset = labelOffsets[groupIndex] || { x: 0, y: 0, yOffset: 0 };
+            
+            // 레이블 텍스트 결정 (겹침 방지를 위해 짧게)
+            let labelText: string;
+            if (hasMultiple) {
+              labelText = group.country;
+            } else {
+              const displayName = group.subsidiaries[0].name.replace('InBody ', '');
+              // "Asia Singapore" 같은 경우 "Singapore"만 표시
+              if (displayName.includes(' ')) {
+                const parts = displayName.split(' ');
+                labelText = parts[parts.length - 1]; // 마지막 단어만
+              } else {
+                labelText = displayName;
+              }
+            }
+
+            // 기본 y 위치 계산
+            const baseY = isAnySelected ? -22 : hasMultiple ? -20 : -20;
+            // offset 적용 (위아래로 분리)
+            const finalY = baseY + offset.yOffset;
 
             return (
-              <Marker key={groupKey} coordinates={[group.longitude, group.latitude]}>
+              <Marker 
+                key={groupKey} 
+                coordinates={[
+                  group.longitude + offset.x, 
+                  group.latitude + offset.y
+                ]}
+              >
                 <text
                   textAnchor="middle"
-                  y={isAnySelected ? -22 : hasMultiple ? -20 : -20}
+                  y={finalY}
                   className={cn(
                     'text-xs font-medium fill-gray-200 pointer-events-none transition-all duration-300',
                     markersVisible ? 'opacity-100' : 'opacity-0'
@@ -303,9 +395,7 @@ export const WorldMap = ({ subsidiaries, selectedId, onSubsidiaryClick }: WorldM
                     transitionDelay: `${(groupIndex + countryGroups.length) * 50}ms`,
                   }}
                 >
-                  {hasMultiple 
-                    ? group.country 
-                    : group.subsidiaries[0].name.replace('InBody ', '')}
+                  {labelText}
                 </text>
               </Marker>
             );
