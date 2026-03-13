@@ -141,7 +141,8 @@ INSERT INTO std_bs_master (bs_code, bs_line, bs_category, display_order, is_calc
 ('12201', 'Right-of-use Assets', 'Non-Current Assets', 140, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
 ('12202', 'Right-of-use Assets - Accumulated Depreciation', 'Non-Current Assets', 141, FALSE, 'Asset', TRUE, 'Non-Current Assets'),
 ('12301', 'Goodwill', 'Non-Current Assets', 150, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
-('12303', 'Patents', 'Non-Current Assets', 152, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
+('12303', 'Industrial rights', 'Non-Current Assets', 152, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
+('12304', 'Industrial rights - Accumulated Depreciation', 'Non-Current Assets', 153, FALSE, 'Asset', TRUE, 'Non-Current Assets'),
 ('12309', 'Computer Software', 'Non-Current Assets', 158, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
 ('12310', 'Computer Software - Accumulated Amortisation', 'Non-Current Assets', 159, FALSE, 'Asset', TRUE, 'Non-Current Assets'),
 ('12313', 'Other intangible assets', 'Non-Current Assets', 162, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
@@ -223,15 +224,26 @@ CREATE POLICY "Allow all for bs_results" ON bs_results FOR ALL USING (true) WITH
 -- pl_results → std_pl_master FK
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.table_constraints 
-    WHERE constraint_name = 'fk_pl_results_std_pl_master' 
-    AND table_name = 'pl_results'
+  -- std_pl_code 컬럼이 존재하는지 확인
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'pl_results' AND column_name = 'std_pl_code'
   ) THEN
-    ALTER TABLE pl_results
-    ADD CONSTRAINT fk_pl_results_std_pl_master
-    FOREIGN KEY (std_code) REFERENCES std_pl_master(pl_code)
-    ON DELETE SET NULL;
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE constraint_name = 'fk_pl_results_std_pl_master' 
+      AND table_name = 'pl_results'
+    ) THEN
+      ALTER TABLE pl_results
+      ADD CONSTRAINT fk_pl_results_std_pl_master
+      FOREIGN KEY (std_pl_code) REFERENCES std_pl_master(pl_code)
+      ON DELETE SET NULL;
+      RAISE NOTICE 'FK fk_pl_results_std_pl_master added';
+    ELSE
+      RAISE NOTICE 'FK fk_pl_results_std_pl_master already exists';
+    END IF;
+  ELSE
+    RAISE NOTICE 'std_pl_code column does not exist in pl_results';
   END IF;
 END $$;
 
@@ -251,7 +263,7 @@ BEGIN
 END $$;
 
 -- 인덱스 추가 (FK 성능 최적화)
-CREATE INDEX IF NOT EXISTS idx_pl_results_std_code ON pl_results(std_code);
+CREATE INDEX IF NOT EXISTS idx_pl_results_std_pl_code ON pl_results(std_pl_code);
 
 -- 완료 메시지
 SELECT 'Migration v2 completed: BS support + FK relationships added' AS status;

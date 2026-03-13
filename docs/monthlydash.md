@@ -274,6 +274,8 @@ Net Income (Income before Tax - Corporate Income Tax)
 | Non-Current Assets | 12201 | Right-of-use Assets |
 | Non-Current Assets | 12202 | Right-of-use Assets - Accumulated Depreciation |
 | Non-Current Assets | 12301 | Goodwill |
+| Non-Current Assets | 12303 | Industrial rights|
+| Non-Current Assets | 12304 | Industrial rights - Accumulated Depreciation |
 | Non-Current Assets | 12309 | Computer Software |
 | Non-Current Assets | 12310 | Computer Software - Accumulated Amortisation |
 | Non-Current Assets | 12316 | Other intangible assets |
@@ -320,7 +322,8 @@ Net Income (Income before Tax - Corporate Income Tax)
 | Non Current Liabilities | 22401 | Leasehold deposits received |
 | Non Current Liabilities | 22501 | Deferred Tax Liabilities - Noncurrent |
 | Non Current Liabilities | 22601 | Finance Lease Liabilities - Non Current |
-| **Shareholders of the Parent Company** | 31101 | Capital Stock - Common Stock |
+| **Shareholders of the Parent Company** 
+| Shareholders of the Parent Company | 31101 | Capital Stock - Common Stock |
 | Shareholders of the Parent Company | 31201 | Paid-In Capital in Excess of Par |
 | Shareholders of the Parent Company | 31202 | Other Additional Capital |
 | Shareholders of the Parent Company | 31308 | Overseas operations translation credit(debit) |
