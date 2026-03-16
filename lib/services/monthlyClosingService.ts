@@ -73,13 +73,13 @@ export async function uploadTBFile(
     if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
       throw new Error(
         `Storage 버킷 '${BUCKET_NAME}'이 존재하지 않습니다. Supabase Storage에서 '${BUCKET_NAME}' 버킷을 생성해주세요.\n` +
-        `설정 가이드: docs/monthly-closing-storage-setup.md`
+        `설정 가이드: docs/monthly-closing-setup.md`
       );
     }
     if (uploadError.message?.includes('row-level security') || uploadError.message?.includes('policy')) {
       throw new Error(
         `Storage 업로드 권한이 없습니다. Supabase Storage의 '${BUCKET_NAME}' 버킷에 업로드 정책을 설정해주세요.\n` +
-        `SQL 파일 실행: docs/monthly-closing-storage-policies.sql`
+        `SQL 파일 실행: docs/monthly-closing-policies.sql`
       );
     }
     throw new Error(`파일 업로드 실패: ${uploadError.message || '알 수 없는 오류'}`);

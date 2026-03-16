@@ -942,7 +942,287 @@ All accounts mapped?
             ↓
             Re-run mapping and P&L generation
 ```
+### 4.6 Supabase Storage Configuration
+**Priority: P0**
 
+#### 4.6.1 Storage Bucket Setup
+
+**Bucket Structure:**
+```
+monthly-closing-storage/
+├─ uploads/
+│  └─ {entity_code}/
+│     └─ {year}/
+│        └─ {month}/
+│           └─ {upload_id}_{original_filename}.xlsx
+└─ exports/
+   └─ {entity_code}/
+      └─ {year}/
+         └─ {month}/
+            └─ pl_export_{timestamp}.xlsx
+```
+
+**Bucket Configuration:**
+- Bucket name: `monthly-closing-storage`
+- Public access: `false` (private bucket)
+- File size limit: 10MB per file
+- Allowed MIME types: 
+  - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (.xlsx)
+  - `application/vnd.ms-excel` (.xls)
+  - `text/csv` (.csv)
+
+#### 4.6.2 Row Level Security (RLS) Policies
+
+**Critical: Storage 접근을 위한 RLS 정책 필수 설정**
+```sql
+-- Storage Bucket 생성
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('monthly-closing-storage', 'monthly-closing-storage', false);
+
+-- Policy 1: 인증된 사용자만 업로드 가능
+CREATE POLICY "Authenticated users can upload files"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'monthly-closing-storage' 
+  AND (storage.foldername(name))[1] = 'uploads'
+);
+
+-- Policy 2: 본인이 업로드한 파일만 조회 가능
+CREATE POLICY "Users can view own uploaded files"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'monthly-closing-storage'
+  AND (storage.foldername(name))[1] = 'uploads'
+  AND owner = auth.uid()
+);
+
+-- Policy 3: GBS Team은 모든 파일 조회 가능
+CREATE POLICY "GBS Team can view all files"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'monthly-closing-storage'
+  AND EXISTS (
+    SELECT 1 FROM user_roles
+    WHERE user_id = auth.uid()
+    AND role IN ('gbs_admin', 'gbs_user')
+  )
+);
+
+-- Policy 4: 본인이 업로드한 파일만 삭제/갱신 가능
+CREATE POLICY "Users can update/delete own files"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'monthly-closing-storage'
+  AND owner = auth.uid()
+);
+
+CREATE POLICY "Users can delete own files"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'monthly-closing-storage'
+  AND owner = auth.uid()
+);
+
+-- Policy 5: Export 폴더는 GBS Team만 접근 가능
+CREATE POLICY "GBS Team can manage exports"
+ON storage.objects FOR ALL
+TO authenticated
+USING (
+  bucket_id = 'monthly-closing-storage'
+  AND (storage.foldername(name))[1] = 'exports'
+  AND EXISTS (
+    SELECT 1 FROM user_roles
+    WHERE user_id = auth.uid()
+    AND role IN ('gbs_admin', 'gbs_user')
+  )
+);
+```
+
+#### 4.6.3 User Role Management
+```sql
+-- User Roles Table
+CREATE TABLE user_roles (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id),
+    role VARCHAR(20), -- 'entity_user', 'gbs_user', 'gbs_admin', 'executive'
+    entity_code VARCHAR(10), -- NULL for GBS/Executive, specific entity for entity_user
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, entity_code)
+);
+
+-- Enable RLS on user_roles
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Users can view own role
+CREATE POLICY "Users can view own role"
+ON user_roles FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+```
+
+#### 4.6.4 File Upload Implementation
+
+**Frontend (Next.js API Route):**
+```typescript
+// app/api/upload/route.ts
+import { createClient } from '@supabase/supabase-js';
+
+export async function POST(request: Request) {
+  const formData = await request.formData();
+  const file = formData.get('file') as File;
+  const entityCode = formData.get('entity_code') as string;
+  const periodYear = formData.get('period_year') as string;
+  const periodMonth = formData.get('period_month') as string;
+  
+  // Supabase client with user's session
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: false
+      }
+    }
+  );
+  
+  // File path following bucket structure
+  const filePath = `uploads/${entityCode}/${periodYear}/${periodMonth}/${Date.now()}_${file.name}`;
+  
+  // Upload to Supabase Storage
+  const { data, error } = await supabase.storage
+    .from('monthly-closing-storage')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+  
+  if (error) {
+    return Response.json({ 
+      success: false, 
+      error: error.message 
+    }, { status: 400 });
+  }
+  
+  // Save upload record to database
+  const { data: uploadRecord, error: dbError } = await supabase
+    .from('tb_uploads')
+    .insert({
+      entity_code: entityCode,
+      period_year: parseInt(periodYear),
+      period_month: parseInt(periodMonth),
+      file_name: file.name,
+      file_path: data.path,
+      status: 'uploaded'
+    })
+    .select()
+    .single();
+  
+  if (dbError) {
+    // Rollback: delete uploaded file
+    await supabase.storage
+      .from('monthly-closing-storage')
+      .remove([filePath]);
+    
+    return Response.json({ 
+      success: false, 
+      error: dbError.message 
+    }, { status: 400 });
+  }
+  
+  return Response.json({ 
+    success: true, 
+    upload_id: uploadRecord.upload_id,
+    file_path: data.path
+  });
+}
+```
+
+#### 4.6.5 File Retrieval for Processing
+```typescript
+// Download and parse file for processing
+async function processUploadedFile(uploadId: number) {
+  const supabase = createClient(/* ... */);
+  
+  // Get upload record
+  const { data: upload } = await supabase
+    .from('tb_uploads')
+    .select('file_path')
+    .eq('upload_id', uploadId)
+    .single();
+  
+  // Download file from Storage
+  const { data: fileData, error } = await supabase.storage
+    .from('monthly-closing-storage')
+    .download(upload.file_path);
+  
+  if (error) throw error;
+  
+  // Parse Excel file using SheetJS
+  const arrayBuffer = await fileData.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer);
+  // ... continue parsing
+}
+```
+
+#### 4.6.6 Storage Error Handling
+
+**Common Storage Errors and Solutions:**
+
+| Error Code | Error Message | Cause | Solution |
+|-----------|---------------|-------|----------|
+| 403 | `new row violates row-level security policy` | RLS 정책 미설정 또는 권한 부족 | RLS 정책 확인 및 user_roles 테이블 확인 |
+| 400 | `The resource already exists` | 동일 파일명 업로드 시도 | Timestamp 추가하여 파일명 unique화 |
+| 413 | `Payload too large` | 파일 크기 제한 초과 | Frontend에서 10MB 체크 |
+| 406 | `Invalid MIME type` | 허용되지 않는 파일 형식 | Frontend에서 확장자 검증 |
+
+**Error Recovery Strategy:**
+1. **Upload Failure**: 
+   - Transaction 개념으로 처리 (DB 기록 실패 시 Storage 파일 삭제)
+   - Retry logic (3회 시도)
+   
+2. **Download Failure**:
+   - Exponential backoff retry
+   - Fallback to cached version (if exists)
+   
+3. **Permission Denied**:
+   - User role 재확인
+   - Admin에게 권한 요청 알림
+
+#### 4.6.7 Security Checklist
+
+- [ ] RLS enabled on `storage.objects`
+- [ ] RLS enabled on all database tables
+- [ ] Bucket is set to `public: false`
+- [ ] File size validation on frontend and backend
+- [ ] MIME type validation
+- [ ] Authenticated users only can upload
+- [ ] Users can only access files they own or have permission for
+- [ ] GBS Team has elevated permissions
+- [ ] Audit log for all file operations
+- [ ] Automatic file cleanup for old uploads (>2 years)
+- [ ] Virus scanning integration (optional, via webhooks)
+
+#### 4.6.8 Performance Optimization
+
+**File Upload:**
+- Use multipart upload for files > 5MB
+- Show upload progress indicator
+- Client-side validation before upload
+
+**File Download:**
+- Generate signed URLs for temporary access (1 hour expiry)
+- Cache downloaded files in browser (session storage)
+- Lazy load file lists (pagination: 20 files per page)
+
+**Storage Quota Management:**
+- Monitor bucket size via Supabase dashboard
+- Set up alerts for 80% capacity
+- Implement automatic archival to cheaper storage tier after 1 year
 ---
 
 ## 5. User Flows
