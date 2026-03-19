@@ -250,7 +250,7 @@ export default function ResultPage() {
       const { data: rawData } = await supabase
         .from('tb_raw_data')
         .select('*')
-        .eq('upload_id', upload.id)
+        .eq('upload_id', upload!.id)
         .in('account_code', accountCodes);
 
       setDrillDownData({
@@ -846,7 +846,6 @@ export default function ResultPage() {
                       return (
                         <>
                           <tr key={line.key} className={cn(
-                          <tr className={cn(
                             'transition-colors',
                             line.isSubtotal && 'bg-gray-50/80 font-semibold',
                             !line.isSubtotal && !line.isMargin && 'hover:bg-gray-50/50'
