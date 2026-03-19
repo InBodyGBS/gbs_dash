@@ -31,8 +31,8 @@ import {
   Info,
   RefreshCw,
 } from 'lucide-react';
-import { getAllEntityPLSummaries } from '@/lib/services/monthlyClosingService';
-import type { PLSummary } from '@/lib/types/monthly-closing';
+import { getAllEntityPLSummaries, getPLResults, calculatePLSummary } from '@/lib/services/monthlyClosingService';
+import type { PLSummary, PLResult } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
 import {
   BarChart,
@@ -46,6 +46,45 @@ import {
 } from 'recharts';
 
 type ComparisonType = 'mom' | 'yoy' | 'yoy_ytd';
+
+// 월별값 계산 헬퍼 함수 (Result 페이지와 동일한 로직)
+function calculateMonthlyDifference(
+  currentCumulative: PLResult[],
+  prevCumulative: PLResult[],
+  entityCode: string,
+  year: number,
+  month: number
+): PLResult[] {
+  // 현재 월 누적값 Map
+  const currMap = new Map<string, number>();
+  currentCumulative.forEach((r) => {
+    currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount);
+  });
+  
+  // 직전월 누적값 Map
+  const prevMap = new Map<string, number>();
+  prevCumulative.forEach((r) => {
+    prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount);
+  });
+  
+  // 차이 계산 (월별값 = 현재 누적 - 직전월 누적)
+  const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
+  const monthlyResults: PLResult[] = Array.from(allCodes).map((code) => ({
+    id: `${code}-${month}`,
+    upload_id: '',
+    entity_code: entityCode,
+    subsidiary_id: null,
+    period_year: year,
+    period_month: month,
+    std_pl_code: code,
+    amount: (currMap.get(code) || 0) - (prevMap.get(code) || 0),
+    currency: currentCumulative[0]?.currency || 'KRW',
+    created_at: new Date().toISOString(),
+    std_pl_master: undefined,
+  }));
+  
+  return monthlyResults;
+}
 
 export default function DashboardPage() {
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
@@ -86,27 +125,99 @@ export default function DashboardPage() {
       const year = parseInt(selectedYear);
       const month = parseInt(selectedMonth);
 
-      // 현재 월 데이터
-      let currentData = await getAllEntityPLSummaries(year, month);
-      
-      // Entity 필터링
-      if (selectedEntity !== 'all') {
-        currentData = currentData.filter(s => s.entityCode === selectedEntity);
-      }
-      setSummaries(currentData);
-
       // 비교 데이터 로드
+      let currentData: PLSummary[] = [];
       let compareData: PLSummary[] = [];
       
       if (comparisonType === 'mom') {
-        // 직전월
+        // 직전월 비교: Result의 월별값 계산 방식 사용
         const prevMonth = month === 1 ? 12 : month - 1;
         const prevYear = month === 1 ? year - 1 : year;
-        compareData = await getAllEntityPLSummaries(prevYear, prevMonth);
-      } else if (comparisonType === 'yoy') {
-        // 전년도 동월
-        compareData = await getAllEntityPLSummaries(year - 1, month);
-      } else if (comparisonType === 'yoy_ytd') {
+        
+        // 모든 Entity 목록 가져오기
+        const allEntities = selectedEntity === 'all' 
+          ? subsidiaries.map(s => s.code)
+          : [selectedEntity];
+        
+        // 각 Entity별로 월별값 계산
+        const currentMonthlySummaries: PLSummary[] = [];
+        const prevMonthlySummaries: PLSummary[] = [];
+        
+        for (const entityCode of allEntities) {
+          const entityName = subsidiaries.find(s => s.code === entityCode)?.name || entityCode;
+          
+          // 현재 월 누적값
+          const currentCumulative = await getPLResults(entityCode, year, month);
+          // 직전월 누적값
+          const prevCumulative = await getPLResults(entityCode, prevYear, prevMonth);
+          
+          if (month === 1) {
+            // 1월: 누적값 = 월별값
+            if (currentCumulative.length > 0) {
+              currentMonthlySummaries.push(
+                calculatePLSummary(currentCumulative, entityCode, entityName, year, month)
+              );
+            }
+            // 직전월(12월)의 월별값 계산
+            if (prevMonth === 12) {
+              const prevPrevCumulative = await getPLResults(entityCode, prevYear - 1, 11);
+              const prevMonthlyResults = calculateMonthlyDifference(prevCumulative, prevPrevCumulative, entityCode, prevYear, prevMonth);
+              if (prevMonthlyResults.length > 0) {
+                prevMonthlySummaries.push(
+                  calculatePLSummary(prevMonthlyResults, entityCode, entityName, prevYear, prevMonth)
+                );
+              }
+            } else {
+              // prevMonth가 12월이 아니면 (이론적으로 불가능하지만 안전 처리)
+              if (prevCumulative.length > 0) {
+                prevMonthlySummaries.push(
+                  calculatePLSummary(prevCumulative, entityCode, entityName, prevYear, prevMonth)
+                );
+              }
+            }
+          } else {
+            // 2월~12월: 현재 월 누적 - 직전월 누적
+            const currentMonthlyResults = calculateMonthlyDifference(currentCumulative, prevCumulative, entityCode, year, month);
+            if (currentMonthlyResults.length > 0) {
+              currentMonthlySummaries.push(
+                calculatePLSummary(currentMonthlyResults, entityCode, entityName, year, month)
+              );
+            }
+            
+            // 직전월의 월별값 계산
+            const prevPrevMonth = prevMonth === 1 ? 12 : prevMonth - 1;
+            const prevPrevYear = prevMonth === 1 ? prevYear - 1 : prevYear;
+            const prevPrevCumulative = await getPLResults(entityCode, prevPrevYear, prevPrevMonth);
+            
+            if (prevMonth === 1) {
+              // 직전월이 1월이면 누적값 = 월별값
+              if (prevCumulative.length > 0) {
+                prevMonthlySummaries.push(
+                  calculatePLSummary(prevCumulative, entityCode, entityName, prevYear, prevMonth)
+                );
+              }
+            } else {
+              // 직전월이 2월~12월이면: 직전월 누적 - 직전월의 직전월 누적
+              const prevMonthlyResults = calculateMonthlyDifference(prevCumulative, prevPrevCumulative, entityCode, prevYear, prevMonth);
+              if (prevMonthlyResults.length > 0) {
+                prevMonthlySummaries.push(
+                  calculatePLSummary(prevMonthlyResults, entityCode, entityName, prevYear, prevMonth)
+                );
+              }
+            }
+          }
+        }
+        
+        currentData = currentMonthlySummaries;
+        compareData = prevMonthlySummaries;
+      } else {
+        // 전년도 동월 또는 전년도 동월(누적): 누적값 사용
+        currentData = await getAllEntityPLSummaries(year, month);
+        
+        if (comparisonType === 'yoy') {
+          // 전년도 동월
+          compareData = await getAllEntityPLSummaries(year - 1, month);
+        } else if (comparisonType === 'yoy_ytd') {
         // 전년도 동월(누적) - 1월부터 현재 월까지 합계
         const allMonths: PLSummary[] = [];
         for (let m = 1; m <= month; m++) {
@@ -152,13 +263,16 @@ export default function DashboardPage() {
           }
         });
         compareData = Array.from(entityMap.values());
+        }
       }
       
       // Entity 필터링
       if (selectedEntity !== 'all') {
+        currentData = currentData.filter(s => s.entityCode === selectedEntity);
         compareData = compareData.filter(s => s.entityCode === selectedEntity);
       }
       
+      setSummaries(currentData);
       setPrevSummaries(compareData);
     } catch (error: any) {
       console.error('Failed to load dashboard:', error);
@@ -526,7 +640,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {summaries
-                      .sort((a, b) => b.revenue - a.revenue)
+                      .sort((a, b) => b.sales - a.sales)
                       .map((s) => (
                         <tr key={s.entityCode} className="border-b hover:bg-gray-50">
                           <td className="py-2 px-3 font-medium">{s.entityName}</td>
