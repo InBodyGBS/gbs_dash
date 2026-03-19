@@ -65,16 +65,16 @@ function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
-// P&L 표시 라인 (PRD 기반)
+// P&L 표시 라인 (12개월 월별 데이터)
 interface PLDisplayLine {
   key: string;
   plCode?: string;
   label: string;
-  amount: number;
+  monthlyAmounts: number[]; // 12개월 데이터 [1월, 2월, ..., 12월]
   indent: number;
   isSubtotal: boolean;
   isMargin: boolean;
-  marginValue?: number;
+  marginValues?: number[]; // 12개월 마진 데이터
   children?: PLDisplayLine[];
   canDrillDown?: boolean;
 }
@@ -95,19 +95,15 @@ export default function ResultPage() {
   // 필터 상태
   const [selectedEntityCode, setSelectedEntityCode] = useState<string>(savedState?.entityCode || '');
   const [selectedYear, setSelectedYear] = useState<string>(savedState?.year || String(new Date().getFullYear()));
-  const [selectedMonth, setSelectedMonth] = useState<string>(savedState?.month || String(new Date().getMonth() || 12));
-  const [viewMode, setViewMode] = useState<'single' | 'multi'>(savedState?.viewMode || 'single');
 
   // 데이터 상태
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
-  const [plResults, setPLResults] = useState<PLResult[]>([]);
   const [plMaster, setPLMaster] = useState<StdPLMaster[]>([]);
-  const [plSummary, setPLSummary] = useState<PLSummary | null>(null);
-  const [allSummaries, setAllSummaries] = useState<PLSummary[]>([]);
+  const [monthlyData, setMonthlyData] = useState<Map<number, PLResult[]>>(new Map()); // 월별 P&L 데이터 (1~12월)
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
-  const [drillDownData, setDrillDownData] = useState<{ plCode: string; accounts: any[] } | null>(null);
+  const [drillDownData, setDrillDownData] = useState<{ plCode: string; accounts: any[]; month: number } | null>(null);
   const [drillDownOpen, setDrillDownOpen] = useState(false);
 
   // 상태 저장
@@ -116,11 +112,9 @@ export default function ResultPage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         entityCode: selectedEntityCode,
         year: selectedYear,
-        month: selectedMonth,
-        viewMode,
       }));
     } catch {}
-  }, [selectedEntityCode, selectedYear, selectedMonth, viewMode]);
+  }, [selectedEntityCode, selectedYear]);
 
   // 초기 로드
   useEffect(() => {
@@ -128,14 +122,12 @@ export default function ResultPage() {
     loadPLMaster();
   }, []);
 
-  // Entity/Period 변경 시 데이터 로드
+  // Entity/Year 변경 시 12개월 데이터 로드
   useEffect(() => {
-    if (viewMode === 'single' && selectedEntityCode && selectedYear && selectedMonth) {
-      loadSingleEntityPL();
-    } else if (viewMode === 'multi' && selectedYear && selectedMonth) {
-      loadMultiEntityPL();
+    if (selectedEntityCode && selectedYear) {
+      loadYearlyMonthlyPL();
     }
-  }, [selectedEntityCode, selectedYear, selectedMonth, viewMode]);
+  }, [selectedEntityCode, selectedYear]);
 
   const loadSubsidiaries = async () => {
     try {
@@ -158,57 +150,77 @@ export default function ResultPage() {
     }
   };
 
-  const loadSingleEntityPL = async () => {
+  // 12개월 월별 데이터 로드 (각 월 = 해당 월 누적 - 직전월 누적)
+  const loadYearlyMonthlyPL = async () => {
+    if (!selectedEntityCode || !selectedYear) return;
+    
     setDataLoading(true);
     try {
-      const results = await getPLResults(
-        selectedEntityCode,
-        parseInt(selectedYear),
-        parseInt(selectedMonth)
-      );
-      setPLResults(results);
+      const year = parseInt(selectedYear);
+      const newMonthlyData = new Map<number, PLResult[]>();
 
-      const entityName =
-        subsidiaries.find((s) => s.code === selectedEntityCode)?.name || selectedEntityCode;
-      if (results.length > 0) {
-        const summary = calculatePLSummary(
-          results,
-          selectedEntityCode,
-          entityName,
-          parseInt(selectedYear),
-          parseInt(selectedMonth)
-        );
-        setPLSummary(summary);
-      } else {
-        setPLSummary(null);
-      }
-    } catch (error: any) {
-      console.error('Failed to load P&L:', error);
-      toast.error('P&L 데이터 로드 실패');
-    } finally {
-      setDataLoading(false);
-    }
-  };
+      // 12개월 데이터를 병렬로 로드
+      const loadPromises = Array.from({ length: 12 }, async (_, i) => {
+        const month = i + 1;
+        const currentResults = await getPLResults(selectedEntityCode, year, month);
+        
+        if (month === 1) {
+          // 1월은 그냥 누적값 사용
+          return { month, results: currentResults };
+        } else {
+          // 2월~12월: 현재 누적 - 직전월 누적
+          const prevMonth = month - 1;
+          const prevResults = await getPLResults(selectedEntityCode, year, prevMonth);
+          
+          // 현재 월 누적값 Map
+          const currMap = new Map<string, number>();
+          currentResults.forEach((r) => {
+            currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount);
+          });
+          
+          // 직전월 누적값 Map
+          const prevMap = new Map<string, number>();
+          prevResults.forEach((r) => {
+            prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount);
+          });
+          
+          // 차이 계산
+          const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
+          const monthlyResults: PLResult[] = Array.from(allCodes).map((code) => ({
+            id: `${code}-${month}`,
+            upload_id: '',
+            entity_code: selectedEntityCode,
+            subsidiary_id: null,
+            period_year: year,
+            period_month: month,
+            std_pl_code: code,
+            amount: (currMap.get(code) || 0) - (prevMap.get(code) || 0),
+            currency: currentResults[0]?.currency || 'KRW',
+            created_at: new Date().toISOString(),
+            std_pl_master: undefined,
+          }));
+          
+          return { month, results: monthlyResults };
+        }
+      });
 
-  const loadMultiEntityPL = async () => {
-    setDataLoading(true);
-    try {
-      const summaries = await getAllEntityPLSummaries(
-        parseInt(selectedYear),
-        parseInt(selectedMonth)
-      );
-      setAllSummaries(summaries);
+      const results = await Promise.all(loadPromises);
+      results.forEach(({ month, results }) => {
+        newMonthlyData.set(month, results);
+      });
+
+      setMonthlyData(newMonthlyData);
     } catch (error: any) {
-      console.error('Failed to load all PL:', error);
-      toast.error('전체 P&L 로드 실패');
+      console.error('Failed to load yearly monthly P&L:', error);
+      toast.error('월별 P&L 데이터 로드 실패');
     } finally {
       setDataLoading(false);
     }
   };
 
   // Drill-down 데이터 로드
-  const loadDrillDown = async (plCode: string) => {
-    if (!selectedEntityCode || !selectedYear || !selectedMonth) return;
+  const loadDrillDown = async (plCode: string, month: number) => {
+    if (!selectedEntityCode || !selectedYear) return;
 
     try {
       // 해당 P&L Code에 매핑된 원장 계정 조회
@@ -217,7 +229,7 @@ export default function ResultPage() {
         .select('id')
         .eq('entity_code', selectedEntityCode)
         .eq('period_year', parseInt(selectedYear))
-        .eq('period_month', parseInt(selectedMonth))
+        .eq('period_month', month)
         .single();
 
       if (!upload) return;
@@ -244,6 +256,7 @@ export default function ResultPage() {
       setDrillDownData({
         plCode,
         accounts: rawData || [],
+        month,
       });
       setDrillDownOpen(true);
     } catch (error: any) {
@@ -252,15 +265,38 @@ export default function ResultPage() {
     }
   };
 
-  // P&L 표시 라인 생성 (PRD 기반)
+  // P&L 표시 라인 생성 (12개월 월별 데이터)
   const plDisplayLines: PLDisplayLine[] = useMemo(() => {
-    if (!plSummary || !plResults.length) return [];
+    if (monthlyData.size === 0 || !plMaster.length) return [];
 
-    // P&L Code별 금액 Map
-    const amountByCode = new Map<string, number>();
-    plResults.forEach((r) => {
-      amountByCode.set(r.std_pl_code, r.amount);
-    });
+    // 각 월별로 P&L Code별 금액 Map 생성
+    const amountByCodeByMonth = new Map<number, Map<string, number>>();
+    for (let month = 1; month <= 12; month++) {
+      const monthData = monthlyData.get(month) || [];
+      const codeMap = new Map<string, number>();
+      monthData.forEach((r) => {
+        codeMap.set(r.std_pl_code, (codeMap.get(r.std_pl_code) || 0) + r.amount);
+      });
+      amountByCodeByMonth.set(month, codeMap);
+    }
+
+    // 각 P&L Code에 대해 12개월 데이터 추출하는 헬퍼 함수
+    const getMonthlyAmounts = (code: string): number[] => {
+      return Array.from({ length: 12 }, (_, i) => {
+        const month = i + 1;
+        const codeMap = amountByCodeByMonth.get(month);
+        return codeMap?.get(code) || 0;
+      });
+    };
+
+    // Summary 계산 헬퍼 (12개월 합계)
+    const getSummary = (codes: string[]): number[] => {
+      return Array.from({ length: 12 }, (_, i) => {
+        const month = i + 1;
+        const codeMap = amountByCodeByMonth.get(month);
+        return codes.reduce((sum, code) => sum + (codeMap?.get(code) || 0), 0);
+      });
+    };
 
     // P&L Master Map
     const masterByCode = new Map<string, StdPLMaster>();
@@ -268,12 +304,72 @@ export default function ResultPage() {
       masterByCode.set(m.pl_code, m);
     });
 
+    // Sales 합계 계산
+    const salesCodes = ['41000', '42000', '43000', '44000', '45000', '46000'];
+    const salesAmounts = getSummary(salesCodes);
+    
+    // COGS 합계 계산
+    const cogsCodes = ['51000', '52000', '53000', '54000'];
+    const cogsAmounts = getSummary(cogsCodes);
+    
+    // Gross Profit 계산 (Sales - COGS)
+    const grossProfitAmounts = Array.from({ length: 12 }, (_, i) => salesAmounts[i] - cogsAmounts[i]);
+    
+    // GP Margin 계산
+    const gpMarginValues = Array.from({ length: 12 }, (_, i) => 
+      salesAmounts[i] !== 0 ? (grossProfitAmounts[i] / salesAmounts[i]) * 100 : 0
+    );
+
+    // SG&A 계산 (600번대 코드들)
+    const sgaCodes = plMaster.filter((m) => m.pl_code.startsWith('600')).map((m) => m.pl_code);
+    const sgaAmounts = getSummary(sgaCodes);
+    
+    // Operating Income 계산 (Gross Profit - SG&A)
+    const operatingIncomeAmounts = Array.from({ length: 12 }, (_, i) => grossProfitAmounts[i] - sgaAmounts[i]);
+    
+    // Operating Margin 계산
+    const operatingMarginValues = Array.from({ length: 12 }, (_, i) => 
+      salesAmounts[i] !== 0 ? (operatingIncomeAmounts[i] / salesAmounts[i]) * 100 : 0
+    );
+    
+    // Other Revenue 계산 (710번대)
+    const otherRevenueCodes = plMaster.filter((m) => m.pl_code.startsWith('710')).map((m) => m.pl_code);
+    const otherRevenueAmounts = getSummary(otherRevenueCodes);
+    
+    // Other Expense 계산 (720번대)
+    const otherExpenseCodes = plMaster.filter((m) => m.pl_code.startsWith('720')).map((m) => m.pl_code);
+    const otherExpenseAmounts = getSummary(otherExpenseCodes);
+    
+    // Financial Revenue 계산 (730번대)
+    const financialRevenueCodes = plMaster.filter((m) => m.pl_code.startsWith('730')).map((m) => m.pl_code);
+    const financialRevenueAmounts = getSummary(financialRevenueCodes);
+    
+    // Financial Expense 계산 (740번대)
+    const financialExpenseCodes = plMaster.filter((m) => m.pl_code.startsWith('740')).map((m) => m.pl_code);
+    const financialExpenseAmounts = getSummary(financialExpenseCodes);
+    
+    // Income before Tax 계산
+    const incomeBeforeTaxAmounts = Array.from({ length: 12 }, (_, i) => 
+      operatingIncomeAmounts[i] + otherRevenueAmounts[i] - otherExpenseAmounts[i] + financialRevenueAmounts[i] - financialExpenseAmounts[i]
+    );
+    
+    // Corporate Income Tax
+    const corporateTaxAmounts = getMonthlyAmounts('80001');
+    
+    // Net Income 계산
+    const netIncomeAmounts = Array.from({ length: 12 }, (_, i) => incomeBeforeTaxAmounts[i] - corporateTaxAmounts[i]);
+    
+    // Net Margin 계산
+    const netMarginValues = Array.from({ length: 12 }, (_, i) => 
+      salesAmounts[i] !== 0 ? (netIncomeAmounts[i] / salesAmounts[i]) * 100 : 0
+    );
+
     return [
       // Sales
       {
         key: 'sales',
         label: 'Sales',
-        amount: plSummary.sales,
+        monthlyAmounts: salesAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -283,7 +379,7 @@ export default function ResultPage() {
             key: '41000',
             plCode: '41000',
             label: 'Sales - Finished Goods',
-            amount: amountByCode.get('41000') || 0,
+            monthlyAmounts: getMonthlyAmounts('41000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -293,7 +389,7 @@ export default function ResultPage() {
             key: '42000',
             plCode: '42000',
             label: 'Sales - Finished Goods (Related)',
-            amount: amountByCode.get('42000') || 0,
+            monthlyAmounts: getMonthlyAmounts('42000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -303,7 +399,7 @@ export default function ResultPage() {
             key: '43000',
             plCode: '43000',
             label: 'Sales - Merchandise',
-            amount: amountByCode.get('43000') || 0,
+            monthlyAmounts: getMonthlyAmounts('43000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -313,7 +409,7 @@ export default function ResultPage() {
             key: '44000',
             plCode: '44000',
             label: 'Sales - Merchandise (Related)',
-            amount: amountByCode.get('44000') || 0,
+            monthlyAmounts: getMonthlyAmounts('44000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -323,7 +419,7 @@ export default function ResultPage() {
             key: '45000',
             plCode: '45000',
             label: 'Sales - Services',
-            amount: amountByCode.get('45000') || 0,
+            monthlyAmounts: getMonthlyAmounts('45000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -333,7 +429,7 @@ export default function ResultPage() {
             key: '46000',
             plCode: '46000',
             label: 'Sales - Others',
-            amount: amountByCode.get('46000') || 0,
+            monthlyAmounts: getMonthlyAmounts('46000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -345,7 +441,7 @@ export default function ResultPage() {
       {
         key: 'cogs',
         label: 'Cost of Goods Sold',
-        amount: plSummary.costOfSales,
+        monthlyAmounts: cogsAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -355,7 +451,7 @@ export default function ResultPage() {
             key: '51000',
             plCode: '51000',
             label: 'COGS - Finished Goods',
-            amount: amountByCode.get('51000') || 0,
+            monthlyAmounts: getMonthlyAmounts('51000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -365,7 +461,7 @@ export default function ResultPage() {
             key: '52000',
             plCode: '52000',
             label: 'COGS - Merchandise',
-            amount: amountByCode.get('52000') || 0,
+            monthlyAmounts: getMonthlyAmounts('52000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -375,7 +471,7 @@ export default function ResultPage() {
             key: '53000',
             plCode: '53000',
             label: 'COGS - Services',
-            amount: amountByCode.get('53000') || 0,
+            monthlyAmounts: getMonthlyAmounts('53000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -385,7 +481,7 @@ export default function ResultPage() {
             key: '54000',
             plCode: '54000',
             label: 'COGS - Others',
-            amount: amountByCode.get('54000') || 0,
+            monthlyAmounts: getMonthlyAmounts('54000'),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -397,7 +493,7 @@ export default function ResultPage() {
       {
         key: 'gross_profit',
         label: 'Gross Profit',
-        amount: plSummary.grossProfit,
+        monthlyAmounts: grossProfitAmounts,
         indent: 0,
         isSubtotal: true,
         isMargin: false,
@@ -405,17 +501,17 @@ export default function ResultPage() {
       {
         key: 'gp_margin',
         label: 'GP Margin',
-        amount: 0,
+        monthlyAmounts: Array(12).fill(0),
         indent: 1,
         isSubtotal: false,
         isMargin: true,
-        marginValue: plSummary.gpMargin,
+        marginValues: gpMarginValues,
       },
       // Selling and Administration Expense
       {
         key: 'sga',
         label: 'Selling and Administration Expense',
-        amount: plSummary.sellingAndAdminExpense,
+        monthlyAmounts: sgaAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -427,7 +523,7 @@ export default function ResultPage() {
             key: m.pl_code,
             plCode: m.pl_code,
             label: m.pl_line,
-            amount: amountByCode.get(m.pl_code) || 0,
+            monthlyAmounts: getMonthlyAmounts(m.pl_code),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -438,7 +534,7 @@ export default function ResultPage() {
       {
         key: 'operating_income',
         label: 'Operating Income',
-        amount: plSummary.operatingIncome,
+        monthlyAmounts: operatingIncomeAmounts,
         indent: 0,
         isSubtotal: true,
         isMargin: false,
@@ -446,17 +542,17 @@ export default function ResultPage() {
       {
         key: 'operating_margin',
         label: 'Operating Margin',
-        amount: 0,
+        monthlyAmounts: Array(12).fill(0),
         indent: 1,
         isSubtotal: false,
         isMargin: true,
-        marginValue: plSummary.operatingMargin,
+        marginValues: operatingMarginValues,
       },
       // Other Revenue
       {
         key: 'other_revenue',
         label: 'Other Revenue',
-        amount: plSummary.otherRevenue,
+        monthlyAmounts: otherRevenueAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -468,7 +564,7 @@ export default function ResultPage() {
             key: m.pl_code,
             plCode: m.pl_code,
             label: m.pl_line,
-            amount: amountByCode.get(m.pl_code) || 0,
+            monthlyAmounts: getMonthlyAmounts(m.pl_code),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -479,7 +575,7 @@ export default function ResultPage() {
       {
         key: 'other_expense',
         label: 'Other Expense',
-        amount: plSummary.otherExpense,
+        monthlyAmounts: otherExpenseAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -491,7 +587,7 @@ export default function ResultPage() {
             key: m.pl_code,
             plCode: m.pl_code,
             label: m.pl_line,
-            amount: amountByCode.get(m.pl_code) || 0,
+            monthlyAmounts: getMonthlyAmounts(m.pl_code),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -502,7 +598,7 @@ export default function ResultPage() {
       {
         key: 'financial_revenue',
         label: 'Financial Revenue',
-        amount: plSummary.financialRevenue,
+        monthlyAmounts: financialRevenueAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -514,7 +610,7 @@ export default function ResultPage() {
             key: m.pl_code,
             plCode: m.pl_code,
             label: m.pl_line,
-            amount: amountByCode.get(m.pl_code) || 0,
+            monthlyAmounts: getMonthlyAmounts(m.pl_code),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -525,7 +621,7 @@ export default function ResultPage() {
       {
         key: 'financial_expense',
         label: 'Financial Expense',
-        amount: plSummary.financialExpense,
+        monthlyAmounts: financialExpenseAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -537,7 +633,7 @@ export default function ResultPage() {
             key: m.pl_code,
             plCode: m.pl_code,
             label: m.pl_line,
-            amount: amountByCode.get(m.pl_code) || 0,
+            monthlyAmounts: getMonthlyAmounts(m.pl_code),
             indent: 1,
             isSubtotal: false,
             isMargin: false,
@@ -548,7 +644,7 @@ export default function ResultPage() {
       {
         key: 'income_before_tax',
         label: 'Income before Tax',
-        amount: plSummary.incomeBeforeTax,
+        monthlyAmounts: incomeBeforeTaxAmounts,
         indent: 0,
         isSubtotal: true,
         isMargin: false,
@@ -558,7 +654,7 @@ export default function ResultPage() {
         key: 'corporate_tax',
         plCode: '80001',
         label: 'Corporate Income Tax',
-        amount: plSummary.corporateIncomeTax,
+        monthlyAmounts: corporateTaxAmounts,
         indent: 0,
         isSubtotal: false,
         isMargin: false,
@@ -568,7 +664,7 @@ export default function ResultPage() {
       {
         key: 'net_income',
         label: 'Net Income',
-        amount: plSummary.netIncome,
+        monthlyAmounts: netIncomeAmounts,
         indent: 0,
         isSubtotal: true,
         isMargin: false,
@@ -576,14 +672,14 @@ export default function ResultPage() {
       {
         key: 'net_margin',
         label: 'Net Margin',
-        amount: 0,
+        monthlyAmounts: Array(12).fill(0),
         indent: 1,
         isSubtotal: false,
         isMargin: true,
-        marginValue: plSummary.netMargin,
+        marginValues: netMarginValues,
       },
     ];
-  }, [plSummary, plResults, plMaster]);
+  }, [monthlyData, plMaster]);
 
   const toggleExpand = (key: string) => {
     setExpandedLines((prev) => {
@@ -594,47 +690,39 @@ export default function ResultPage() {
     });
   };
 
-  const handleDrillDown = (plCode: string) => {
-    loadDrillDown(plCode);
+  const handleDrillDown = (plCode: string, month: number) => {
+    loadDrillDown(plCode, month);
   };
 
   // Excel 내보내기
   const handleExport = () => {
-    if (viewMode === 'single' && plSummary) {
-      const wsData = plDisplayLines
-        .filter((l) => !l.isMargin)
-        .map((line) => ({
+    if (!selectedEntityCode || !selectedYear || plDisplayLines.length === 0) return;
+    
+    const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+    const headers = ['P&L Code', 'P&L Line', ...monthNames];
+    
+    const wsData = plDisplayLines
+      .filter((l) => !l.isMargin)
+      .map((line) => {
+        const row: any = {
           'P&L Code': line.plCode || '',
           'P&L Line': line.label,
-          Amount: line.amount,
-        }));
-      const ws = XLSX.utils.json_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'P&L');
-      XLSX.writeFile(wb, `PL_${selectedEntityCode}_${selectedYear}_${selectedMonth}.xlsx`);
-    } else if (viewMode === 'multi' && allSummaries.length > 0) {
-      const wsData = allSummaries.map((s) => ({
-        Entity: s.entityName,
-        Sales: s.sales,
-        'Cost of Sales': s.costOfSales,
-        'Gross Profit': s.grossProfit,
-        'GP%': s.gpMargin,
-        'Operating Income': s.operatingIncome,
-        'Op. Margin%': s.operatingMargin,
-        'Net Income': s.netIncome,
-        'Net%': s.netMargin,
-      }));
-      const ws = XLSX.utils.json_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Entity Comparison');
-      XLSX.writeFile(wb, `PL_All_${selectedYear}_${selectedMonth}.xlsx`);
-    }
+        };
+        line.monthlyAmounts.forEach((amount, idx) => {
+          row[monthNames[idx]] = amount;
+        });
+        return row;
+      });
+    
+    const ws = XLSX.utils.json_to_sheet(wsData, { header: headers });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'P&L Monthly');
+    XLSX.writeFile(wb, `PL_${selectedEntityCode}_${selectedYear}_Monthly.xlsx`);
   };
 
   // 옵션 데이터
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: currentYear - 2019 }, (_, i) => String(2020 + i));
-  const months = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
   if (loading) {
     return (
@@ -652,11 +740,11 @@ export default function ResultPage() {
       {/* Header */}
       <div className="flex-shrink-0 mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">P&L Statement</h1>
-          <p className="text-gray-600">월별 손익계산서 조회 및 분석</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-1.5">P&L Statement</h1>
+          <p className="text-gray-500 text-sm">월별 손익계산서 조회 및 분석</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="sm" onClick={handleExport} className="border-gray-300 hover:bg-gray-50">
             <Download className="h-4 w-4 mr-2" />
             Export Excel
           </Button>
@@ -664,40 +752,24 @@ export default function ResultPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex-shrink-0 mb-6 bg-white rounded-lg border p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* View Mode */}
+      <div className="flex-shrink-0 mb-6 bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Entity */}
           <div>
-            <Label>View Mode</Label>
-            <Select value={viewMode} onValueChange={(v) => setViewMode(v as 'single' | 'multi')}>
+            <Label>Entity</Label>
+            <Select value={selectedEntityCode} onValueChange={setSelectedEntityCode}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Entity 선택" />
               </SelectTrigger>
               <SelectContent position="popper">
-                <SelectItem value="single">Single Entity</SelectItem>
-                <SelectItem value="multi">Multi-Entity Comparison</SelectItem>
+                {subsidiaries.map((sub) => (
+                  <SelectItem key={sub.id} value={sub.code}>
+                    {sub.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-
-          {/* Entity (Single mode only) */}
-          {viewMode === 'single' && (
-            <div>
-              <Label>Entity</Label>
-              <Select value={selectedEntityCode} onValueChange={setSelectedEntityCode}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Entity 선택" />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  {subsidiaries.map((sub) => (
-                    <SelectItem key={sub.id} value={sub.code}>
-                      {sub.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <div>
             <Label>연도</Label>
@@ -712,21 +784,10 @@ export default function ResultPage() {
               </SelectContent>
             </Select>
           </div>
-
-          <div>
-            <Label>월</Label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper">
-                {months.map((m) => (
-                  <SelectItem key={m} value={m}>{m}월</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         </div>
+        <p className="text-xs text-gray-500 mt-3">
+          * 각 월은 해당 월 누적값에서 직전월 누적값을 뺀 월별 금액입니다. (1월은 누적값)
+        </p>
       </div>
 
       {/* Content */}
@@ -735,204 +796,174 @@ export default function ResultPage() {
           <div className="flex items-center justify-center py-20">
             <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
           </div>
-        ) : viewMode === 'single' ? (
-          /* Single Entity P&L View */
-          !selectedEntityCode ? (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-500">
-                Entity를 선택하면 P&L 손익계산서가 표시됩니다.
-              </CardContent>
-            </Card>
-          ) : !plSummary ? (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-500">
-                <p className="mb-2">해당 기간의 P&L 데이터가 없습니다.</p>
-                <p className="text-sm">Upload 탭에서 TB 파일을 먼저 업로드해주세요.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl">
-                      {subsidiaries.find((s) => s.code === selectedEntityCode)?.name || selectedEntityCode}
-                    </CardTitle>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {selectedYear}년 {selectedMonth}월 P&L
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-0.5">
-                  {/* 헤더 */}
-                  <div className="grid grid-cols-12 py-2 px-4 border-b-2 border-gray-300 text-xs font-semibold text-gray-500 uppercase">
-                    <div className="col-span-7">P&L Line</div>
-                    <div className="col-span-5 text-right">Amount</div>
-                  </div>
-
-                  {/* P&L 라인 */}
-                  {plDisplayLines.map((line) => {
-                    const hasChildren = line.children && line.children.length > 0;
-                    const isExpanded = expandedLines.has(line.key);
-
-                    return (
-                      <div key={line.key}>
-                        <div
-                          className={cn(
-                            'grid grid-cols-12 py-2.5 px-4 rounded-md transition-colors',
-                            line.isSubtotal && 'bg-gray-100 font-semibold border-t border-b border-gray-200',
-                            line.isMargin && 'text-gray-500 italic text-sm',
-                            !line.isSubtotal && !line.isMargin && 'hover:bg-gray-50',
-                            (hasChildren || line.canDrillDown) && 'cursor-pointer'
-                          )}
-                          onClick={() => {
-                            if (hasChildren) {
-                              toggleExpand(line.key);
-                            } else if (line.canDrillDown && line.plCode) {
-                              handleDrillDown(line.plCode);
-                            }
-                          }}
-                          style={{ paddingLeft: `${16 + line.indent * 24}px` }}
-                        >
-                          <div className="col-span-7 flex items-center gap-2">
-                            {hasChildren && (
-                              isExpanded ? (
-                                <ChevronDown className="h-4 w-4 text-gray-400" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-gray-400" />
-                              )
-                            )}
-                            {line.plCode && (
-                              <span className="font-mono text-xs text-gray-400 mr-2">{line.plCode}</span>
-                            )}
-                            <span>{line.label}</span>
-                          </div>
-                          <div className={cn(
-                            'col-span-5 text-right font-mono',
-                            line.isMargin && 'text-gray-500',
-                            !line.isMargin && line.amount < 0 && 'text-red-600'
-                          )}>
-                            {line.isMargin
-                              ? formatPercent(line.marginValue || 0)
-                              : line.amount !== 0
-                                ? formatCurrency(line.amount)
-                                : '-'}
-                          </div>
-                        </div>
-
-                        {/* Drill-Down Children */}
-                        {hasChildren && isExpanded && line.children?.map((child) => (
-                          <div
-                            key={child.key}
-                            className="grid grid-cols-12 py-2 px-4 text-sm text-gray-600 hover:bg-gray-50 cursor-pointer"
-                            style={{ paddingLeft: `${16 + child.indent * 24 + 20}px` }}
-                            onClick={() => child.canDrillDown && child.plCode && handleDrillDown(child.plCode)}
-                          >
-                            <div className="col-span-7 flex items-center gap-2">
-                              {child.plCode && (
-                                <span className="font-mono text-xs text-gray-400 mr-2">{child.plCode}</span>
-                              )}
-                              <span>{child.label}</span>
-                            </div>
-                            <div className="col-span-5 text-right font-mono">
-                              {child.amount !== 0 ? formatCurrency(child.amount) : '-'}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )
+        ) : !selectedEntityCode ? (
+          <Card>
+            <CardContent className="py-12 text-center text-gray-500">
+              Entity를 선택하면 P&L 손익계산서가 표시됩니다.
+            </CardContent>
+          </Card>
+        ) : plDisplayLines.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-gray-500">
+              <p className="mb-2">해당 기간의 P&L 데이터가 없습니다.</p>
+              <p className="text-sm">Upload 탭에서 TB 파일을 먼저 업로드해주세요.</p>
+            </CardContent>
+          </Card>
         ) : (
-          /* Multi-Entity Comparison View */
-          allSummaries.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-500">
-                <p className="mb-2">해당 기간의 P&L 데이터가 없습니다.</p>
-                <p className="text-sm">Upload 탭에서 각 Entity의 TB 파일을 업로드해주세요.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Multi-Entity P&L Comparison</CardTitle>
-                <p className="text-sm text-gray-500">
-                  {selectedYear}년 {selectedMonth}월
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="text-left py-2 px-3 font-semibold text-gray-600">P&L Line</th>
-                        {allSummaries.map((s) => (
-                          <th key={s.entityCode} className="text-right py-2 px-3 font-semibold text-gray-600">
-                            {s.entityName}
-                          </th>
-                        ))}
-                        <th className="text-right py-2 px-3 font-semibold text-gray-900">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: 'Sales', key: 'sales' },
-                        { label: 'COGS', key: 'costOfSales' },
-                        { label: 'Gross Profit', key: 'grossProfit', bold: true },
-                        { label: 'GP%', key: 'gpMargin', isPercent: true },
-                        { label: 'SG&A', key: 'sellingAndAdminExpense' },
-                        { label: 'Operating Income', key: 'operatingIncome', bold: true },
-                        { label: 'Op. Margin%', key: 'operatingMargin', isPercent: true },
-                        { label: 'Net Income', key: 'netIncome', bold: true },
-                        { label: 'Net%', key: 'netMargin', isPercent: true },
-                      ].map((row) => {
-                        const total = row.isPercent
-                          ? 0
-                          : allSummaries.reduce((sum, s) => sum + (s as any)[row.key], 0);
-                        const totalPercent = row.key === 'gpMargin'
-                          ? (allSummaries.reduce((s, e) => s + e.grossProfit, 0) / Math.max(allSummaries.reduce((s, e) => s + e.sales, 0), 1)) * 100
-                          : row.key === 'operatingMargin'
-                            ? (allSummaries.reduce((s, e) => s + e.operatingIncome, 0) / Math.max(allSummaries.reduce((s, e) => s + e.sales, 0), 1)) * 100
-                            : row.key === 'netMargin'
-                              ? (allSummaries.reduce((s, e) => s + e.netIncome, 0) / Math.max(allSummaries.reduce((s, e) => s + e.sales, 0), 1)) * 100
-                              : 0;
-
-                        return (
-                          <tr
-                            key={row.key}
-                            className={cn(
-                              'border-b',
-                              row.bold && 'bg-gray-50 font-semibold',
-                              row.isPercent && 'text-gray-500 text-xs italic'
-                            )}
-                          >
-                            <td className="py-2 px-3">{row.label}</td>
-                            {allSummaries.map((s) => (
-                              <td key={s.entityCode} className="py-2 px-3 text-right font-mono">
-                                {row.isPercent
-                                  ? formatPercent((s as any)[row.key])
-                                  : formatCurrency((s as any)[row.key], true)}
-                              </td>
-                            ))}
-                            <td className="py-2 px-3 text-right font-mono font-semibold">
-                              {row.isPercent
-                                ? formatPercent(totalPercent)
-                                : formatCurrency(total, true)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+          <Card className="border-gray-200 shadow-sm">
+            <CardHeader className="pb-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl font-bold text-gray-900">
+                    {subsidiaries.find((s) => s.code === selectedEntityCode)?.name || selectedEntityCode}
+                  </CardTitle>
+                  <p className="text-sm text-gray-500 mt-1.5">
+                    {selectedYear}년 월별 P&L (각 월 = 해당 월 누적 - 직전월 누적)
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          )
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b-2 border-gray-200">
+                      <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 min-w-[300px]">
+                        P&L Line
+                      </th>
+                      {Array.from({ length: 12 }, (_, i) => (
+                        <th key={i + 1} className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">
+                          {i + 1}월
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {plDisplayLines.map((line) => {
+                      const hasChildren = line.children && line.children.length > 0;
+                      const isExpanded = expandedLines.has(line.key);
+
+                      return (
+                        <>
+                          <tr key={line.key} className={cn(
+                          <tr className={cn(
+                            'transition-colors',
+                            line.isSubtotal && 'bg-gray-50/80 font-semibold',
+                            !line.isSubtotal && !line.isMargin && 'hover:bg-gray-50/50'
+                          )}>
+                            <td
+                              className={cn(
+                                'py-3 px-6 sticky left-0 bg-inherit z-10',
+                                line.isSubtotal && 'bg-gray-50/80',
+                                !line.isSubtotal && !line.isMargin && 'bg-white',
+                                (hasChildren || line.canDrillDown) && 'cursor-pointer'
+                              )}
+                              onClick={() => {
+                                if (hasChildren) {
+                                  toggleExpand(line.key);
+                                }
+                              }}
+                              style={{ paddingLeft: `${24 + line.indent * 20}px` }}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                {hasChildren && (
+                                  <div className="flex-shrink-0">
+                                    {isExpanded ? (
+                                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                                    )}
+                                  </div>
+                                )}
+                                {!hasChildren && (hasChildren || line.canDrillDown) && (
+                                  <div className="w-4" />
+                                )}
+                                {line.plCode && (
+                                  <span className="font-mono text-xs text-gray-500 mr-2 font-medium">{line.plCode}</span>
+                                )}
+                                <span className={cn(
+                                  line.isSubtotal && 'text-gray-900',
+                                  line.isMargin && 'text-gray-500 italic text-sm',
+                                  !line.isSubtotal && !line.isMargin && 'text-gray-700'
+                                )}>{line.label}</span>
+                              </div>
+                            </td>
+                            {line.monthlyAmounts.map((amount, monthIdx) => {
+                              const month = monthIdx + 1;
+                              const isNegative = amount < 0;
+                              return (
+                                <td
+                                  key={month}
+                                  className={cn(
+                                    'py-3 px-4 text-right font-mono text-sm',
+                                    line.isMargin && 'text-gray-500',
+                                    !line.isMargin && isNegative && 'text-red-600 font-medium',
+                                    !line.isMargin && !isNegative && line.isSubtotal && 'text-gray-900 font-semibold',
+                                    !line.isMargin && !isNegative && !line.isSubtotal && 'text-gray-700',
+                                    line.canDrillDown && !line.isMargin && 'cursor-pointer hover:bg-gray-50'
+                                  )}
+                                  onClick={() => {
+                                    if (line.canDrillDown && line.plCode && !line.isMargin) {
+                                      handleDrillDown(line.plCode, month);
+                                    }
+                                  }}
+                                >
+                                  {line.isMargin
+                                    ? line.marginValues?.[monthIdx] !== undefined
+                                      ? formatPercent(line.marginValues[monthIdx])
+                                      : '-'
+                                    : amount !== 0
+                                      ? formatCurrency(amount)
+                                      : <span className="text-gray-400">-</span>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          {/* Drill-Down Children */}
+                          {hasChildren && isExpanded && line.children?.map((child) => (
+                            <tr
+                              key={child.key}
+                              className="text-sm text-gray-600 hover:bg-gray-50/50 transition-colors"
+                            >
+                              <td
+                                className="py-2 px-6 sticky left-0 bg-white z-10 cursor-pointer"
+                                onClick={() => child.canDrillDown && child.plCode && handleDrillDown(child.plCode, 1)}
+                                style={{ paddingLeft: `${24 + child.indent * 20 + 24}px` }}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  {child.plCode && (
+                                    <span className="font-mono text-xs text-gray-400 mr-2">{child.plCode}</span>
+                                  )}
+                                  <span className="text-gray-600">{child.label}</span>
+                                </div>
+                              </td>
+                              {child.monthlyAmounts.map((amount, monthIdx) => {
+                                const month = monthIdx + 1;
+                                const isNegative = amount < 0;
+                                return (
+                                  <td
+                                    key={month}
+                                    className={cn(
+                                      'py-2 px-4 text-right font-mono text-sm cursor-pointer hover:bg-gray-50',
+                                      isNegative && 'text-red-600',
+                                      !isNegative && 'text-gray-700'
+                                    )}
+                                    onClick={() => child.canDrillDown && child.plCode && handleDrillDown(child.plCode, month)}
+                                  >
+                                    {amount !== 0 ? formatCurrency(amount) : <span className="text-gray-400">-</span>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 
@@ -944,7 +975,7 @@ export default function ResultPage() {
               {drillDownData && plMaster.find((m) => m.pl_code === drillDownData.plCode)?.pl_line}
             </DialogTitle>
             <p className="text-sm text-gray-500">
-              P&L Code: {drillDownData?.plCode}
+              P&L Code: {drillDownData?.plCode} | {selectedYear}년 {drillDownData?.month}월
             </p>
           </DialogHeader>
           {drillDownData && drillDownData.accounts.length > 0 ? (
