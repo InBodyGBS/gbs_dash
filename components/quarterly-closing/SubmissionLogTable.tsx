@@ -80,7 +80,10 @@ export function SubmissionLogTable({
       if (error) {
         console.error('Failed to load subsidiaries:', error);
       } else {
-        setSubsidiaries(data || []);
+        const EXCLUDED = ['Germany', 'UK', 'Singapore'];
+        setSubsidiaries(
+          (data || []).filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
+        );
       }
     };
 
@@ -132,7 +135,7 @@ export function SubmissionLogTable({
           .maybeSingle();
 
         if (quarterData) {
-          query = query.eq('quarter_id', quarterData.id);
+          query = query.eq('quarter_id', (quarterData as { id: string }).id);
         } else {
           // 해당 quarter가 없으면 빈 결과 반환
           setSubmissions([]);

@@ -1,188 +1,126 @@
-/**
- * Audit and Tax Compliance 페이지
- * 회계기준 카드뉴스
- */
-
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { AuditGrid } from '@/components/audit-and-tax/AuditGrid';
 import { CardNewsCard } from '@/components/audit-and-tax/CardNewsCard';
 import { CardNewsDetailDialog } from '@/components/audit-and-tax/CardNewsDetailDialog';
-import {
-  getAccountingStandards,
-  getCardCategories,
-  getCardNews,
-} from '@/lib/services/accountingStandardsService';
-import type {
-  AccountingStandard,
-  CardCategory,
-  CardNewsFull,
-} from '@/lib/types/accounting-standards';
-import { Search } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getCardNews } from '@/lib/services/accountingStandardsService';
+import type { Subsidiary } from '@/lib/supabase/types';
+import type { CardNewsFull } from '@/lib/types/accounting-standards';
+
+const EXCLUDED = ['Germany', 'UK', 'Singapore'];
 
 export default function AuditAndTaxPage() {
-  const [standards, setStandards] = useState<AccountingStandard[]>([]);
-  const [selectedStandard, setSelectedStandard] = useState<string>('IFRS'); // DB의 standard_code는 IFRS로 유지
-
-  // 표시 이름 매핑
-  const getStandardDisplayName = (standardCode: string) => {
-    if (standardCode === 'IFRS') return 'USA_IFRS';
-    return standardCode;
-  };
-  const [categories, setCategories] = useState<CardCategory[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [cards, setCards] = useState<CardNewsFull[]>([]);
-  const [filteredCards, setFilteredCards] = useState<CardNewsFull[]>([]);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
+  const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear() - 1);
   const [loading, setLoading] = useState(true);
 
-  // 회계기준 목록 로드
+  // Card News
+  const [cards, setCards] = useState<CardNewsFull[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<CardNewsFull | null>(null);
+
   useEffect(() => {
-    async function loadStandards() {
-      const data = await getAccountingStandards();
-      setStandards(data);
-      if (data.length > 0 && !selectedStandard) {
-        setSelectedStandard(data[0].standard_code);
-      }
-    }
-    loadStandards();
+    const load = async () => {
+      const { data } = await supabase.from('subsidiaries').select('*').order('name');
+      setSubsidiaries(
+        (data || []).filter((s: Subsidiary) => !EXCLUDED.some((ex) => s.name.includes(ex)))
+      );
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  // 카테고리 목록 로드
-  useEffect(() => {
-    async function loadCategories() {
-      if (!selectedStandard) return;
-      setLoading(true);
-      const data = await getCardCategories(selectedStandard);
-      setCategories(data);
-      setLoading(false);
-    }
-    loadCategories();
-  }, [selectedStandard]);
-
-  // 카드뉴스 로드
-  useEffect(() => {
-    async function loadCards() {
-      if (!selectedStandard) return;
-      setLoading(true);
-      const categoryName = selectedCategory === 'all' ? undefined : selectedCategory;
-      const data = await getCardNews(selectedStandard, categoryName, searchQuery);
-      setCards(data);
-      setLoading(false);
-    }
-    loadCards();
-  }, [selectedStandard, selectedCategory, searchQuery]);
-
-  // 필터링된 카드 목록 (서비스에서 이미 검색 필터링이 적용됨)
-  useEffect(() => {
-    setFilteredCards(cards);
-  }, [cards]);
-
-  // 카드 클릭 핸들러
-  const handleCardClick = (card: CardNewsFull) => {
-    setSelectedCardId(card.id);
-    setIsDetailDialogOpen(true);
+  const loadCards = async () => {
+    setCardsLoading(true);
+    const data = await getCardNews();
+    setCards(data);
+    setCardsLoading(false);
   };
 
-  return (
-    <div className="h-full w-full overflow-y-auto">
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Audit and Tax Compliance</h1>
-          <p className="text-gray-500 mt-2">회계기준 카드뉴스</p>
-        </div>
+  const years = Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - i);
 
-        {/* 회계기준 선택 탭 */}
-        <Tabs
-          value={selectedStandard}
-          onValueChange={(value) => {
-            setSelectedStandard(value);
-            setSelectedCategory('all');
-            setSearchQuery('');
-          }}
-          className="mb-6"
-        >
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            {standards.map((standard) => (
-              <TabsTrigger key={standard.id} value={standard.standard_code}>
-                {getStandardDisplayName(standard.standard_code)}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        {/* 필터 및 검색 */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* 카테고리 필터 */}
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="카테고리 선택" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">전체 카테고리</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category.id} value={category.category_name}>
-                  <div className="flex items-center gap-2">
-                    {category.icon && <span>{category.icon}</span>}
-                    <span>{category.category_name}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* 검색 */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="제목, 본문, 태그로 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
-
-        {/* 로딩 상태 */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        )}
-
-        {/* 카드뉴스 그리드 */}
-        {!loading && (
-          <>
-            {filteredCards.length === 0 ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-                <p className="text-gray-500">카드뉴스가 없습니다.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-6">
-                {filteredCards.map((card) => (
-                  <CardNewsCard
-                    key={card.id}
-                    card={card}
-                    onCardClick={handleCardClick}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* 상세 다이얼로그 */}
-        <CardNewsDetailDialog
-          cardId={selectedCardId}
-          open={isDetailDialogOpen}
-          onOpenChange={setIsDetailDialogOpen}
-        />
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-400" />
       </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col p-6 space-y-4">
+      {/* 헤더 */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Audit and Tax</h1>
+        <p className="text-sm text-gray-500 mt-0.5">감사 현황 관리 및 회계기준 카드뉴스</p>
+      </div>
+
+      {/* 탭 */}
+      <Tabs
+        defaultValue="audit"
+        className="flex-1 flex flex-col min-h-0"
+        onValueChange={(v) => { if (v === 'cardnews' && cards.length === 0) loadCards(); }}
+      >
+        <div className="flex items-center justify-between flex-shrink-0">
+          <TabsList>
+            <TabsTrigger value="audit">감사 현황</TabsTrigger>
+            <TabsTrigger value="cardnews">Card News</TabsTrigger>
+          </TabsList>
+
+          {/* 귀속연도 필터 — 감사 현황 탭에서만 의미 있음 */}
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">귀속연도</Label>
+            <Select value={fiscalYear.toString()} onValueChange={(v) => setFiscalYear(parseInt(v))}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* 감사 현황 그리드 */}
+        <TabsContent value="audit" className="flex-1 min-h-0 mt-4">
+          <AuditGrid subsidiaries={subsidiaries} fiscalYear={fiscalYear} />
+        </TabsContent>
+
+        {/* 카드뉴스 */}
+        <TabsContent value="cardnews" className="flex-1 overflow-y-auto mt-4">
+          {cardsLoading ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400" />
+            </div>
+          ) : cards.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+              카드뉴스가 없습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {cards.map((card) => (
+                <CardNewsCard key={card.id} card={card} onCardClick={setSelectedCard} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* 카드뉴스 상세 다이얼로그 */}
+      {selectedCard && (
+        <CardNewsDetailDialog
+          card={selectedCard}
+          open={!!selectedCard}
+          onClose={() => setSelectedCard(null)}
+        />
+      )}
     </div>
   );
 }

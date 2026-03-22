@@ -12,34 +12,44 @@ import {
   FileCheck,
   FolderOpen,
   Users,
+  Megaphone,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
+
+export interface SubCategory {
+  id: string;
+  label: string;
+  path: string;
+}
 
 export interface Category {
   id: string;
   label: string;
   path: string;
   icon: LucideIcon;
-  featured?: boolean;
   description?: string;
+  children?: SubCategory[];
 }
 
 export const CATEGORIES: Category[] = [
   {
-    id: 'quarterly-closing',
-    label: 'Quarterly Closing',
-    path: '/quarterly-closing',
-    icon: Calendar,
-    featured: true,
-    description: '분기별 마감 일정 관리',
+    id: 'announcements',
+    label: 'Announcements',
+    path: '/announcements',
+    icon: Megaphone,
+    description: '공지사항 관리',
   },
   {
-    id: 'monthly-closing',
-    label: 'Monthly Closing',
-    path: '/monthly-closing',
+    id: 'closing',
+    label: 'Closing',
+    path: '',
     icon: Calendar,
-    featured: true,
-    description: '월별 마감 일정 관리',
+    description: '마감 일정 관리',
+    children: [
+      { id: 'quarterly-closing', label: 'Quarterly Closing', path: '/quarterly-closing' },
+      { id: 'monthly-closing', label: 'Monthly Closing', path: '/monthly-closing' },
+    ],
   },
   {
     id: 'financial-result',
@@ -77,18 +87,14 @@ export const CATEGORIES: Category[] = [
     description: '감사 및 세무',
   },
   {
-    id: 'p-file',
-    label: 'P-File',
-    path: '/p-file',
-    icon: FolderOpen,
-    description: '문서 보관함',
-  },
-  {
-    id: 'gbs',
-    label: 'GBS',
-    path: '/gbs',
-    icon: Users,
-    description: 'GBS 업무 관리',
+    id: 'admin',
+    label: 'Admin',
+    path: '',
+    icon: ShieldCheck,
+    description: '관리자 메뉴',
+    children: [
+      { id: 'p-file', label: 'P-File', path: '/p-file' },
+      { id: 'gbs', label: 'GBS', path: '/gbs' },
+    ],
   },
 ] as const;
-

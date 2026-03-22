@@ -151,7 +151,10 @@ export default function SubmissionPage() {
         .order('name');
 
       if (subsError) throw subsError;
-      setSubsidiaries(subsData || []);
+      const EXCLUDED = ['Germany', 'UK', 'Singapore'];
+      setSubsidiaries(
+        (subsData || []).filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
+      );
     } catch (error: any) {
       console.error('Failed to load data:', error);
       toast.error(`데이터 로딩 실패: ${error.message || '알 수 없는 오류'}`);

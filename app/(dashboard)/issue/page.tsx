@@ -63,8 +63,13 @@ export default function IssuePage() {
       console.log('🏢 Loaded Subsidiaries:', subsidiariesData.data?.length || 0);
       console.log('🏢 Subsidiaries Data:', subsidiariesData.data);
 
+      const EXCLUDED = ['Germany', 'UK', 'Singapore'];
       setIssues(issuesData);
-      setSubsidiaries(subsidiariesData.data || []);
+      setSubsidiaries(
+        (subsidiariesData.data || []).filter(
+          (s) => !EXCLUDED.some((ex) => s.name.includes(ex))
+        )
+      );
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('데이터 로딩 실패');
