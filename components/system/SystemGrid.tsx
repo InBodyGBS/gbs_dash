@@ -359,7 +359,7 @@ export function SystemGrid({ subsidiaries, systems, onUpdate }: SystemGridProps)
   const [draggedEntityIndex, setDraggedEntityIndex] = useState<number | null>(null);
 
   // 시스템 순서 관리
-  const [orderedSystems, setOrderedSystems] = useState<typeof SYSTEM_NAMES>([...SYSTEM_NAMES]);
+  const [orderedSystems, setOrderedSystems] = useState<Array<typeof SYSTEM_NAMES[number]>>([...SYSTEM_NAMES]);
   const [draggedSystemIndex, setDraggedSystemIndex] = useState<number | null>(null);
 
   // localStorage에서 시스템 순서 복원
@@ -418,7 +418,7 @@ export function SystemGrid({ subsidiaries, systems, onUpdate }: SystemGridProps)
   }, []);
 
   // 시스템 순서 저장
-  const saveSystemOrder = useCallback((order: typeof SYSTEM_NAMES) => {
+  const saveSystemOrder = useCallback((order: Array<typeof SYSTEM_NAMES[number]>) => {
     if (typeof window === 'undefined') return;
     try {
       localStorage.setItem(CATEGORY_ORDER_KEY, JSON.stringify(order.map(sys => sys.id)));
@@ -635,7 +635,7 @@ export function SystemGrid({ subsidiaries, systems, onUpdate }: SystemGridProps)
               onDragStart={(e) => handleSystemDragStart(e, index)}
               onDragEnd={handleSystemDragEnd}
               onDragOver={(e) => handleSystemDragOver(e, index)}
-              onDrop={handleSystemDrop}
+              onDrop={(e) => handleSystemDrop(e, index)}
               className={cn(
                 'inline-flex items-center gap-2 px-3 py-2 rounded-lg transition-all border-2 cursor-move hover:shadow-md',
                 draggedSystemIndex === index && 'opacity-50'

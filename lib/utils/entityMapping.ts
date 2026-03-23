@@ -9,7 +9,7 @@ import type { Subsidiary } from '@/lib/supabase/types';
  * Entity 이름을 Subsidiary ID로 매핑
  * 노트북 파일의 ENTITY_NAME_MAPPING 참고
  */
-const ENTITY_TO_CODE_MAPPING: Record<string, string> = {
+const ENTITY_TO_CODE_MAPPING: Record<string, string | null> = {
   'HQ': 'HQ',
   'USA': 'USA',
   'Japan': 'JPN',
@@ -30,8 +30,8 @@ const ENTITY_TO_CODE_MAPPING: Record<string, string> = {
   'DE': 'DEU',
   'UK': 'GBR',
   'Singapore': 'SGP',
-  '연결조정': null as any, // subsidiaries에 없음
-  '합계': null as any, // 합계는 subsidiaries에 없음
+  '연결조정': null, // subsidiaries에 없음
+  '합계': null, // 합계는 subsidiaries에 없음
 };
 
 /**

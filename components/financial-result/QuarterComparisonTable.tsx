@@ -185,7 +185,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: ${prevPeriod}`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item ? item.base : 0);
@@ -198,7 +198,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: ${period}`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item ? item.compare : 0);
@@ -211,7 +211,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: 증감액 (${prevPeriod} → ${period})`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item ? item.change : 0);
@@ -224,7 +224,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: 증감률(%) (${prevPeriod} → ${period})`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item && item.rate !== null ? item.rate : null);
@@ -241,7 +241,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: ${yoyPeriod}`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item ? item.base : 0);
@@ -253,7 +253,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: ${period}`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item ? item.compare : 0);
@@ -265,7 +265,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: 증감액 (${yoyPeriod} → ${period})`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item ? item.change : 0);
@@ -277,7 +277,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: 증감률(%) (${yoyPeriod} → ${period})`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item && item.rate !== null ? item.rate : null);
@@ -294,7 +294,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: ${yoyPeriod}(누적)`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item ? item.base : 0);
@@ -306,7 +306,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: ${period}(누적)`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item ? item.compare : 0);
@@ -318,7 +318,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: 증감액 (${yoyPeriod} → ${period})`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item ? item.change : 0);
@@ -330,7 +330,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: 증감률(%) (${yoyPeriod} → ${period})`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row = [account];
+        const row: any[] = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item && item.rate !== null ? item.rate : null);

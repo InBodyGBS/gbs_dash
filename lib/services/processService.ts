@@ -6,6 +6,7 @@ export interface ProcessRecord {
   entity_id: string;
   category: string;
   description: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   flowchart_data: any;
   version: number;
   status: string;
@@ -23,7 +24,7 @@ export async function getProcesses(): Promise<ProcessRecord[]> {
     .order('updated_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as ProcessRecord[];
 }
 
 export async function getProcess(id: string): Promise<ProcessRecord> {
@@ -34,7 +35,7 @@ export async function getProcess(id: string): Promise<ProcessRecord> {
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as ProcessRecord;
 }
 
 export async function updateProcess(
@@ -43,13 +44,14 @@ export async function updateProcess(
 ): Promise<ProcessRecord> {
   const { data, error } = await supabase
     .from('processes')
-    .update(updates)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq('id', id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as ProcessRecord;
 }
 
 export async function createProcess(
@@ -57,10 +59,11 @@ export async function createProcess(
 ): Promise<ProcessRecord> {
   const { data, error } = await supabase
     .from('processes')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert(processData as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as ProcessRecord;
 }

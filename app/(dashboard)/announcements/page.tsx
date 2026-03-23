@@ -58,7 +58,7 @@ export default function AnnouncementsPage() {
       .select('*')
       .order('created_at', { ascending: false });
     if (error) toast.error('불러오기 실패: ' + error.message);
-    else setAnnouncements((data || []) as Announcement[]);
+    else setAnnouncements((data || []) as unknown as Announcement[]);
     setLoading(false);
   };
 
@@ -70,7 +70,8 @@ export default function AnnouncementsPage() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from('announcements').insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from('announcements').insert({
       type: form.type,
       title: form.title.trim(),
       author: form.author.trim(),

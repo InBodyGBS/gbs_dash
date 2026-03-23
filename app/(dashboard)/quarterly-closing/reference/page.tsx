@@ -16,6 +16,8 @@ import { ChatDialog } from '@/components/quarterly-closing/ChatDialog';
 import type { ClosingTopic } from '@/lib/types/reference';
 import { supabase } from '@/lib/supabase/client';
 
+const CONTACT_EMAIL = 'eunbik0730@inbody.com';
+
 export default function ReferencePage() {
   const [topics, setTopics] = useState<ClosingTopic[]>([]);
   const [filteredTopics, setFilteredTopics] = useState<ClosingTopic[]>([]);
@@ -183,7 +185,7 @@ export default function ReferencePage() {
               <p className="text-sm text-gray-600 mb-2">Contact the GBS team:</p>
               <div className="text-sm text-gray-700">
                 <p>Rosa: seung-hyun.cho@inbody.com</p>
-                <p>Grace: eunbik0730@inbody.com</p>
+                <p>Grace: {CONTACT_EMAIL}</p>
               </div>
             </div>
           </div>

@@ -99,8 +99,6 @@ export async function savePreliminarySalesSGA(
       };
     });
 
-    console.log('Inserting data:', JSON.stringify(insertData, null, 2));
-
     const { data: insertedData, error: insertError } = await supabase
       .from('preliminary_sales_sga')
       .insert(insertData)

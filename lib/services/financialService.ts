@@ -28,7 +28,7 @@ export const getLatestFinancialData = async (
       .single();
 
     if (error) throw error;
-    return data as FinancialDataWithSubsidiary;
+    return data as unknown as FinancialDataWithSubsidiary;
   } catch (error) {
     console.error('Failed to fetch latest financial data:', error);
     return null;
@@ -86,11 +86,11 @@ export const getAllLatestFinancialData = async (): Promise<FinancialDataWithSubs
         *,
         subsidiaries (*)
       `)
-      .eq('fiscal_year', (latestPeriod as any).fiscal_year)
-      .eq('quarter', (latestPeriod as any).quarter);
+      .eq('fiscal_year', latestPeriod.fiscal_year)
+      .eq('quarter', latestPeriod.quarter);
 
     if (error) throw error;
-    return (data as FinancialDataWithSubsidiary[]) || [];
+    return (data as unknown as FinancialDataWithSubsidiary[]) || [];
   } catch (error) {
     console.error('Failed to fetch all latest financial data:', error);
     return [];
@@ -139,7 +139,7 @@ export const getAvailableYears = async (subsidiaryId: string): Promise<number[]>
     if (error) throw error;
 
     // 중복 제거 및 정렬
-    const uniqueYears = Array.from(new Set((data || []).map((d: any) => d.fiscal_year)));
+    const uniqueYears = Array.from(new Set((data || []).map((d) => d.fiscal_year)));
     return uniqueYears.sort((a, b) => b - a);
   } catch (error) {
     console.error('Failed to fetch available years:', error);

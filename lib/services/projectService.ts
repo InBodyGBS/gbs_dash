@@ -18,7 +18,7 @@ export async function getProjects(entityId?: string, status?: ProjectStatus): Pr
   const { data, error } = await query;
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as Project[];
 }
 
 /**
@@ -34,7 +34,7 @@ export async function getProject(id: string): Promise<Project | null> {
     throw error;
   }
 
-  return data;
+  return data as unknown as Project;
 }
 
 /**
@@ -53,16 +53,17 @@ export async function createProject(projectData: {
 }): Promise<Project> {
   const { data, error } = await supabase
     .from('projects')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       ...projectData,
       status: projectData.status || '계획중',
       progress: 0,
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as Project;
 }
 
 /**
@@ -85,13 +86,14 @@ export async function updateProject(
 ): Promise<Project> {
   const { data, error } = await supabase
     .from('projects')
-    .update(updates)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq('id', id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as Project;
 }
 
 /**
@@ -115,7 +117,7 @@ export async function getTasks(projectId: string): Promise<Task[]> {
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as Task[];
 }
 
 /**
@@ -136,17 +138,18 @@ export async function createTask(taskData: {
 }): Promise<Task> {
   const { data, error } = await supabase
     .from('tasks')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       ...taskData,
       status: taskData.status || '계획중',
       progress: taskData.progress || 0,
       order_index: taskData.order_index || 0,
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as Task;
 }
 
 /**
@@ -170,13 +173,14 @@ export async function updateTask(
 ): Promise<Task> {
   const { data, error } = await supabase
     .from('tasks')
-    .update(updates)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq('id', id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as Task;
 }
 
 /**
@@ -219,7 +223,7 @@ export async function getTaskHistories(taskId: string): Promise<TaskHistory[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as TaskHistory[];
 }
 
 /**
@@ -234,12 +238,13 @@ export async function createTaskHistory(historyData: {
 }): Promise<TaskHistory> {
   const { data, error } = await supabase
     .from('task_histories')
-    .insert(historyData)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .insert(historyData as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as TaskHistory;
 }
 
 /**
@@ -256,13 +261,14 @@ export async function updateTaskHistory(
 ): Promise<TaskHistory> {
   const { data, error } = await supabase
     .from('task_histories')
-    .update(updates)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(updates as any)
     .eq('id', id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as TaskHistory;
 }
 
 /**

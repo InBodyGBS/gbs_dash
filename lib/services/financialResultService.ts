@@ -93,6 +93,9 @@ export async function uploadFinancialResultFile(
     }
 
     // DB에 파일 정보 저장
+    const { data: { user } } = await supabase.auth.getUser();
+    const uploadedBy = user?.email || user?.id || null;
+
     const { data, error: dbError } = await supabase
       .from('financial_result_files')
       .insert({
@@ -101,7 +104,7 @@ export async function uploadFinancialResultFile(
         file_size: file.size,
         fiscal_year: fiscalYear,
         quarter: quarter,
-        uploaded_by: null, // TODO: 사용자 정보 추가
+        uploaded_by: uploadedBy,
       })
       .select()
       .single();
@@ -111,7 +114,7 @@ export async function uploadFinancialResultFile(
       throw new Error(`파일 정보 저장 실패: ${dbError.message || '알 수 없는 오류'}`);
     }
 
-    return data;
+    return data as unknown as FinancialResultFile;
   } catch (error: any) {
     console.error('Upload Financial Result File Error:', error);
     throw error;
@@ -211,7 +214,7 @@ export async function getFinancialResultFiles(
       throw new Error(`파일 목록 조회 실패: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []) as unknown as FinancialResultFile[];
   } catch (error: any) {
     console.error('Get Financial Result Files Error:', error);
     throw error;
@@ -238,7 +241,7 @@ export async function getFinancialResultDataByFile(
       throw new Error(`데이터 조회 실패: ${error.message}`);
     }
 
-    return data || [];
+    return (data || []) as unknown as FinancialResultData[];
   } catch (error: any) {
     console.error('Get Financial Result Data Error:', error);
     throw error;
@@ -362,7 +365,7 @@ export async function getQuarterComparison(
           : null;
 
       // subsidiary name 가져오기
-      const subsidiaryName = (row as any).subsidiaries?.name || null;
+      const subsidiaryName = (row as { subsidiaries?: { name?: string } }).subsidiaries?.name || null;
 
       return {
         period: targetPeriod,

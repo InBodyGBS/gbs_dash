@@ -15,6 +15,7 @@ export interface Subsidiary {
   latitude: number;
   longitude: number;
   region: 'Americas' | 'Europe' | 'Asia-Pacific';
+  contact_email: string | null;
   created_at: string;
 }
 
@@ -45,41 +46,299 @@ export interface FinancialDataWithSubsidiary extends FinancialData {
 }
 
 /**
+ * Helper type for a permissive table entry that satisfies GenericTable
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyTable = { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any>; Relationships: [] };
+
+/**
  * Supabase 데이터베이스 스키마
  */
 export interface Database {
+  __InternalSupabase: {
+    PostgrestVersion: '12';
+  };
   public: {
+    Views: Record<string, { Row: Record<string, unknown>; Relationships: [] }>;
+    Functions: Record<string, { Args: Record<string, unknown>; Returns: unknown }>;
     Tables: {
       subsidiaries: {
-        Row: Subsidiary;
-        Insert: Omit<Subsidiary, 'id' | 'created_at'>;
-        Update: Partial<Omit<Subsidiary, 'id' | 'created_at'>>;
+        Row: Subsidiary & { [key: string]: unknown };
+        Insert: Omit<Subsidiary, 'id' | 'created_at'> & { [key: string]: unknown };
+        Update: Partial<Omit<Subsidiary, 'id' | 'created_at'>> & { [key: string]: unknown };
+        Relationships: [];
+      };
+      submissions: {
+        Row: {
+          id: string;
+          quarter_id: string | null;
+          subsidiary_id: string | null;
+          fiscal_year: string | null;
+          entity_name: string | null;
+          category: string;
+          file_name: string;
+          file_path: string;
+          file_size: number;
+          version: number;
+          submitted_by: string | null;
+          submitted_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          quarter_id?: string | null;
+          subsidiary_id?: string | null;
+          fiscal_year?: string | null;
+          entity_name?: string | null;
+          category: string;
+          file_name: string;
+          file_path: string;
+          file_size: number;
+          version?: number;
+          submitted_by?: string | null;
+          submitted_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          quarter_id?: string | null;
+          subsidiary_id?: string | null;
+          fiscal_year?: string | null;
+          entity_name?: string | null;
+          category?: string;
+          file_name?: string;
+          file_path?: string;
+          file_size?: number;
+          version?: number;
+          submitted_by?: string | null;
+          submitted_at?: string;
+        };
+        Relationships: [];
+      };
+      reminder_logs: {
+        Row: {
+          id: string;
+          schedule_item_id: string;
+          subsidiary_id: string;
+          quarter_id: string;
+          category: string;
+          recipient_email: string;
+          sent_at: string;
+          email_id: string | null;
+          status: 'sent' | 'failed';
+          error_message: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          schedule_item_id: string;
+          subsidiary_id: string;
+          quarter_id: string;
+          category: string;
+          recipient_email: string;
+          sent_at?: string;
+          email_id?: string | null;
+          status?: 'sent' | 'failed';
+          error_message?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          schedule_item_id?: string;
+          subsidiary_id?: string;
+          quarter_id?: string;
+          category?: string;
+          recipient_email?: string;
+          sent_at?: string;
+          email_id?: string | null;
+          status?: 'sent' | 'failed';
+          error_message?: string | null;
+        };
+        Relationships: [];
       };
       financial_data: {
-        Row: FinancialData;
-        Insert: Omit<FinancialData, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<FinancialData, 'id' | 'created_at' | 'updated_at'>>;
+        Row: FinancialData & { [key: string]: unknown };
+        Insert: Omit<FinancialData, 'id' | 'created_at' | 'updated_at'> & { [key: string]: unknown };
+        Update: Partial<Omit<FinancialData, 'id' | 'created_at' | 'updated_at'>> & { [key: string]: unknown };
+        Relationships: [];
       };
       quarters: {
-        Row: any;
-        Insert: any;
-        Update: any;
+        Row: {
+          id: string;
+          year: number;
+          quarter: number;
+          start_date: string;
+          end_date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          year: number;
+          quarter: number;
+          start_date: string;
+          end_date: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          year?: number;
+          quarter?: number;
+          start_date?: string;
+          end_date?: string;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       schedule_items: {
-        Row: any;
-        Insert: any;
-        Update: any;
+        Row: {
+          id: string;
+          quarter_id: string;
+          subsidiary_id: string;
+          category: string;
+          planned_date: string;
+          confirmed_date: string | null;
+          status: 'planned' | 'confirmed';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          quarter_id: string;
+          subsidiary_id: string;
+          category: string;
+          planned_date: string;
+          confirmed_date?: string | null;
+          status?: 'planned' | 'confirmed';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          quarter_id?: string;
+          subsidiary_id?: string;
+          category?: string;
+          planned_date?: string;
+          confirmed_date?: string | null;
+          status?: 'planned' | 'confirmed';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       document_submissions: {
-        Row: any;
-        Insert: any;
-        Update: any;
+        Row: {
+          id: string;
+          quarter_id: string;
+          subsidiary_id: string;
+          category: string;
+          file_name: string;
+          file_path: string;
+          file_size: number;
+          version: number;
+          submitted_by: string | null;
+          submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          quarter_id: string;
+          subsidiary_id: string;
+          category: string;
+          file_name: string;
+          file_path: string;
+          file_size: number;
+          version?: number;
+          submitted_by?: string | null;
+          submitted_at?: string;
+        };
+        Update: {
+          id?: string;
+          quarter_id?: string;
+          subsidiary_id?: string;
+          category?: string;
+          file_name?: string;
+          file_path?: string;
+          file_size?: number;
+          version?: number;
+          submitted_by?: string | null;
+          submitted_at?: string;
+        };
+        Relationships: [];
       };
       closing_guides: {
-        Row: any;
-        Insert: any;
-        Update: any;
+        Row: {
+          id: string;
+          title: string;
+          category: string;
+          icon: string | null;
+          summary: string | null;
+          content: string;
+          attachments: Record<string, unknown> | null;
+          tags: string[] | null;
+          view_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          category: string;
+          icon?: string | null;
+          summary?: string | null;
+          content: string;
+          attachments?: Record<string, unknown> | null;
+          tags?: string[] | null;
+          view_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          category?: string;
+          icon?: string | null;
+          summary?: string | null;
+          content?: string;
+          attachments?: Record<string, unknown> | null;
+          tags?: string[] | null;
+          view_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
+      // Additional tables used in the application
+      accounting_standards: AnyTable;
+      card_categories: AnyTable;
+      card_news_full: AnyTable;
+      card_references: AnyTable;
+      practical_tips: AnyTable;
+      arap_submissions: AnyTable;
+      arap_submission_details: AnyTable;
+      bs_results: AnyTable;
+      closing_questions: AnyTable;
+      closing_topics: AnyTable;
+      coa_mapping: AnyTable;
+      financial_result_data: AnyTable;
+      financial_result_files: AnyTable;
+      gbs_calendar_events: AnyTable;
+      issues: AnyTable;
+      monthly_review_statuses: AnyTable;
+      monthly_submissions: AnyTable;
+      pl_results: AnyTable;
+      preliminary_sales_sga: AnyTable;
+      processes: AnyTable;
+      projects: AnyTable;
+      question_views: AnyTable;
+      std_bs_master: AnyTable;
+      std_pl_master: AnyTable;
+      submission_comments: AnyTable;
+      systems: AnyTable;
+      task_histories: AnyTable;
+      tasks: AnyTable;
+      tb_raw_data: AnyTable;
+      tb_uploads: AnyTable;
+      user_profiles: AnyTable;
+      work_manuals: AnyTable;
     };
   };
 }

@@ -40,11 +40,12 @@ git push origin main
 Vercel 대시보드에서 **Settings → Environment Variables**에 다음 변수 추가:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://zaeyagrtriyhxodvcdyh.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZXlhZ3J0cml5aHhvZHZjZHloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MTExMDMsImV4cCI6MjA4MzI4NzEwM30.8_EQyjEijqNMaZKatCId0geS86_Mgxs4muUWfpb13WM
+NEXT_PUBLIC_SUPABASE_URL=<YOUR_SUPABASE_URL>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
+GEMINI_API_KEY=<YOUR_GEMINI_API_KEY>
 ```
 
-> ⚠️ **보안 참고**: 현재 Supabase 키가 코드에 하드코딩되어 있습니다. 배포 후에는 환경 변수로 변경하는 것을 권장합니다.
+> ⚠️ **보안 참고**: 실제 API 키는 코드나 문서에 포함하지 마세요. 반드시 환경 변수로 관리하세요.
 
 ### 4단계: 배포 실행
 

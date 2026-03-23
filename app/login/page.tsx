@@ -8,13 +8,25 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+/**
+ * Validate that a redirect path is a safe relative path.
+ * Must start with '/' but not '//' (to prevent protocol-relative URL open redirect).
+ */
+function getSafeRedirect(redirect: string | null): string {
+  if (!redirect) return '/';
+  if (redirect.startsWith('/') && !redirect.startsWith('//')) {
+    return redirect;
+  }
+  return '/';
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // 로그인 페이지 접근 시 바로 main 페이지로 리다이렉트
   useEffect(() => {
-    const redirect = searchParams.get('redirect') || '/';
+    const redirect = getSafeRedirect(searchParams.get('redirect'));
     router.replace(redirect);
   }, [router, searchParams]);
 

@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
-import { RefreshCw, ChevronRight, Calendar, Clock, Megaphone } from 'lucide-react';
+import { RefreshCw, ChevronRight, Calendar, Megaphone, MessageSquare } from 'lucide-react';
 import { ScheduleCalendar } from '@/components/dashboard/ScheduleCalendar';
+import { getVoeInquiries } from '@/lib/services/voeService';
+import type { VoeInquiry, VoeStatus } from '@/lib/types/voe';
 
 interface Announcement {
   id: string;
@@ -13,6 +15,12 @@ interface Announcement {
   author: string;
   created_at: string;
 }
+
+const VOE_STATUS_STYLES: Record<VoeStatus, { bg: string; text: string }> = {
+  Pending:       { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+  'In Progress': { bg: 'bg-blue-100',   text: 'text-blue-700'   },
+  Resolved:      { bg: 'bg-green-100',  text: 'text-green-700'  },
+};
 
 const ANNOUNCEMENT_TYPE_COLORS: Record<string, string> = {
   Notice: '#EF4444',
@@ -24,7 +32,8 @@ const ANNOUNCEMENT_TYPE_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [stats, setStats] = useState({ announcements: 0, upcoming: 0, overdue: 0 });
+  const [voeItems, setVoeItems] = useState<VoeInquiry[]>([]);
+  const [stats, setStats] = useState({ announcements: 0, upcoming: 0, pendingVoe: 0 });
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
@@ -34,7 +43,7 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
       const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const [announcementsResult, upcomingResult, overdueResult] = await Promise.all([
+      const [announcementsResult, upcomingResult, voeResult] = await Promise.all([
         supabase
           .from('announcements')
           .select('*')
@@ -46,19 +55,17 @@ export default function DashboardPage() {
           .eq('status', 'planned')
           .gte('planned_date', today)
           .lte('planned_date', in30Days),
-        supabase
-          .from('schedule_items')
-          .select('id', { count: 'exact' })
-          .eq('status', 'planned')
-          .lt('planned_date', today),
+        getVoeInquiries().catch(() => []),
       ]);
 
-      const announcementsData = (announcementsResult.data || []) as Announcement[];
+      const announcementsData = (announcementsResult.data || []) as unknown as Announcement[];
+      const voeData = voeResult as VoeInquiry[];
       setAnnouncements(announcementsData);
+      setVoeItems(voeData.slice(0, 8));
       setStats({
         announcements: announcementsData.length,
         upcoming: upcomingResult.count || 0,
-        overdue: overdueResult.count || 0,
+        pendingVoe: voeData.filter((v) => v.status !== 'Resolved').length,
       });
       setLastRefreshed(new Date());
     } catch (err) {
@@ -111,11 +118,13 @@ export default function DashboardPage() {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Clock className="w-4 h-4 text-red-500" />
-              <span className="text-xs text-gray-500 font-medium">Overdue</span>
+              <MessageSquare className="w-4 h-4 text-yellow-500" />
+              <span className="text-xs text-gray-500 font-medium">Pending VOE</span>
             </div>
-            <p className="text-3xl font-bold text-red-600">{stats.overdue}</p>
-            <p className="text-xs text-gray-400 mt-1">기한 초과</p>
+            <p className={`text-3xl font-bold ${stats.pendingVoe > 0 ? 'text-yellow-500' : 'text-gray-900'}`}>
+              {stats.pendingVoe}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">미완료 문의</p>
           </div>
         </div>
 
@@ -207,6 +216,80 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* VOE Widget */}
+        <div className="bg-white rounded-xl border border-gray-200 flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-blue-500" />
+              <h2 className="font-semibold text-gray-900">VOE</h2>
+              <span className="text-xs text-gray-400">Voice of Entity</span>
+            </div>
+            <Link
+              href="/voe"
+              className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+            >
+              View All <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="p-4 space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+                ))}
+              </div>
+            ) : voeItems.length === 0 ? (
+              <div className="flex items-center justify-center h-24 text-gray-400 text-sm">
+                등록된 문의가 없습니다.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Category</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Title</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Entity</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Author</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {voeItems.map((item) => {
+                    const s = VOE_STATUS_STYLES[item.status];
+                    return (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => window.location.href = '/voe'}
+                      >
+                        <td className="px-4 py-2.5">
+                          <span className="text-xs text-gray-500">{item.category}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-700 max-w-xs">
+                          <span className="truncate block" title={item.title}>{item.title}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{item.entity_name}</td>
+                        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{item.author}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${s.bg} ${s.text}`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-xs text-gray-400 whitespace-nowrap">
+                          {new Date(item.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   );

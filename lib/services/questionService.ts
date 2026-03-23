@@ -26,7 +26,7 @@ export async function getQuestionsByTopic(
   const { data, error } = await query;
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as ClosingQuestion[];
 }
 
 /**
@@ -42,7 +42,7 @@ export async function getQuestionsBySubsidiary(
     .order('asked_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as ClosingQuestion[];
 }
 
 /**
@@ -57,7 +57,7 @@ export async function getPendingQuestions(): Promise<ClosingQuestion[]> {
     .order('asked_at', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as ClosingQuestion[];
 }
 
 /**
@@ -75,18 +75,19 @@ export async function createQuestion(
 ): Promise<ClosingQuestion> {
   const { data, error } = await supabase
     .from('closing_questions')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       ...questionData,
       status: 'pending',
       priority: questionData.priority || 'normal',
       is_public: false,
       tags: questionData.tags || [],
-    })
+    } as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as ClosingQuestion;
 }
 
 /**
@@ -101,8 +102,9 @@ export async function updateQuestion(
     is_public?: boolean;
   }
 ): Promise<ClosingQuestion> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateData: any = { ...updates };
-  
+
   if (updates.answer && updates.answered_by) {
     updateData.answered_at = new Date().toISOString();
   }
@@ -115,7 +117,7 @@ export async function updateQuestion(
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as ClosingQuestion;
 }
 
 /**
@@ -130,10 +132,11 @@ export async function recordQuestionView(
 ): Promise<QuestionView> {
   const { data, error } = await supabase
     .from('question_views')
-    .insert(viewData)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .insert(viewData as any)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as QuestionView;
 }

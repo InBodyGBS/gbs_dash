@@ -1,24 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from './types';
 
 export function createServerClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const supabaseUrl = 'https://zaeyagrtriyhxodvcdyh.supabase.co';
+  if (!supabaseUrl) {
+    throw new Error('Missing environment variable: NEXT_PUBLIC_SUPABASE_URL');
+  }
+  if (!supabaseKey) {
+    throw new Error('Missing environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  }
 
-  
-
-  // Legacy anon key (eyJ로 시작, 500자 이상)
-
-  const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZXlhZ3J0cml5aHhvZHZjZHloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MTExMDMsImV4cCI6MjA4MzI4NzEwM30.8_EQyjEijqNMaZKatCId0geS86_Mgxs4muUWfpb13WM';
-
-  return createClient(supabaseUrl, supabaseKey, {
-
+  return createClient<Database>(supabaseUrl, supabaseKey, {
     auth: {
-
       persistSession: false,
-
     },
-
   });
-
 }
-

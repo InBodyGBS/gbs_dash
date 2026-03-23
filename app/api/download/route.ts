@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase/server';
 
 // Supabase 클라이언트 생성
 const supabase = createClient(
@@ -15,9 +16,31 @@ const supabase = createClient(
 );
 
 /**
+ * Validates the Supabase session from the Authorization header.
+ * Returns the user if valid, or null if not authenticated.
+ */
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  const token = authHeader?.replace('Bearer ', '');
+  if (!token) return null;
+  const client = createServerClient();
+  const { data: { user }, error } = await client.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
+}
+
+/**
  * Signed URL 생성 (1시간 유효)
  */
 export async function GET(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const uploadId = searchParams.get('upload_id');
@@ -83,6 +106,14 @@ export async function GET(request: NextRequest) {
  * 파일 직접 다운로드 (Blob 반환)
  */
 export async function POST(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await request.json();
     const { upload_id, file_path } = body;

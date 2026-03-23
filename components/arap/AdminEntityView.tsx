@@ -10,6 +10,7 @@ import { Building2, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getArapEntities, getEntityMatchMatrix, getSubmittedEntityIds } from '@/lib/services/arapService';
+import { supabase } from '@/lib/supabase/client';
 import type { ArapEntity, EntityMatchMatrix, MatchStatus } from '@/lib/types/arap';
 import { cn } from '@/lib/utils';
 import { SummaryStats } from './SummaryStats';
@@ -296,10 +297,22 @@ export function AdminEntityView({
                               adminEditMode && status === 'no_data' && 'hover:ring-2 hover:ring-blue-400'
                             )}
                             title={`${entityA.entity_name} ↔ ${entityB.entity_name}: ${status}`}
-                            onClick={() => {
+                            onClick={async () => {
                               if (adminEditMode && status === 'no_data') {
-                                // TODO: 수동 상태 변경 로직
-                                console.log('Change status for', entityA.id, entityB.id);
+                                // 관리자 수동 상태 변경: no_data -> pending
+                                try {
+                                  const { error } = await supabase
+                                    .from('arap_submissions')
+                                    .update({ match_status: 'pending' })
+                                    .eq('entity_id', entityA.id)
+                                    .eq('fiscal_year', selectedYear)
+                                    .eq('fiscal_month', selectedMonth);
+                                  if (!error) {
+                                    await loadData();
+                                  }
+                                } catch {
+                                  // silently fail - status remains unchanged
+                                }
                               } else {
                                 // 상세 팝업 열기
                                 setSelectedPair({ entity1: entityA, entity2: entityB });

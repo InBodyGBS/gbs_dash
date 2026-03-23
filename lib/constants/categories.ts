@@ -14,6 +14,7 @@ import {
   Users,
   Megaphone,
   ShieldCheck,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -85,6 +86,13 @@ export const CATEGORIES: Category[] = [
     path: '/audit-and-tax',
     icon: FileCheck,
     description: '감사 및 세무',
+  },
+  {
+    id: 'voe',
+    label: 'VOE',
+    path: '/voe',
+    icon: MessageSquare,
+    description: 'Voice of Entity — 법인 문의',
   },
   {
     id: 'admin',

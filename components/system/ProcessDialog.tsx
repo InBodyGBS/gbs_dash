@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -90,13 +91,20 @@ export function ProcessDialog({
     try {
       setLoading(true);
 
+      const { data: { user } } = await supabase.auth.getUser();
+      const createdBy = user?.email || user?.id || 'unknown';
+
       const processData = {
         title: formData.title,
         entity_id: formData.entity_id,
         category: formData.category,
         description: formData.description || null,
         flowchart_data: process?.flowchart_data || {},
-        created_by: '조승현', // TODO: 실제 사용자 인증 연동
+        created_by: createdBy,
+        version: 1,
+        status: 'draft',
+        approved_by: null,
+        approved_at: null,
       };
 
       if (process) {

@@ -68,53 +68,44 @@ export async function createArapSubmission(
   try {
     const { fiscal_year, fiscal_month, submission_type, items, file } = formData;
 
-    console.log('📤 Creating ARAP submission:', {
-      entityId,
-      fiscal_year,
-      fiscal_month,
-      submission_type,
-      itemsCount: items.length,
-      hasFile: !!file,
-    });
-
     // 1. 파일 업로드 (파일이 있는 경우)
     let filePath: string | null = null;
     if (file && submission_type === 'file') {
       try {
         const fileName = `${entityId}/${fiscal_year}/${fiscal_month}/${Date.now()}_${file.name}`;
-        console.log('📁 Uploading file:', fileName);
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('arap-submissions')
           .upload(fileName, file);
 
         if (uploadError) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const uploadErrorAny = uploadError as any;
           // 에러 객체를 안전하게 직렬화
           const errorDetails = {
             message: uploadError.message || 'Unknown error',
-            statusCode: uploadError.statusCode || 'Unknown',
-            statusText: uploadError.statusText || 'Unknown',
+            statusCode: uploadErrorAny.statusCode || 'Unknown',
+            statusText: uploadErrorAny.statusText || 'Unknown',
             name: uploadError.name || 'Unknown',
-            error: uploadError.error ? String(uploadError.error) : 'No error details',
-            ...(uploadError as any),
+            error: uploadErrorAny.error ? String(uploadErrorAny.error) : 'No error details',
           };
-          
+
           console.error('❌ File upload error:', JSON.stringify(errorDetails, null, 2));
-          
+
           // Storage 버킷이 없거나 RLS 정책 위반인 경우 파일 없이 진행
           const errorMessage = String(uploadError.message || '');
-          const isBucketNotFound = 
-            errorMessage.includes('Bucket not found') || 
+          const isBucketNotFound =
+            errorMessage.includes('Bucket not found') ||
             errorMessage.includes('does not exist') ||
             errorMessage.includes('not found');
-          const isRLSViolation = 
+          const isRLSViolation =
             errorMessage.includes('row-level security policy') ||
             errorMessage.includes('RLS') ||
             errorMessage.includes('violates row-level security') ||
-            uploadError.statusCode === 403 ||
-            uploadError.statusCode === '403' ||
-            (uploadError as any).status === 403 ||
-            (uploadError as any).status === 400;
+            uploadErrorAny.statusCode === 403 ||
+            uploadErrorAny.statusCode === '403' ||
+            ('status' in uploadError && (uploadError as { status: unknown }).status === 403) ||
+            ('status' in uploadError && (uploadError as { status: unknown }).status === 400);
           
           if (isBucketNotFound || isRLSViolation) {
             console.warn('⚠️ Storage bucket not found or RLS policy violation. Proceeding without file upload.');
@@ -127,7 +118,6 @@ export async function createArapSubmission(
           }
         } else {
           filePath = fileName;
-          console.log('✅ File uploaded successfully:', uploadData);
         }
       } catch (fileError: any) {
         const errorMessage = fileError?.message || String(fileError) || 'Unknown error';
@@ -153,10 +143,8 @@ export async function createArapSubmission(
 
     // 2. 기존 제출은 삭제하지 않고 새로 추가 (로그 누적)
     // 제약 조건이 있어도 여러 번 저장하면 로그가 쌓이도록 함
-    console.log('🔍 Creating new submission (keeping history)...');
 
     // 3. Submission 생성
-    console.log('💾 Creating submission record...');
     const { data: submission, error: submissionError } = await supabase
       .from('arap_submissions')
       .insert({
@@ -192,10 +180,7 @@ export async function createArapSubmission(
       throw new Error('Submission was not created');
     }
 
-    console.log('✅ Submission created:', submission.id);
-
     // 4. Submission Details 생성
-    console.log('💾 Creating submission details...', items.length, 'items');
     const details = items.map((item) => ({
       submission_id: submission.id,
       invoice_date: item.invoice_date || null,
@@ -226,13 +211,9 @@ export async function createArapSubmission(
       throw new Error(`Failed to create submission details: ${detailsError.message}`);
     }
 
-    console.log('✅ Submission details created:', detailsData?.length || 0, 'items');
-
     // 5. 매칭 상태 재계산 (에러가 나도 무시)
     try {
-      console.log('🔄 Recalculating match status...', { fiscal_year, fiscal_month });
       await recalculateMatchStatus(fiscal_year, fiscal_month);
-      console.log('✅ Match status recalculated successfully');
     } catch (matchError: any) {
       console.error('⚠️ Failed to recalculate match status:', {
         message: matchError?.message,
@@ -244,9 +225,9 @@ export async function createArapSubmission(
     }
 
     return {
-      ...submission,
-      submission_details: detailsData || [],
-    };
+      ...(submission as unknown as ArapSubmission),
+      submission_details: (detailsData || []) as unknown as ArapSubmissionDetail[],
+    } as ArapSubmissionWithDetails;
   } catch (error: any) {
     console.error('❌ Error in createArapSubmission:', {
       message: error?.message,
@@ -268,12 +249,6 @@ export async function getArapSubmissions(
   fiscalMonth?: number
 ): Promise<ArapSubmissionWithDetails[]> {
   try {
-    console.log('🔍 Fetching ARAP submissions:', {
-      entityId,
-      fiscalYear,
-      fiscalMonth,
-    });
-    
     let query = supabase
       .from('arap_submissions')
       .select(`
@@ -310,27 +285,12 @@ export async function getArapSubmissions(
       throw error;
     }
 
-    console.log('✅ Fetched submissions:', {
-      count: data?.length || 0,
-      submissions: data?.map((sub: any) => ({
-        id: sub.id,
-        entity_id: sub.entity_id,
-        fiscal_year: sub.fiscal_year,
-        fiscal_month: sub.fiscal_month,
-        submission_date: sub.submission_date,
-        submission_type: sub.submission_type,
-        total_items: sub.total_items,
-        details_count: Array.isArray(sub.submission_details) 
-          ? sub.submission_details.length 
-          : (sub.submission_details ? 1 : 0),
-      })),
-    });
-
     // submission_details가 배열이 아닌 경우 처리
-    const submissions = (data || []).map((sub: any) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const submissions = ((data || []) as any[]).map((sub: ArapSubmission & { submission_details: ArapSubmissionDetail[] | ArapSubmissionDetail | null }) => ({
       ...sub,
-      submission_details: Array.isArray(sub.submission_details) 
-        ? sub.submission_details 
+      submission_details: Array.isArray(sub.submission_details)
+        ? sub.submission_details
         : [],
     }));
 
@@ -885,7 +845,6 @@ export async function recalculateMatchStatus(
 ): Promise<void> {
   try {
     const entities = await getArapEntities();
-    console.log(`🔄 Recalculating match status for ${fiscalYear}-${fiscalMonth} (${entities.length} entities)`);
 
     for (let i = 0; i < entities.length; i++) {
       for (let j = i + 1; j < entities.length; j++) {
@@ -898,8 +857,6 @@ export async function recalculateMatchStatus(
           fiscalYear,
           fiscalMonth
         );
-
-        console.log(`  ${entityA.entity_name} ↔ ${entityB.entity_name}: ${summary.status}`);
 
         // 관련된 모든 submissions의 match_status 업데이트
         const { data: submissionsA, error: errorA } = await supabase
@@ -937,14 +894,10 @@ export async function recalculateMatchStatus(
           
           if (updateError) {
             console.warn(`⚠️ Error updating match_status for ${entityA.entity_name} ↔ ${entityB.entity_name}:`, updateError);
-          } else {
-            console.log(`  ✅ Updated ${allSubmissionIds.length} submissions to ${summary.status}`);
           }
         }
       }
     }
-    
-    console.log('✅ Match status recalculation completed');
   } catch (error: any) {
     console.error('❌ Error in recalculateMatchStatus:', {
       message: error?.message,

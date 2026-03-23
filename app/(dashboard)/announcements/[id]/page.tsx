@@ -76,7 +76,7 @@ export default function AnnouncementDetailPage() {
         return;
       }
 
-      const item = announcementResult.data as Announcement;
+      const item = announcementResult.data as unknown as Announcement;
       setData(item);
       setForm({
         type: item.type,
@@ -86,7 +86,7 @@ export default function AnnouncementDetailPage() {
       });
       // 본문이 없으면 바로 편집 모드로
       setEditMode(!item.content);
-      setComments((commentsResult.data || []) as Comment[]);
+      setComments((commentsResult.data || []) as unknown as Comment[]);
       setLoading(false);
     };
     load();
@@ -98,7 +98,8 @@ export default function AnnouncementDetailPage() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from('announcements')
       .update({
         type: form.type,
@@ -124,14 +125,15 @@ export default function AnnouncementDetailPage() {
       return;
     }
     setSubmitting(true);
-    const { data: newComment, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: newComment, error } = await (supabase as any)
       .from('announcement_comments')
       .insert({ announcement_id: id, author: commentAuthor.trim(), content: commentContent.trim() })
       .select()
       .single();
     setSubmitting(false);
     if (error) { toast.error('댓글 등록 실패: ' + error.message); return; }
-    setComments((prev) => [...prev, newComment as Comment]);
+    setComments((prev) => [...prev, newComment as unknown as Comment]);
     setCommentContent('');
   };
 

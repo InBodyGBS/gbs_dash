@@ -98,8 +98,8 @@ export default function InterCoTransactionPage() {
   };
 
   const handleSaveSuccess = () => {
-    // 제출 성공 후 데이터 새로고침
-    // TODO: 필요시 상태 업데이트
+    // 제출 성공 후 엔티티 목록 새로고침
+    loadEntities();
   };
 
   if (entities.length === 0) {

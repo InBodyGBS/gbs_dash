@@ -37,7 +37,7 @@ export default function AuditAndTaxPage() {
 
   const loadCards = async () => {
     setCardsLoading(true);
-    const data = await getCardNews();
+    const data = await getCardNews('');
     setCards(data);
     setCardsLoading(false);
   };
@@ -114,13 +114,11 @@ export default function AuditAndTaxPage() {
       </Tabs>
 
       {/* 카드뉴스 상세 다이얼로그 */}
-      {selectedCard && (
-        <CardNewsDetailDialog
-          card={selectedCard}
-          open={!!selectedCard}
-          onClose={() => setSelectedCard(null)}
-        />
-      )}
+      <CardNewsDetailDialog
+        cardId={selectedCard?.id ?? null}
+        open={!!selectedCard}
+        onOpenChange={(open) => { if (!open) setSelectedCard(null); }}
+      />
     </div>
   );
 }

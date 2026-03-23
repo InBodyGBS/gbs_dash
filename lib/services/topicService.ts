@@ -25,7 +25,7 @@ export async function getTopics(): Promise<ClosingTopic[]> {
       }
       throw error;
     }
-    return data || [];
+    return (data || []) as unknown as ClosingTopic[];
   } catch (error) {
     console.error('Error fetching topics:', error);
     // Return empty array instead of throwing to prevent app crash
@@ -48,7 +48,7 @@ export async function getTopicById(id: string): Promise<ClosingTopic | null> {
     if (error.code === 'PGRST116') return null; // Not found
     throw error;
   }
-  return data;
+  return data as unknown as ClosingTopic;
 }
 
 /**
@@ -66,7 +66,7 @@ export async function getTopicByCode(code: string): Promise<ClosingTopic | null>
     if (error.code === 'PGRST116') return null; // Not found
     throw error;
   }
-  return data;
+  return data as unknown as ClosingTopic;
 }
 
 /**
@@ -88,7 +88,7 @@ export async function searchTopics(query: string): Promise<ClosingTopic[]> {
       }
       throw error;
     }
-    return data || [];
+    return (data || []) as unknown as ClosingTopic[];
   } catch (error) {
     console.error('Error searching topics:', error);
     return [];

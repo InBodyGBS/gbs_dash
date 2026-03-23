@@ -110,7 +110,7 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
       .select('*')
       .eq('fiscal_year', fiscalYear);
     if (error) toast.error('데이터 로딩 실패: ' + error.message);
-    else setRecords((data || []) as AuditRecord[]);
+    else setRecords((data || []) as unknown as AuditRecord[]);
     setLoading(false);
   }, [fiscalYear]);
 
@@ -131,7 +131,8 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
         const existing = recordsMap.get(subsidiaryId);
         if (existing?.id) {
           // UPDATE
-          const { error } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase as any)
             .from('audit_records')
             .update({ [category]: value, updated_at: new Date().toISOString() })
             .eq('id', existing.id);
@@ -150,13 +151,14 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
             audit_report: null,
             [category]: value,
           };
-          const { data, error } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data, error } = await (supabase as any)
             .from('audit_records')
             .insert(newRecord)
             .select()
             .single();
           if (error) throw error;
-          setRecords((prev) => [...prev, data as AuditRecord]);
+          setRecords((prev) => [...prev, data as unknown as AuditRecord]);
         }
       } catch (err: any) {
         toast.error('저장 실패: ' + err.message);

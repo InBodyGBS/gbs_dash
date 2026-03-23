@@ -167,7 +167,7 @@ export function SubmissionCommentDialog({
     ];
     ws['!cols'] = colWidths;
 
-    const fileName = `댓글로그_${submission.file_name.replace(/\.(xlsx?|xls)$/i, '')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
+    const fileName = `댓글로그_${submission?.file_name.replace(/\.(xlsx?|xls)$/i, '')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
     XLSX.writeFile(wb, fileName);
     
     toast.success('댓글 로그가 다운로드되었습니다.', {

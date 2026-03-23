@@ -19,7 +19,6 @@ export async function uploadWorkManual(
   try {
     // 사용자 정보 가져오기 (선택적 - 로그인하지 않아도 업로드 가능)
     const { data: { user } } = await supabase.auth.getUser();
-    console.log('Current user:', user);
 
     const fileExt = file.name.split('.').pop();
     const filePath = `${uuidv4()}.${fileExt}`;
@@ -35,7 +34,6 @@ export async function uploadWorkManual(
     }
 
     // DB에 메타데이터 저장 (file_type 포함)
-    console.log('Saving to DB with fileType:', fileType);
     const { data, error: dbError } = await supabase
       .from('work_manuals')
       .insert({
@@ -48,8 +46,6 @@ export async function uploadWorkManual(
       .select()
       .single();
     
-    console.log('Saved data:', data);
-
     if (dbError) {
       console.error('DB Error Details:', {
         message: dbError.message,
@@ -79,7 +75,7 @@ export async function uploadWorkManual(
       );
     }
 
-    return data;
+    return data as unknown as WorkManual;
   } catch (error) {
     console.error('Error uploading work manual:', error);
     throw error;
@@ -126,14 +122,12 @@ export async function getWorkManuals(fileType?: '업무기술서' | '업무분�
       
       // file_type 컬럼이 없으면 모든 파일을 반환 (클라이언트에서 필터링)
       const allFiles = allData || [];
-      console.log('All files loaded (no file_type column):', allFiles.length);
-      return allFiles;
+      return allFiles as unknown as WorkManual[];
     }
     throw new Error(`조회 실패: ${error.message}`);
   }
 
-  console.log('Files loaded with file_type filter:', data?.length || 0);
-  return data || [];
+  return (data || []) as unknown as WorkManual[];
 }
 
 /**

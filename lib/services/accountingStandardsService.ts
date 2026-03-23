@@ -24,7 +24,7 @@ export async function getAccountingStandards(): Promise<AccountingStandard[]> {
       .order('standard_code');
 
     if (error) throw error;
-    return data || [];
+    return (data || []) as unknown as AccountingStandard[];
   } catch (error) {
     console.error('Error fetching accounting standards:', error);
     return [];
@@ -56,7 +56,7 @@ export async function getCardCategories(
       .order('display_order');
 
     if (error) throw error;
-    return data || [];
+    return (data || []) as unknown as CardCategory[];
   } catch (error) {
     console.error('Error fetching card categories:', error);
     return [];
@@ -93,22 +93,22 @@ export async function getCardNews(
       if (error) throw error;
       
       // 클라이언트 사이드 필터링 (태그 검색 포함)
-      const filtered = (data || []).filter((card) => {
+      const filtered = ((data || []) as unknown as CardNewsFull[]).filter((card) => {
         const titleMatch = card.title?.toLowerCase().includes(searchLower);
         const contentMatch = card.content?.toLowerCase().includes(searchLower);
-        const tagMatch = card.tags?.some((tag) => 
+        const tagMatch = card.tags?.some((tag: string) =>
           tag.toLowerCase().includes(searchLower)
         );
         return titleMatch || contentMatch || tagMatch;
       });
-      
+
       return filtered;
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
-    return data || [];
+    return (data || []) as unknown as CardNewsFull[];
   } catch (error) {
     console.error('Error fetching card news:', error);
     return [];
@@ -155,10 +155,10 @@ export async function getCardNewsDetail(
     }
 
     return {
-      ...cardData,
-      references: references || [],
-      practical_tips: tips || [],
-    };
+      ...(cardData as unknown as CardNewsDetail),
+      references: (references || []) as unknown as CardReference[],
+      practical_tips: (tips || []) as unknown as PracticalTip[],
+    } as CardNewsDetail;
   } catch (error) {
     console.error('Error fetching card news detail:', error);
     return null;
@@ -180,7 +180,7 @@ export async function getImportantCardNews(
       .order('card_number');
 
     if (error) throw error;
-    return data || [];
+    return (data || []) as unknown as CardNewsFull[];
   } catch (error) {
     console.error('Error fetching important card news:', error);
     return [];

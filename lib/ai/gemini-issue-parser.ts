@@ -7,9 +7,6 @@ import type { Subsidiary } from '@/lib/supabase/types';
 import type { IssueCategory } from '@/lib/types/issue';
 import { ISSUE_CATEGORIES } from '@/lib/constants/issue-categories';
 
-// Gemini API 초기화
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 interface ParsedIssue {
   title: string;
   category: IssueCategory;
@@ -65,6 +62,11 @@ export async function parseIssueWithAI(
   subsidiaries: Subsidiary[]
 ): Promise<ParsedIssue | null> {
   try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is not set');
+    }
+    const genAI = new GoogleGenerativeAI(apiKey);
     // Gemini 모델 초기화
     const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
@@ -75,8 +77,6 @@ export async function parseIssueWithAI(
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-
-    console.log('🤖 Gemini 응답:', text);
 
     // JSON 파싱 (마크다운 코드 블록 제거)
     const jsonText = text

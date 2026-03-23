@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -133,6 +134,9 @@ export function ProjectDialog({
     try {
       setLoading(true);
 
+      const { data: { user } } = await supabase.auth.getUser();
+      const createdBy = user?.email || user?.id || 'unknown';
+
       const projectData = {
         title: formData.title,
         entity_id: formData.entity_id,
@@ -142,7 +146,7 @@ export function ProjectDialog({
         start_date: formData.start_date || null,
         due_date: formData.due_date || null,
         description: formData.description || null,
-        created_by: '조승현', // TODO: 실제 사용자 인증 연동
+        created_by: createdBy,
       };
 
       if (project) {

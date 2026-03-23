@@ -8,6 +8,43 @@ import { supabase } from '@/lib/supabase/client';
 import type { Submission, SubmissionComment, SubmissionFormData } from '@/lib/types/submission';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 
+/**
+ * 서버사이드 API를 통한 파일 제출
+ * schedule_items 자동 확정 포함
+ */
+export async function createSubmissionViaApi(
+  formData: SubmissionFormData
+): Promise<Submission> {
+  const body = new FormData();
+  body.append('file', formData.file);
+  body.append('category', formData.category);
+  if (formData.quarter_id) body.append('quarter_id', formData.quarter_id);
+  if (formData.subsidiary_id) body.append('subsidiary_id', formData.subsidiary_id);
+  if (formData.fiscal_year) body.append('fiscal_year', formData.fiscal_year);
+  if (formData.entity_name) body.append('entity_name', formData.entity_name);
+
+  // 인증 토큰 전달
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: HeadersInit = {};
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+
+  const response = await fetch('/api/submissions', {
+    method: 'POST',
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    const err = await response.json() as { error?: string };
+    throw new Error(err.error ?? '제출 실패');
+  }
+
+  const { submission } = await response.json() as { submission: Submission };
+  return submission;
+}
+
 const BUCKET_NAME = 'submission';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -77,14 +114,6 @@ export async function createSubmission(
       ? quarter_id
       : null;
 
-    console.log(`📤 Submission 저장:`, {
-      category,
-      quarter_id: quarter_id,
-      finalQuarterId: finalQuarterId,
-      subsidiary_id: subsidiary_id,
-      file_name: file.name,
-    });
-
     // DB에 메타데이터 저장
     const { data, error: dbError } = await supabase
       .from('submissions')
@@ -140,7 +169,7 @@ export async function createSubmission(
       throw new Error(`데이터베이스 저장 실패: ${errorMessage}${errorCode}${errorHint}${errorDetails}`);
     }
 
-    return data;
+    return data as unknown as Submission;
   } catch (error) {
     console.error('Error creating submission:', error);
     throw error;
@@ -195,7 +224,7 @@ export async function getSubmissions(
       submitted_at: item.submitted_at,
       created_at: item.created_at,
       updated_at: item.updated_at,
-    }));
+    })) as unknown as Submission[];
   } catch (error) {
     console.error('Error getting submissions:', error);
     throw error;

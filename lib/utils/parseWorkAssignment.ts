@@ -232,7 +232,7 @@ async function parseExcelFile(arrayBuffer: ArrayBuffer): Promise<WorkAssignment[
     // 모든 시트 순회
     workbook.SheetNames.forEach((sheetName, sheetIndex) => {
       const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][];
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as unknown[][];
 
       // 빈 시트 건너뛰기
       if (!data || data.length === 0) return;

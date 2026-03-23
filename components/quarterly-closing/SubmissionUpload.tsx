@@ -6,7 +6,7 @@ import { Download, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { createSubmission } from '@/lib/services/submissionService';
+import { createSubmissionViaApi } from '@/lib/services/submissionService';
 import { downloadSubmissionTemplate } from '@/lib/utils/submissionTemplate';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
@@ -59,7 +59,7 @@ export function SubmissionUpload({
 
       setUploading(true);
       try {
-        await createSubmission({
+        await createSubmissionViaApi({
           category,
           file,
           quarter_id: quarterId || null,

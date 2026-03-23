@@ -14,7 +14,7 @@ export async function getSystems(entityId?: string): Promise<System[]> {
   const { data, error } = await query;
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as unknown as System[];
 }
 
 /**
@@ -39,7 +39,7 @@ export async function getSystemByEntityAndCategory(
     throw error;
   }
 
-  return data;
+  return data as unknown as System;
 }
 
 /**
@@ -48,6 +48,7 @@ export async function getSystemByEntityAndCategory(
 export async function upsertSystem(systemData: SystemFormData): Promise<System> {
   const { data, error } = await supabase
     .from('systems')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .upsert(
       {
         entity_id: systemData.entity_id,
@@ -58,7 +59,7 @@ export async function upsertSystem(systemData: SystemFormData): Promise<System> 
         implementation_date: systemData.implementation_date || null,
         notes: systemData.notes || null,
         created_by: systemData.created_by,
-      },
+      } as any,
       {
         onConflict: 'entity_id,category',
       }
@@ -67,7 +68,7 @@ export async function upsertSystem(systemData: SystemFormData): Promise<System> 
     .single();
 
   if (error) throw error;
-  return data;
+  return data as unknown as System;
 }
 
 /**
@@ -94,21 +95,23 @@ export async function updateSystemName(
     // 업데이트
     const { data, error } = await supabase
       .from('systems')
-      .update({ system_name: systemName || null })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update({ system_name: systemName ?? null } as any)
       .eq('id', existing.id)
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return data as unknown as System;
   } else {
-    // 생성
+    // 생성 - get authenticated user for created_by
+    const { data: { user } } = await supabase.auth.getUser();
+    const createdBy = user?.email || user?.id || 'unknown';
     return upsertSystem({
       entity_id: entityId,
       category,
-      system_name: systemName || null,
-      created_by: '조승현', // TODO: 실제 사용자 인증 연동
+      system_name: systemName ?? undefined,
+      created_by: createdBy,
     });
   }
 }
-

@@ -10,6 +10,27 @@ import mammoth from 'mammoth';
 import { getWorkManualUrl } from '@/lib/services/workManualService';
 import type { WorkManual } from '@/lib/types/work-manual';
 
+/**
+ * Simple HTML sanitizer that strips script tags and inline event handlers
+ * to prevent XSS when rendering HTML from converted documents.
+ */
+function sanitizeHtml(html: string): string {
+  // Remove <script> blocks (including content)
+  let safe = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Remove <iframe> blocks
+  safe = safe.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
+  // Remove <object> blocks
+  safe = safe.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '');
+  // Remove <embed> tags
+  safe = safe.replace(/<embed\b[^>]*>/gi, '');
+  // Remove inline event handler attributes (onclick, onerror, onload, etc.)
+  safe = safe.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // Remove javascript: and data: URIs in href/src attributes
+  safe = safe.replace(/(href|src)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '');
+  safe = safe.replace(/(href|src)\s*=\s*(?:"data:[^"]*"|'data:[^']*')/gi, '');
+  return safe;
+}
+
 interface WorkManualViewerProps {
   manual: WorkManual | null;
 }
@@ -32,16 +53,11 @@ export function WorkManualViewer({ manual }: WorkManualViewerProps) {
       try {
         // 1. 파일 URL 가져오기
         const fileUrl = await getWorkManualUrl(manual.file_path);
-        console.log('File URL:', fileUrl);
-        console.log('File path:', manual.file_path);
 
         // 2. 파일 다운로드
         const response = await fetch(fileUrl);
-        console.log('Fetch response status:', response.status);
-        
+
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Fetch error response:', errorText);
           throw new Error(`파일 다운로드 실패 (${response.status}): ${response.statusText}`);
         }
 
@@ -50,17 +66,16 @@ export function WorkManualViewer({ manual }: WorkManualViewerProps) {
         // 3. mammoth.js로 HTML 변환 (docx 파일만)
         if (manual.file_name.endsWith('.docx')) {
           const result = await mammoth.convertToHtml({ arrayBuffer });
-          setHtmlContent(result.value);
+          setHtmlContent(sanitizeHtml(result.value));
         } else if (manual.file_name.endsWith('.xlsx')) {
           // xlsx 파일은 아직 파싱 미지원
           setError('XLSX 파일은 아직 미리보기를 지원하지 않습니다.');
         } else {
           setError('지원하지 않는 파일 형식입니다.');
         }
-      } catch (err: any) {
-        const errorMessage = err.message || '문서를 불러오는 중 오류가 발생했습니다.';
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : '문서를 불러오는 중 오류가 발생했습니다.';
         setError(errorMessage);
-        console.error('Document load error:', err);
       } finally {
         setLoading(false);
       }

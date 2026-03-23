@@ -150,7 +150,7 @@ export function ProjectCard({ project, subsidiary, onClick, onDelete }: ProjectC
                 <div
                   className={cn(
                     'font-semibold',
-                    dDay < 0 ? 'text-red-600' : dDay === 0 ? 'text-orange-600' : 'text-blue-600'
+                    dDay !== null && dDay < 0 ? 'text-red-600' : dDay === 0 ? 'text-orange-600' : 'text-blue-600'
                   )}
                 >
                   {dDayText}

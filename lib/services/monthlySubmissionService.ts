@@ -200,16 +200,18 @@ export async function upsertMonthlyReviewStatus(
     data: { user },
   } = await supabase.auth.getUser();
 
+  const upsertPayload: Omit<MonthlyReviewStatus, 'id' | 'created_at' | 'updated_at'> & { updated_by: string | null } = {
+    period_year: periodYear,
+    period_month: periodMonth,
+    subsidiary_id: subsidiaryId,
+    reviewing: patch.reviewing,
+    confirm: patch.confirm,
+    // DB에 트리거/컬럼이 있다면 감사/정합성에 사용
+    updated_by: user?.id || null,
+  };
+
   const { data, error } = await supabase.from('monthly_review_statuses').upsert(
-    {
-      period_year: periodYear,
-      period_month: periodMonth,
-      subsidiary_id: subsidiaryId,
-      reviewing: patch.reviewing,
-      confirm: patch.confirm,
-      // DB에 트리거/컬럼이 있다면 감사/정합성에 사용
-      updated_by: user?.id || null,
-    } as any,
+    upsertPayload,
     { onConflict: 'subsidiary_id,period_year,period_month' }
   ).select().single();
 

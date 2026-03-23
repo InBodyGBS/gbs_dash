@@ -7,12 +7,27 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@/lib/supabase/server';
 
 // Supabase 클라이언트 생성
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+/**
+ * Validates the Supabase session from the Authorization header.
+ * Returns the user if valid, or null if not authenticated.
+ */
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  const token = authHeader?.replace('Bearer ', '');
+  if (!token) return null;
+  const client = createServerClient();
+  const { data: { user }, error } = await client.auth.getUser(token);
+  if (error || !user) return null;
+  return user;
+}
 
 // 허용되는 MIME 타입
 const ALLOWED_MIME_TYPES = [
@@ -25,6 +40,14 @@ const ALLOWED_MIME_TYPES = [
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -131,6 +154,14 @@ export async function POST(request: NextRequest) {
  * 업로드된 파일 목록 조회
  */
 export async function GET(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const entityCode = searchParams.get('entity_code');
@@ -179,6 +210,14 @@ export async function GET(request: NextRequest) {
  * 업로드된 파일 삭제
  */
 export async function DELETE(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const uploadId = searchParams.get('upload_id');

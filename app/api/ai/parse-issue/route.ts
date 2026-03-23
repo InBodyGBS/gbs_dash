@@ -5,10 +5,34 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ISSUE_CATEGORIES } from '@/lib/constants/issue-categories';
+import { createServerClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyCD7AREeCCiVK4KYWn9NMf99W0oOXTnk-8';
+    // Validate Gemini API key
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Server configuration error: GEMINI_API_KEY is not set' },
+        { status: 500 }
+      );
+    }
+
+    // Validate session
+    const supabase = createServerClient();
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+
+    if (token) {
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (error || !user) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        );
+      }
+    }
+
     const { userInput, subsidiaries } = await request.json();
 
     if (!userInput || !subsidiaries) {
@@ -18,12 +42,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🔑 API 키 사용 중');
-    console.log('📝 사용자 입력:', userInput);
-
     // 프롬프트 생성
     const subsidiaryList = subsidiaries
-      .map((s: any) => `- ${s.code}: ${s.name}`)
+      .map((s: { code: string; name: string }) => `- ${s.code}: ${s.name}`)
       .join('\n');
 
     const prompt = `
@@ -77,14 +98,12 @@ JSON 응답:
 
     if (!response.ok) {
       const error = await response.json();
-      console.error('❌ API 에러:', error);
+      console.error('AI API error:', response.status);
       throw new Error(`API 호출 실패: ${response.status}`);
     }
 
     const data = await response.json();
     const text = data.candidates[0]?.content?.parts[0]?.text;
-    
-    console.log('📤 AI 응답:', text);
 
     // JSON 추출
     let jsonText = text.trim();
@@ -99,7 +118,6 @@ JSON 응답:
     }
 
     const parsed = JSON.parse(jsonText);
-    console.log('✅ 파싱 성공:', parsed);
 
     return NextResponse.json({
       success: true,
@@ -107,11 +125,10 @@ JSON 응답:
     });
 
   } catch (error) {
-    console.error('❌ AI 파싱 실패:', error);
+    console.error('AI 파싱 실패:', error);
     return NextResponse.json(
       { error: 'AI 파싱 실패', details: (error as Error).message },
       { status: 500 }
     );
   }
 }
-

@@ -49,19 +49,13 @@ export async function uploadTBFile(
     throw new Error('파일 크기는 10MB를 초과할 수 없습니다.');
   }
 
-  // 기존 업로드 확인
-  const { data: existing } = await supabase
+  // 기존 업로드 삭제 (cascade로 tb_raw_data, pl_results도 삭제)
+  await supabase
     .from('tb_uploads')
-    .select('id')
+    .delete()
     .eq('entity_code', entityCode)
     .eq('period_year', periodYear)
-    .eq('period_month', periodMonth)
-    .single();
-
-  if (existing) {
-    // 기존 데이터 삭제 (cascade로 tb_raw_data, pl_results도 삭제)
-    await supabase.from('tb_uploads').delete().eq('id', existing.id);
-  }
+    .eq('period_month', periodMonth);
 
   // Storage 업로드
   const filePath = `${entityCode}/${periodYear}/${periodMonth}/${uuidv4()}.${fileExt}`;
@@ -161,7 +155,7 @@ export async function updateUploadStatus(
   status: string,
   unmappedCount?: number
 ): Promise<void> {
-  const updateData: any = { status, updated_at: new Date().toISOString() };
+  const updateData: { status: string; updated_at: string; unmapped_count?: number } = { status, updated_at: new Date().toISOString() };
   if (unmappedCount !== undefined) updateData.unmapped_count = unmappedCount;
 
   const { error } = await supabase
@@ -317,7 +311,7 @@ export async function getCOAMappings(
       .from('std_pl_master')
       .select('*')
       .in('pl_code', plCodes);
-    (plData || []).forEach((pl: StdPLMaster) => plMasterMap.set(pl.pl_code, pl));
+    ((plData || []) as unknown as StdPLMaster[]).forEach((pl: StdPLMaster) => plMasterMap.set(pl.pl_code, pl));
   }
 
   if (bsCodes.length > 0) {
@@ -325,7 +319,7 @@ export async function getCOAMappings(
       .from('std_bs_master')
       .select('*')
       .in('bs_code', bsCodes);
-    (bsData || []).forEach((bs: StdBSMaster) => bsMasterMap.set(bs.bs_code, bs));
+    ((bsData || []) as unknown as StdBSMaster[]).forEach((bs: StdBSMaster) => bsMasterMap.set(bs.bs_code, bs));
   }
 
   // 매핑에 마스터 정보 추가
@@ -385,7 +379,7 @@ export async function parseCOAMappingExcel(file: File): Promise<COAMappingInput[
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, unknown>[];
 
         if (jsonData.length === 0) {
           reject(new Error('Excel 파일이 비어있습니다.'));
@@ -681,9 +675,6 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
   const bsCodeAmounts = new Map<string, number>();
   let unmappedCount = 0;
 
-  // 디버그: 각 std_code별 상세 내역
-  const debugDetails = new Map<string, { accounts: string[]; rawBalances: number[]; amounts: number[] }>();
-
   // 부호 결정 함수: std_code가 1, 5, 6, 72, 74, 80으로 시작하면 +balance, 그 외는 -balance
   const getSignedAmount = (stdCode: string, balance: number): number => {
     const prefix1 = stdCode.charAt(0);
@@ -714,15 +705,6 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
     // 부호 적용
     const amount = getSignedAmount(mapping.std_code, effectiveBalance);
 
-    // 디버그 정보 수집
-    if (!debugDetails.has(mapping.std_code)) {
-      debugDetails.set(mapping.std_code, { accounts: [], rawBalances: [], amounts: [] });
-    }
-    const detail = debugDetails.get(mapping.std_code)!;
-    detail.accounts.push(row.account_code);
-    detail.rawBalances.push(effectiveBalance);
-    detail.amounts.push(amount);
-
     if (mapping.statement_type === 'PL') {
       const existing = plCodeAmounts.get(mapping.std_code) || 0;
       plCodeAmounts.set(mapping.std_code, existing + amount);
@@ -731,19 +713,6 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
       bsCodeAmounts.set(mapping.std_code, existing + amount);
     }
   });
-
-  // 디버그 로그: Sales(4xxxx)와 COGS(5xxxx) 상세 출력
-  console.log('=== P&L 생성 디버그 ===');
-  debugDetails.forEach((detail, stdCode) => {
-    if (stdCode.startsWith('4') || stdCode.startsWith('5')) {
-      const total = detail.amounts.reduce((a, b) => a + b, 0);
-      console.log(`[${stdCode}] 계정수: ${detail.accounts.length}, 합계: ${total.toLocaleString()}`);
-      detail.accounts.forEach((acc, i) => {
-        console.log(`  - ${acc}: rawBalance=${detail.rawBalances[i].toLocaleString()} → amount=${detail.amounts[i].toLocaleString()}`);
-      });
-    }
-  });
-  console.log(`Unmapped 계정 수: ${unmappedCount}`);
 
   // 기존 결과 삭제
   await supabase.from('pl_results').delete().eq('upload_id', uploadId);
@@ -824,7 +793,7 @@ export async function getPLResults(
     .eq('period_month', periodMonth);
 
   if (error) throw new Error(`P&L 조회 실패: ${error.message}`);
-  return (data || []) as PLResult[];
+  return (data || []) as unknown as PLResult[];
 }
 
 /**
@@ -973,7 +942,7 @@ export async function getBSResults(
     .eq('period_month', periodMonth);
 
   if (error) throw new Error(`BS 조회 실패: ${error.message}`);
-  return (data || []) as BSResult[];
+  return (data || []) as unknown as BSResult[];
 }
 
 /**
