@@ -20,17 +20,17 @@ export interface WorkAssignment {
 /**
  * HTML에서 테이블 데이터 추출
  */
-function parseTableFromHTML(html: string): any[][] {
+function parseTableFromHTML(html: string): string[][] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   const tables = doc.querySelectorAll('table');
-  const allData: any[][] = [];
+  const allData: string[][] = [];
 
   tables.forEach((table) => {
     const rows = table.querySelectorAll('tr');
     rows.forEach((row) => {
       const cells = row.querySelectorAll('td, th');
-      const rowData: any[] = [];
+      const rowData: string[] = [];
       cells.forEach((cell) => {
         rowData.push(cell.textContent?.trim() || '');
       });
@@ -46,7 +46,7 @@ function parseTableFromHTML(html: string): any[][] {
 /**
  * 테이블 데이터를 업무 분장 정보로 변환
  */
-function parseTableData(data: any[][], debugName?: string): WorkAssignment[] {
+function parseTableData(data: unknown[][], debugName?: string): WorkAssignment[] {
   const assignments: WorkAssignment[] = [];
 
   if (!data || data.length === 0) {
@@ -61,7 +61,7 @@ function parseTableData(data: any[][], debugName?: string): WorkAssignment[] {
   const headers = data[0] || [];
   
   // 법인명/개인명 컬럼 인덱스 찾기
-  const nameColIndex = headers.findIndex((h: string) => 
+  const nameColIndex = (headers as unknown[]).findIndex((h) => 
     typeof h === 'string' && (
       h.includes('법인') || 
       h.includes('개인') || 
@@ -79,7 +79,7 @@ function parseTableData(data: any[][], debugName?: string): WorkAssignment[] {
 
   // 업무 컬럼 인덱스 찾기
   const assignmentColIndices = headers
-    .map((h: string, idx: number) => 
+    .map((h, idx: number) => 
       typeof h === 'string' && (
         h.includes('업무') || 
         h.includes('담당') || 
@@ -113,7 +113,7 @@ function parseTableData(data: any[][], debugName?: string): WorkAssignment[] {
   }
 
   // 부서 컬럼 인덱스 찾기
-  const departmentColIndex = headers.findIndex((h: string) => 
+  const departmentColIndex = (headers as unknown[]).findIndex((h) => 
     typeof h === 'string' && (
       h.includes('부서') || 
       h.includes('팀') || 
@@ -125,7 +125,7 @@ function parseTableData(data: any[][], debugName?: string): WorkAssignment[] {
   );
 
   // 법인 코드 컬럼 인덱스 찾기
-  const entityColIndex = headers.findIndex((h: string) => 
+  const entityColIndex = (headers as unknown[]).findIndex((h) => 
     typeof h === 'string' && (
       h.includes('코드') || 
       h.includes('Code') ||
@@ -179,7 +179,7 @@ function parseTableData(data: any[][], debugName?: string): WorkAssignment[] {
       : undefined;
 
     // 헤더를 보고 법인별/개인별 판단
-    const isEntityType = headers.some((h: string) => 
+  const isEntityType = headers.some((h) => 
       typeof h === 'string' && h.includes('법인')
     );
 

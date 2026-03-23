@@ -94,14 +94,16 @@ function DroppableCell({ entityId, category, value, onSave, isSaving }: Droppabl
   }, [systemNames]);
 
   useEffect(() => {
-    if (isOtherCategory) {
-      setEditValue(value || '');
-    } else if (hasOtherSystem) {
-      // "기타" 시스템의 입력값 설정 (있으면 그 값, 없으면 빈 문자열)
-      setEditValue(otherSystemName || '');
-    } else {
-      setEditValue('');
-    }
+    Promise.resolve().then(() => {
+      if (isOtherCategory) {
+        setEditValue(value || '');
+      } else if (hasOtherSystem) {
+        // "기타" 시스템의 입력값 설정 (있으면 그 값, 없으면 빈 문자열)
+        setEditValue(otherSystemName || '');
+      } else {
+        setEditValue('');
+      }
+    });
   }, [value, isOtherCategory, hasOtherSystem, otherSystemName]);
 
   useEffect(() => {

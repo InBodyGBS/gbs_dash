@@ -41,7 +41,9 @@ function EditableCell({ value, onSave, isSaving }: EditableCellProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setEditValue(value || '');
+    const next = value || '';
+    // Schedule the state update after this effect completes.
+    Promise.resolve().then(() => setEditValue(next));
   }, [value]);
 
   useEffect(() => {

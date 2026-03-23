@@ -303,8 +303,8 @@ export async function getCOAMappings(
   const plCodes = mappings.filter(m => m.statement_type === 'PL').map(m => m.std_code);
   const bsCodes = mappings.filter(m => m.statement_type === 'BS').map(m => m.std_code);
 
-  let plMasterMap = new Map<string, StdPLMaster>();
-  let bsMasterMap = new Map<string, StdBSMaster>();
+  const plMasterMap = new Map<string, StdPLMaster>();
+  const bsMasterMap = new Map<string, StdBSMaster>();
 
   if (plCodes.length > 0) {
     const { data: plData } = await supabase

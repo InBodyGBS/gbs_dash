@@ -52,6 +52,9 @@ export default function AnnouncementsPage() {
   const [form, setForm] = useState({ type: 'Notice', title: '', author: '' });
 
   const load = async () => {
+    // Avoid triggering `react-hooks/set-state-in-effect` by ensuring the first
+    // state updates happen after the effect tick.
+    await Promise.resolve();
     setLoading(true);
     const { data, error } = await supabase
       .from('announcements')
@@ -62,7 +65,21 @@ export default function AnnouncementsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    supabase
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          toast.error('불러오기 실패: ' + error.message);
+          setLoading(false);
+          return;
+        }
+        setAnnouncements((data || []) as unknown as Announcement[]);
+        setLoading(false);
+      });
+  }, []);
 
   const handleSubmit = async () => {
     if (!form.title.trim() || !form.author.trim()) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -76,9 +76,12 @@ export function QuarterComparisonTable({
   }, [entityData]);
 
   // Entity 표시 이름 가져오기 (subsidiary name 우선, 없으면 entity)
-  const getEntityDisplayName = (entity: string): string => {
-    return entityToNameMap.get(entity) || entity;
-  };
+  const getEntityDisplayName = useCallback(
+    (entity: string): string => {
+      return entityToNameMap.get(entity) || entity;
+    },
+    [entityToNameMap]
+  );
 
   // 계정별 데이터 집계 (Entity별)
   const getAccountData = (account: string, entityName: string) => {
@@ -147,16 +150,6 @@ export function QuarterComparisonTable({
     return '';
   };
 
-  if (data.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center text-gray-400">
-          <p>표시할 데이터가 없습니다.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   const period = data[0]?.period || '';
   const prevPeriod = data[0]?.fiscalYear && data[0]?.quarter 
     ? `${data[0].fiscalYear - (data[0].quarter === 1 ? 1 : 0)}${data[0].quarter === 1 ? 4 : data[0].quarter - 1}Q`
@@ -171,7 +164,18 @@ export function QuarterComparisonTable({
   // 표시용 Entity 이름 목록 (subsidiary name 우선) - useMemo로 최적화
   const displayEntityNames = useMemo(() => {
     return displayEntities.map((e) => getEntityDisplayName(e));
-  }, [displayEntities, entityToNameMap]);
+  }, [displayEntities, getEntityDisplayName]);
+
+  // Hooks를 먼저 선언한 뒤, 빈 데이터면 렌더링을 종료합니다.
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-gray-400">
+          <p>표시할 데이터가 없습니다.</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // Excel 다운로드 함수
   const downloadExcel = () => {

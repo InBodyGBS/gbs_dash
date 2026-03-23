@@ -35,30 +35,32 @@ export function EventDialog({ open, onClose, date, event, onSave, onDelete }: Ev
   const [assignee, setAssignee] = useState('');
 
   useEffect(() => {
-    if (event) {
-      if (event.end_date) {
-        // 기간 일정
-        setDateMode('range');
-        setSelectedDate(new Date(event.date));
-        setDateRange({
-          from: new Date(event.date),
-          to: new Date(event.end_date),
-        });
+    Promise.resolve().then(() => {
+      if (event) {
+        if (event.end_date) {
+          // 기간 일정
+          setDateMode('range');
+          setSelectedDate(new Date(event.date));
+          setDateRange({
+            from: new Date(event.date),
+            to: new Date(event.end_date),
+          });
+        } else {
+          // 단일 일정
+          setDateMode('single');
+          setSelectedDate(new Date(event.date));
+          setDateRange(undefined);
+        }
+        setTitle(event.title);
+        setAssignee(event.assignee || '');
       } else {
-        // 단일 일정
         setDateMode('single');
-        setSelectedDate(new Date(event.date));
+        setSelectedDate(date);
         setDateRange(undefined);
+        setTitle('');
+        setAssignee('');
       }
-      setTitle(event.title);
-      setAssignee(event.assignee || '');
-    } else {
-      setDateMode('single');
-      setSelectedDate(date);
-      setDateRange(undefined);
-      setTitle('');
-      setAssignee('');
-    }
+    });
   }, [event, date, open]);
 
   const handleSave = () => {

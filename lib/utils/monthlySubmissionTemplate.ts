@@ -6,11 +6,14 @@ import * as XLSX from 'xlsx';
 import type { MonthlyClosingCategoryId } from '@/lib/constants/monthly-closing-categories';
 import { MONTHLY_CLOSING_CATEGORIES } from '@/lib/constants/monthly-closing-categories';
 
-function getTemplateData(categoryId: MonthlyClosingCategoryId): any[][] {
+type TemplateCell = string | number;
+type TemplateData = TemplateCell[][];
+
+function getTemplateData(categoryId: MonthlyClosingCategoryId): TemplateData {
   const category = MONTHLY_CLOSING_CATEGORIES.find((cat) => cat.id === categoryId);
   const categoryLabel = category?.label || categoryId;
 
-  const template: any[][] = [
+  const template: TemplateData = [
     ['Monthly Closing Template', '', '', ''],
     ['Category', categoryLabel, '', ''],
     ['Submission Date', '', '', ''],

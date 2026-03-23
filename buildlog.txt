@@ -1,0 +1,555 @@
+﻿
+> gbs_dash@0.1.0 build
+> next build
+
+   ??Next.js 15.1.9
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ??Compiled successfully
+   Linting and checking validity of types ...
+
+./app/(dashboard)/announcements/[id]/page.tsx
+93:6  Warning: React Hook useEffect has a missing dependency: 'router'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/(dashboard)/gbs/calendar/page.tsx
+56:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+114:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+129:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+144:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/gbs/work-assignment/page.tsx
+13:16  Warning: 'TabsContent' is defined but never used.  @typescript-eslint/no-unused-vars
+73:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/gbs/work-manual/page.tsx
+33:6  Warning: React Hook useEffect has a missing dependency: 'selectedManual'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/(dashboard)/issue/page.tsx
+4:40  Warning: 'TrendingUp' is defined but never used.  @typescript-eslint/no-unused-vars
+366:62  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/monthly-closing/dashboard/page.tsx
+20:39  Warning: 'TabsContent' is defined but never used.  @typescript-eslint/no-unused-vars
+107:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+117:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+277:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+297:11  Warning: 'prevTotalOperatingIncome' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+393:6  Warning: React Hook useMemo has a missing dependency: 'prevSummaries'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/(dashboard)/monthly-closing/mapping/page.tsx
+97:6  Warning: React Hook useEffect has missing dependencies: 'loadEntityUploads' and 'loadMappings'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+103:6  Warning: React Hook useEffect has a missing dependency: 'loadUnmappedAccounts'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+116:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+116:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+127:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+139:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+149:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+200:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+212:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+261:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+309:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/monthly-closing/overview/page.tsx
+38:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+56:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/monthly-closing/result/page.tsx
+37:3  Warning: 'calculatePLSummary' is defined but never used.  @typescript-eslint/no-unused-vars
+38:3  Warning: 'getAllEntityPLSummaries' is defined but never used.  @typescript-eslint/no-unused-vars
+41:25  Warning: 'PLSummary' is defined but never used.  @typescript-eslint/no-unused-vars
+126:82  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+152:6  Warning: React Hook useEffect has a missing dependency: 'loadSingleMonthPL'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+159:6  Warning: React Hook useEffect has a missing dependency: 'loadYearlyMonthlyPL'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+177:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+233:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+314:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+348:45  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+351:35  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+366:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+641:6  Warning: React Hook useMemo has a missing dependency: 'createSingleMonthDisplayLines'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+646:6  Warning: React Hook useMemo has a missing dependency: 'createSingleMonthDisplayLines'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+1186:22  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1787:53  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/monthly-closing/submission/page.tsx
+60:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/monthly-closing/upload/page.tsx
+63:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+67:6  Warning: React Hook useEffect has a missing dependency: 'loadUploads'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+78:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+90:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+112:67  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+193:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+275:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+301:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/quarterly-closing/calendar/page.tsx
+78:60  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/quarterly-closing/calendar-t/page.tsx
+231:46  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+238:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+256:46  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+266:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/quarterly-closing/reference/page.tsx
+29:24  Warning: 'setSubsidiaryId' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+42:6  Warning: React Hook useEffect has a missing dependency: 'handleSearch'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/(dashboard)/quarterly-closing/submission/page.tsx
+90:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+95:41  Warning: 'quarterError' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+158:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./app/(dashboard)/system/layout.tsx
+10:10  Warning: 'cn' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(dashboard)/system/process/page.tsx
+4:10  Warning: 'Button' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(dashboard)/system/project/page.tsx
+18:24  Warning: 'ProjectStatus' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./app/(dashboard)/voe/page.tsx
+15:7  Warning: 'CATEGORY_COLORS' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./app/api/ai/parse-issue/route.ts
+100:13  Warning: 'error' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./app/api/cron/check-submissions/route.ts
+128:5  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+
+./app/api/submissions/route.ts
+91:39  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/arap/AdminEntityView.tsx
+9:21  Warning: 'Calendar' is defined but never used.  @typescript-eslint/no-unused-vars
+53:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+66:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/arap/AdminMonthlyView.tsx
+28:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+39:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/arap/AdminReviewPage.tsx
+9:30  Warning: 'Calendar' is defined but never used.  @typescript-eslint/no-unused-vars
+37:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+66:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+121:85  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+169:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/arap/EntityMainPage.tsx
+9:21  Warning: 'Calendar' is defined but never used.  @typescript-eslint/no-unused-vars
+9:31  Warning: 'TrendingUp' is defined but never used.  @typescript-eslint/no-unused-vars
+10:10  Warning: 'Button' is defined but never used.  @typescript-eslint/no-unused-vars
+13:60  Warning: 'CurrencyMatchBreakdown' is defined but never used.  @typescript-eslint/no-unused-vars
+37:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+52:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/arap/EntitySubmissionPage.tsx
+9:48  Warning: 'X' is defined but never used.  @typescript-eslint/no-unused-vars
+16:69  Warning: 'deleteArapSubmission' is defined but never used.  @typescript-eslint/no-unused-vars
+38:64  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+43:6  Warning: React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+76:109  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+103:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+161:101  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+169:40  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+263:6  Warning: React Hook useCallback has a missing dependency: 'items.length'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+293:90  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+462:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/arap/TransactionDetailPopup.tsx
+47:6  Warning: React Hook useEffect has a missing dependency: 'loadDetails'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+66:9  Warning: 'formatCurrency' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./components/audit-and-tax/AuditGrid.tsx
+165:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/audit-and-tax/CardNewsDetailDialog.tsx
+138:49  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+169:66  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+171:47  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/dashboard/ScheduleCalendar.tsx
+58:37  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+60:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+63:70  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+193:15  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+206:15  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+
+./components/dashboard/SubsidiaryCard.tsx
+117:6  Warning: React Hook useEffect has a missing dependency: 'selectedYear'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/financial-result/FinancialResultUpload.tsx
+42:67  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+84:25  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+139:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/financial-result/QuarterComparisonTable.tsx
+12:10  Warning: 'Download' is defined but never used.  @typescript-eslint/no-unused-vars
+24:3  Warning: 'showEntityColumn' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+162:9  Warning: The 'displayEntities' conditional could make the dependencies of useMemo Hook (at line 167) change on every render. To fix this, wrap the initialization of 'displayEntities' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+186:27  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+192:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+205:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+218:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+231:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+243:28  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+248:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+260:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+272:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+284:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+296:28  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+301:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+313:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+325:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+337:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+355:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/gbs/WorkManualList.tsx
+48:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+77:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/gbs/WorkManualUpload.tsx
+9:18  Warning: 'FileText' is defined but never used.  @typescript-eslint/no-unused-vars
+10:10  Warning: 'Button' is defined but never used.  @typescript-eslint/no-unused-vars
+46:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/issue/IssueCard.tsx
+17:9  Warning: 'categoryLabel' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./components/issue/IssueCreateDialog.tsx
+64:22  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+102:13  Warning: 'newIssue' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+118:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/issue/IssueDetailDialog.tsx
+30:27  Warning: 'CATEGORY_LABELS' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/layout/Header.tsx
+10:10  Warning: 'User' is defined but never used.  @typescript-eslint/no-unused-vars
+96:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/layout/Sidebar.tsx
+47:7  Warning: Expected an assignment or function call and instead saw an expression.  @typescript-eslint/no-unused-expressions
+
+./components/LoginButton.tsx
+15:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/monthly-closing/MonthlyOverviewGrid.tsx
+7:15  Warning: 'MonthlyClosingCategoryId' is defined but never used.  @typescript-eslint/no-unused-vars
+63:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/monthly-closing/SubmissionCategorySidebar.tsx
+30:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/monthly-closing/SubmissionList.tsx
+59:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+124:31  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+133:31  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+217:29  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/monthly-closing/SubmissionUpload.tsx
+40:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+71:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/ChatDialog.tsx
+64:6  Warning: React Hook useEffect has a missing dependency: 'loadQuestions'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/quarterly-closing/OverviewGrid.tsx
+10:51  Warning: 'RotateCcw' is defined but never used.  @typescript-eslint/no-unused-vars
+21:7  Warning: 'ENTITY_ORDER_KEY' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+41:3  Warning: 'submissions' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/quarterly-closing/PreliminarySalesSGAForm.tsx
+7:10  Warning: 'Label' is defined but never used.  @typescript-eslint/no-unused-vars
+11:15  Warning: 'PreliminarySalesSGA' is defined but never used.  @typescript-eslint/no-unused-vars
+46:6  Warning: React Hook useEffect has a missing dependency: 'loadExistingData'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+61:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+103:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/ScheduleGrid.tsx
+42:3  Warning: 'onItemDelete' is defined but never used.  @typescript-eslint/no-unused-vars
+386:75  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+426:76  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+445:74  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/SubmissionCategorySidebar.tsx
+28:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/SubmissionCommentDialog.tsx
+5:31  Warning: 'X' is defined but never used.  @typescript-eslint/no-unused-vars
+48:6  Warning: React Hook useEffect has a missing dependency: 'loadComments'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+63:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+88:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+116:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+130:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/SubmissionList.tsx
+5:66  Warning: 'ExternalLink' is defined but never used.  @typescript-eslint/no-unused-vars
+5:80  Warning: 'Check' is defined but never used.  @typescript-eslint/no-unused-vars
+61:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+85:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+104:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+111:9  Warning: 'handleCopyLink' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+118:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+277:29  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/SubmissionLogTable.tsx
+96:6  Warning: React Hook useEffect has a missing dependency: 'loadSubmissions'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+157:40  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+159:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+181:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/quarterly-closing/SubmissionUpload.tsx
+40:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+74:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+82:5  Warning: React Hook useCallback has missing dependencies: 'entityName' and 'fiscalYear'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/system/ProcessFlowEditor.tsx
+36:16  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+37:14  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+38:13  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+39:18  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+41:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+68:41  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+82:45  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/system/ProjectDialog.tsx
+28:18  Warning: 'X' is defined but never used.  @typescript-eslint/no-unused-vars
+30:61  Warning: 'TaskStatus' is defined but never used.  @typescript-eslint/no-unused-vars
+37:3  Warning: 'createTask' is defined but never used.  @typescript-eslint/no-unused-vars
+38:3  Warning: 'updateTask' is defined but never used.  @typescript-eslint/no-unused-vars
+39:3  Warning: 'deleteTask' is defined but never used.  @typescript-eslint/no-unused-vars
+114:6  Warning: React Hook useEffect has a missing dependency: 'loadTasks'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/system/SystemGrid.tsx
+10:20  Warning: 'Loader2' is defined but never used.  @typescript-eslint/no-unused-vars
+14:28  Warning: 'upsertSystem' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./components/system/TaskList.tsx
+160:27  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./components/ui/resizable.tsx
+12:4  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+27:4  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+35:4  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/constants/categories.ts
+13:3  Warning: 'FolderOpen' is defined but never used.  @typescript-eslint/no-unused-vars
+14:3  Warning: 'Users' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/hooks/useScheduleData.ts
+191:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+269:47  Warning: 'fiscalQuarterError' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+277:49  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+284:83  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+298:50  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+335:72  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+336:26  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+340:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+353:83  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+354:61  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+356:48  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+360:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+362:82  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+430:87  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+443:72  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+444:26  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+448:23  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+467:66  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+483:83  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+484:61  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+486:48  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+490:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+492:82  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+709:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+764:42  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+772:12  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+790:42  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+804:42  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+806:73  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+841:50  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+873:66  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+881:16  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+927:18  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+939:65  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+974:18  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/arapService.ts
+16:3  Warning: 'AccountType' is defined but never used.  @typescript-eslint/no-unused-vars
+49:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+77:23  Warning: 'uploadData' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+122:27  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+217:26  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+231:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+298:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+353:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+449:52  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+450:52  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+451:55  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+477:30  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+497:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+567:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+666:33  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+673:32  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+687:33  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+694:32  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+789:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+901:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+935:69  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+937:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/financialResultService.ts
+9:57  Warning: 'getEntityToSubsidiaryMapping' is defined but never used.  @typescript-eslint/no-unused-vars
+118:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+184:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+218:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+245:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+388:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+432:41  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+466:44  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+492:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+512:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/gbsCalendarService.ts
+43:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/monthlyClosingService.ts
+12:3  Warning: 'TBRawData' is defined but never used.  @typescript-eslint/no-unused-vars
+441:21  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+470:59  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+482:59  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+599:49  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+603:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+604:16  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+666:32  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+692:33  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+722:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+742:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+903:22  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/projectService.ts
+56:5  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any').
+61:10  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+141:5  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any').
+147:10  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/questionService.ts
+78:5  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any').
+85:10  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/services/systemService.ts
+51:5  Warning: Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any').
+62:12  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/test_schema.ts
+5:7  Warning: '_1' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+6:7  Warning: '_2' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./lib/types/accounting-standards.ts
+36:13  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+37:16  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+75:13  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+76:16  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+105:12  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+108:20  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/types/quarterly-closing.ts
+46:16  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/types/system.ts
+91:34  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/types/work-manual.ts
+15:13  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/utils/entityMapping.ts
+6:15  Warning: 'Subsidiary' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./lib/utils/exportExcel.ts
+77:9  Warning: 'subsidiaryMap' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+88:31  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/utils/monthlySubmissionTemplate.ts
+9:65  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+13:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/utils/parseWorkAssignment.ts
+23:44  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+27:18  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+33:22  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+49:31  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./lib/utils/submissionTemplate.ts
+12:58  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+17:19  Warning: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/40) ...
+   Generating static pages (10/40) 
+   Generating static pages (20/40) 
+?뿺截?Map Config: {
+  scale: 180,
+  center: [ 32.57815, 12.251650000000001 ],
+  latRange: 84.563535,
+  lngRange: 271.6437,
+  selectedId: null
+}
+   Generating static pages (30/40) 
+ ??Generating static pages (40/40)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+????/                                    5.57 kB         174 kB
+????/_not-found                          990 B           107 kB
+????/announcements                       5.76 kB         211 kB
+??? /announcements/[id]                  6.38 kB         208 kB
+??? /api/ai/models                       168 B           106 kB
+??? /api/ai/parse-issue                  168 B           106 kB
+??? /api/cron/check-submissions          168 B           106 kB
+??? /api/download                        168 B           106 kB
+??? /api/submissions                     168 B           106 kB
+??? /api/upload                          168 B           106 kB
+????/audit-and-tax                       9.49 kB         219 kB
+????/financial-result                    45.3 kB         351 kB
+????/gbs                                 394 B           106 kB
+????/gbs/calendar                        14.9 kB         242 kB
+????/gbs/test                            555 B           106 kB
+????/gbs/work-assignment                 8.78 kB         463 kB
+????/gbs/work-manual                     9.83 kB         334 kB
+????/inter-co-transaction                21.9 kB         374 kB
+????/issue                               13.7 kB         369 kB
+????/login                               648 B           106 kB
+????/monthly-closing                     168 B           106 kB
+????/monthly-closing/dashboard           6.99 kB         455 kB
+????/monthly-closing/mapping             7.77 kB         360 kB
+????/monthly-closing/overview            9.06 kB         218 kB
+????/monthly-closing/result              8.43 kB         361 kB
+????/monthly-closing/submission          6.25 kB         370 kB
+????/monthly-closing/upload              5.45 kB         361 kB
+????/p-file                              168 B           106 kB
+????/quarterly-closing                   168 B           106 kB
+????/quarterly-closing/calendar          8.26 kB         383 kB
+????/quarterly-closing/calendar-t        7.34 kB         363 kB
+????/quarterly-closing/overview          8.03 kB         364 kB
+????/quarterly-closing/reference         42.7 kB         236 kB
+????/quarterly-closing/submission        11.7 kB         379 kB
+????/system                              5.26 kB         357 kB
+????/system/process                      1.26 kB         115 kB
+????/system/project                      14.3 kB         370 kB
+????/voe                                 5.42 kB         162 kB
++ First Load JS shared by all            106 kB
+  ??chunks/1517-474567dcc5c5022f.js      50.8 kB
+  ??chunks/4bd1b696-28e3c7899b58ff78.js  53 kB
+  ??other shared chunks (total)          2.05 kB
+
+
+?? (Static)   prerendered as static content
+?  (Dynamic)  server-rendered on demand
+

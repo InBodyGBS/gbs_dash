@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { calculateAchievementRate } from '@/lib/utils/achievement-rate';
 import { format, eachDayOfInterval, parseISO } from 'date-fns';
 import { getCategoryById, CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quarterly-closing';
 
@@ -188,7 +189,7 @@ export function useScheduleData() {
         return quarterId;
       }
       return null;
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ ensureQuarterExists 예외:', error);
       toast.error('분기 데이터 확인 중 오류가 발생했습니다.');
       return null;
@@ -274,14 +275,14 @@ export function useScheduleData() {
         .maybeSingle();
 
       if (fiscalQuarterData) {
-        fiscalQuarterId = (fiscalQuarterData as any).id;
+        fiscalQuarterId = (fiscalQuarterData as { id: string }).id;
         console.log(`✅ 귀속연도 Quarter 조회 성공:`, { fiscalYear, fiscalQuarter, fiscalQuarterId });
       } else {
         console.log(`⚠️ 귀속연도 ${fiscalYear}년 ${fiscalQuarter}Q의 quarter가 없습니다. 생성 시도...`);
         const quarterStartDate = new Date(fiscalYear, (fiscalQuarter - 1) * 3, 1);
         const quarterEndDate = new Date(fiscalYear, fiscalQuarter * 3, 0);
 
-        const { data: newFiscalQuarter, error: insertError } = await (supabase as any)
+        const { data: newFiscalQuarter, error: insertError } = await supabase
           .from('quarters')
           .insert({
             year: fiscalYear,
@@ -295,7 +296,7 @@ export function useScheduleData() {
         if (insertError) {
           console.warn('Quarter 생성 실패:', insertError);
         } else {
-          fiscalQuarterId = (newFiscalQuarter as any)?.id;
+          fiscalQuarterId = (newFiscalQuarter as { id?: string } | null)?.id ?? null;
           console.log(`✅ Quarter 생성 성공: ${fiscalQuarterId}`);
         }
       }
@@ -332,40 +333,65 @@ export function useScheduleData() {
           console.warn('preliminary_sales_sga 테이블 조회 실패 (무시):', preliminarySalesSGAResult.error);
         }
 
-        const submissionDocuments = ((submissionsResult.data || []) as any[])
-          .filter((item: any) => {
+        type RawSubmissionRow = {
+          id: string;
+          quarter_id: string | null;
+          subsidiary_id: string;
+          category: string;
+          file_name: string;
+          file_path: string | null;
+          file_size: number | null;
+          version: number | null;
+          submitted_by: string | null;
+          submitted_at: string | null;
+        };
+
+        type RawPreliminarySalesSGARow = {
+          subsidiary_id: string;
+          quarter_id: string | null;
+          updated_at: string;
+        };
+
+        const normalizeSubmission = (
+          row: RawSubmissionRow,
+          fallbackQuarterId: string,
+        ): DocumentSubmission => ({
+          id: row.id,
+          quarter_id: row.quarter_id || fallbackQuarterId,
+          subsidiary_id: row.subsidiary_id,
+          category: row.category,
+          file_name: row.file_name,
+          file_path: row.file_path ?? '',
+          file_size: row.file_size ?? 0,
+          version: row.version ?? 1,
+          submitted_by: row.submitted_by,
+          submitted_at: row.submitted_at ?? '',
+        });
+
+        const submissionRows = (submissionsResult.data || []) as unknown as RawSubmissionRow[];
+        const submissionDocuments = submissionRows
+          .filter((item) => {
             if (!item.quarter_id) return !fiscalQuarterId;
             return item.quarter_id === fiscalQuarterId;
           })
-          .map((item: any) => ({
-            id: item.id,
-            quarter_id: item.quarter_id || fiscalQuarterId,
-            subsidiary_id: item.subsidiary_id,
-            category: item.category,
-            file_name: item.file_name,
-            file_path: item.file_path,
-            file_size: item.file_size,
-            version: item.version,
-            submitted_by: item.submitted_by,
-            submitted_at: item.submitted_at,
-          }));
+          .map((item) => normalizeSubmission(item, fiscalQuarterId ?? ''));
 
-        const preliminarySalesSGAData = (preliminarySalesSGAResult.data || []) as any[];
-        const preliminarySalesSubmissions = new Map<string, any>();
+        const preliminarySalesSGAData = (preliminarySalesSGAResult.data || []) as unknown as RawPreliminarySalesSGARow[];
+        const preliminarySalesSubmissions = new Map<string, DocumentSubmission>();
 
-        preliminarySalesSGAData.forEach((item: any) => {
+        preliminarySalesSGAData.forEach((item) => {
           const key = `${item.subsidiary_id}_preliminary-sales`;
           if (!preliminarySalesSubmissions.has(key)) {
-            const sameSubsidiary = preliminarySalesSGAData.filter(
-              (d: any) => d.subsidiary_id === item.subsidiary_id,
+            const sameSubsidiary = preliminarySalesSGAData.filter((d) => d.subsidiary_id === item.subsidiary_id);
+            const latestUpdate = sameSubsidiary.reduce(
+              (latest, current) =>
+                new Date(current.updated_at) > new Date(latest) ? current.updated_at : latest,
+              item.updated_at,
             );
-            const latestUpdate = sameSubsidiary.reduce((latest: string, current: any) => {
-              return new Date(current.updated_at) > new Date(latest) ? current.updated_at : latest;
-            }, item.updated_at);
 
             preliminarySalesSubmissions.set(key, {
               id: `preliminary-sales-${item.subsidiary_id}`,
-              quarter_id: item.quarter_id || fiscalQuarterId,
+              quarter_id: item.quarter_id || (fiscalQuarterId ?? ''),
               subsidiary_id: item.subsidiary_id,
               category: 'preliminary-sales',
               file_name: 'Preliminary Sales/SG&A',
@@ -425,46 +451,63 @@ export function useScheduleData() {
           console.warn('preliminary_sales_sga 테이블 조회 실패 (무시):', preliminarySalesSGAResult.error);
         }
 
-        let scheduleItemsData = itemsResult.data || [];
+        const scheduleItemsData = (itemsResult.data || []) as unknown as ScheduleItem[];
 
-        const documentSubmissions = (documentSubmissionsResult.data || []).map((item: any) => ({
-          id: item.id,
-          quarter_id: item.quarter_id,
-          subsidiary_id: item.subsidiary_id,
-          category: item.category,
-          file_name: item.file_name,
-          file_path: item.file_path,
-          file_size: item.file_size,
-          version: item.version,
-          submitted_by: item.submitted_by,
-          submitted_at: item.submitted_at,
-        }));
+        type RawSubmissionRow = {
+          id: string;
+          quarter_id: string | null;
+          subsidiary_id: string;
+          category: string;
+          file_name: string;
+          file_path: string | null;
+          file_size: number | null;
+          version: number | null;
+          submitted_by: string | null;
+          submitted_at: string | null;
+        };
 
-        const submissionDocuments = ((submissionsResult.data || []) as any[])
-          .filter((item: any) => {
+        type RawPreliminarySalesSGARow = {
+          subsidiary_id: string;
+          quarter_id: string | null;
+          updated_at: string;
+        };
+
+        const normalizeSubmission = (
+          row: RawSubmissionRow,
+          fallbackQuarterId: string,
+        ): DocumentSubmission => ({
+          id: row.id,
+          quarter_id: row.quarter_id || fallbackQuarterId,
+          subsidiary_id: row.subsidiary_id,
+          category: row.category,
+          file_name: row.file_name,
+          file_path: row.file_path ?? '',
+          file_size: row.file_size ?? 0,
+          version: row.version ?? 1,
+          submitted_by: row.submitted_by,
+          submitted_at: row.submitted_at ?? '',
+        });
+
+        const documentSubmissionsRows = (documentSubmissionsResult.data || []) as unknown as RawSubmissionRow[];
+        const documentSubmissions = documentSubmissionsRows.map((item) =>
+          normalizeSubmission(item, fiscalQuarterId ?? ''),
+        );
+
+        const submissionRows = (submissionsResult.data || []) as unknown as RawSubmissionRow[];
+        const submissionDocuments = submissionRows
+          .filter((item) => {
             if (!item.quarter_id) return !fiscalQuarterId;
             return item.quarter_id === fiscalQuarterId;
           })
-          .map((item: any) => ({
-            id: item.id,
-            quarter_id: item.quarter_id || fiscalQuarterId,
-            subsidiary_id: item.subsidiary_id,
-            category: item.category,
-            file_name: item.file_name,
-            file_path: item.file_path,
-            file_size: item.file_size,
-            version: item.version,
-            submitted_by: item.submitted_by,
-            submitted_at: item.submitted_at,
-          }));
+          .map((item) => normalizeSubmission(item, fiscalQuarterId ?? ''));
 
         console.log(`📊 submissions 조회 결과:`, {
           fiscalYear,
           fiscalQuarter,
           fiscalQuarterId,
-          rawSubmissionsCount: (submissionsResult.data || []).length,
+          rawSubmissionsCount: submissionRows.length,
           filteredSubmissionsCount: submissionDocuments.length,
-          rawSubmissions: (submissionsResult.data || []).map((s: any) => ({
+          rawSubmissions: submissionRows.map((s) => ({
             id: s.id,
             category: s.category,
             subsidiary_id: s.subsidiary_id,
@@ -480,22 +523,24 @@ export function useScheduleData() {
           })),
         });
 
-        const preliminarySalesSGAData = (preliminarySalesSGAResult.data || []) as any[];
-        const preliminarySalesSubmissions = new Map<string, any>();
+        const preliminarySalesSGAData = (preliminarySalesSGAResult.data || []) as unknown as RawPreliminarySalesSGARow[];
+        const preliminarySalesSubmissions = new Map<string, DocumentSubmission>();
 
-        preliminarySalesSGAData.forEach((item: any) => {
+        preliminarySalesSGAData.forEach((item) => {
           const key = `${item.subsidiary_id}_preliminary-sales`;
           if (!preliminarySalesSubmissions.has(key)) {
             const sameSubsidiary = preliminarySalesSGAData.filter(
-              (d: any) => d.subsidiary_id === item.subsidiary_id,
+              (d) => d.subsidiary_id === item.subsidiary_id,
             );
-            const latestUpdate = sameSubsidiary.reduce((latest: string, current: any) => {
-              return new Date(current.updated_at) > new Date(latest) ? current.updated_at : latest;
-            }, item.updated_at);
+            const latestUpdate = sameSubsidiary.reduce(
+              (latest, current) =>
+                new Date(current.updated_at) > new Date(latest) ? current.updated_at : latest,
+              item.updated_at,
+            );
 
             preliminarySalesSubmissions.set(key, {
               id: `preliminary-sales-${item.subsidiary_id}`,
-              quarter_id: item.quarter_id || fiscalQuarterId,
+              quarter_id: item.quarter_id || (fiscalQuarterId ?? ''),
               subsidiary_id: item.subsidiary_id,
               category: 'preliminary-sales',
               file_name: 'Preliminary Sales/SG&A',
@@ -706,9 +751,10 @@ export function useScheduleData() {
         setScheduleItems(updatedScheduleItems);
         setSubmissions(mergedSubmissions);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load data:', error);
-      toast.error(`데이터 로딩 실패: ${error.message || '알 수 없는 오류'}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`데이터 로딩 실패: ${message || '알 수 없는 오류'}`);
     } finally {
       setLoading(false);
     }
@@ -761,7 +807,7 @@ export function useScheduleData() {
       return;
     }
 
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('schedule_items')
       .insert({
         quarter_id: quarterId,
@@ -769,7 +815,7 @@ export function useScheduleData() {
         category: categoryId,
         planned_date: date,
         status: 'planned',
-      } as any);
+      });
 
     if (error) {
       console.error('❌ Schedule item 추가 실패:', error);
@@ -787,7 +833,7 @@ export function useScheduleData() {
   const handleItemDelete = async (itemId: string) => {
     if (!confirm('일정을 삭제하시겠습니까?')) return;
 
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('schedule_items')
       .delete()
       .eq('id', itemId);
@@ -801,9 +847,9 @@ export function useScheduleData() {
   };
 
   const handleItemConfirm = async (itemId: string, confirmedDate: string) => {
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('schedule_items')
-      .update({ status: 'confirmed', confirmed_date: confirmedDate } as any)
+      .update({ status: 'confirmed', confirmed_date: confirmedDate })
       .eq('id', itemId);
 
     if (error) {
@@ -838,7 +884,7 @@ export function useScheduleData() {
           toast.info('Badge를 클릭하여 확정 날짜를 선택하세요.');
         } else {
           if (confirm('확정된 일정을 삭제하시겠습니까?')) {
-            const { error } = await (supabase as any)
+            const { error } = await supabase
               .from('schedule_items')
               .delete()
               .eq('id', existingCategoryItem.id);
@@ -870,7 +916,7 @@ export function useScheduleData() {
           status: 'planned',
         });
 
-        const { data: insertedData, error } = await (supabase as any)
+        const { data: insertedData, error } = await supabase
           .from('schedule_items')
           .insert({
             quarter_id: quarterId,
@@ -878,7 +924,7 @@ export function useScheduleData() {
             category: selectedCategory,
             planned_date: date,
             status: 'planned',
-          } as any)
+          })
           .select();
 
         if (error) {
@@ -924,7 +970,7 @@ export function useScheduleData() {
         scheduleItems.filter((item) => item.subsidiary_id === subsidiary.id),
       );
 
-      const row: any[] = [subsidiary.name.replace('InBody ', '')];
+      const row: string[] = [subsidiary.name.replace('InBody ', '')];
 
       allDates.forEach((date) => {
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -936,7 +982,7 @@ export function useScheduleData() {
         if (items.length > 0) {
           const categoryLabels = items
             .map((item) => {
-              const category = getCategoryById(item.category as any);
+              const category = getCategoryById(item.category as ClosingCategoryId);
               const status = item.status === 'confirmed' ? '✓' : '○';
               return category ? `${status}${category.label}` : '';
             })
@@ -971,7 +1017,7 @@ export function useScheduleData() {
     const headers = ['Entity', ...CLOSING_CATEGORIES.map((cat) => cat.label)];
 
     const rows = subsidiaries.map((subsidiary) => {
-      const row: any[] = [subsidiary.name.replace('InBody ', '')];
+      const row: string[] = [subsidiary.name.replace('InBody ', '')];
       CLOSING_CATEGORIES.forEach((category) => {
         const hasItem = scheduleItems.some(
           (item) =>

@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { CardNewsDetail } from '@/lib/types/accounting-standards';
 import {
   Dialog,
@@ -32,9 +32,18 @@ export function CardNewsDetailDialog({
   const [card, setCard] = useState<CardNewsDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const keyPointsText: string[] = Array.isArray(card?.key_points)
+    ? card!.key_points.map((p) => String(p))
+    : [];
+
+  const keyPointsNodes: ReactNode = keyPointsText.map((point, index) => (
+    <li key={index}>{point}</li>
+  ));
+
   useEffect(() => {
     if (open && cardId) {
-      setLoading(true);
+      // Avoid synchronous state updates directly in the effect body.
+      Promise.resolve().then(() => setLoading(true));
       getCardNewsDetail(cardId)
         .then((data) => {
           setCard(data);
@@ -46,7 +55,7 @@ export function CardNewsDetailDialog({
           setLoading(false);
         });
     } else {
-      setCard(null);
+      Promise.resolve().then(() => setCard(null));
     }
   }, [open, cardId]);
 
@@ -112,16 +121,12 @@ export function CardNewsDetailDialog({
               </div>
 
               {/* 핵심 포인트 */}
-              {card.key_points && card.key_points.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-2">핵심 포인트</h3>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    {card.key_points.map((point, index) => (
-                      <li key={index}>{point}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div>
+                <h3 className="font-semibold mb-2">핵심 포인트</h3>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  {keyPointsNodes}
+                </ul>
+              </div>
 
               {/* 예시 */}
               {card.examples && (

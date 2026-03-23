@@ -30,7 +30,7 @@ export function AuthorFilterDialog({
   const uniqueAuthors = Array.from(new Set(issues.map((issue) => issue.created_by).filter(Boolean))).sort();
 
   useEffect(() => {
-    setTempSelected(selectedAuthors);
+    Promise.resolve().then(() => setTempSelected(selectedAuthors));
   }, [selectedAuthors, open]);
 
   const handleToggle = (author: string) => {

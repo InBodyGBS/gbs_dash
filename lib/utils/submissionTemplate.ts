@@ -9,12 +9,15 @@ import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
 /**
  * 카테고리별 템플릿 데이터 생성
  */
-function getTemplateData(categoryId: ClosingCategoryId): any[][] {
+type TemplateCell = string | number;
+type TemplateData = TemplateCell[][];
+
+function getTemplateData(categoryId: ClosingCategoryId): TemplateData {
   const category = CLOSING_CATEGORIES.find((cat) => cat.id === categoryId);
   const categoryLabel = category?.label || categoryId;
 
   // 기본 템플릿 구조 (카테고리에 따라 다를 수 있음)
-  const template: any[][] = [
+  const template: TemplateData = [
     // 헤더
     ['Quarterly Report Template', '', '', ''],
     ['Category', categoryLabel, '', ''],

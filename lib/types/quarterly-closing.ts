@@ -43,7 +43,7 @@ export interface ClosingGuide {
   icon: string | null;
   summary: string | null;
   content: string;
-  attachments: any;
+  attachments: unknown;
   tags: string[] | null;
   view_count: number;
   created_at: string;

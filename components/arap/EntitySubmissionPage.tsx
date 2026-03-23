@@ -537,7 +537,7 @@ export function EntitySubmissionPage({
               {items.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                    No items. Click "Add Line" or upload a file.
+                    No items. Click &quot;Add Line&quot; or upload a file.
                   </td>
                 </tr>
               ) : (

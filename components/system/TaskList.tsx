@@ -428,7 +428,7 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
 
         {tasks.length === 0 && (
           <div className="text-center py-8 text-gray-400">
-            <p>Task가 없습니다. "+ Add Task" 버튼을 클릭하여 추가하세요.</p>
+            <p>Task가 없습니다. &quot;+ Add Task&quot; 버튼을 클릭하여 추가하세요.</p>
           </div>
         )}
       </div>

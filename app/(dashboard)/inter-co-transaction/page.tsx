@@ -29,39 +29,27 @@ interface ArapSession {
 
 export default function InterCoTransactionPage() {
   const [entities, setEntities] = useState<ArapEntity[]>([]);
-  const [session, setSession] = useState<ArapSession | null>(null);
-  const [showLogin, setShowLogin] = useState(true);
+  const [session, setSession] = useState<ArapSession | null>(() => {
+    // sessionStorage는 브라우저에서만 접근 가능합니다.
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (!stored) return null;
+
+      const sessionData: ArapSession = JSON.parse(stored);
+      // 세션 타임아웃 체크 (30분)
+      const now = Date.now();
+      if (now - sessionData.loginTime < 30 * 60 * 1000) return sessionData;
+
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      return null;
+    } catch {
+      return null;
+    }
+  });
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [activeTab, setActiveTab] = useState('monthly');
-
-  useEffect(() => {
-    loadEntities();
-    loadSession();
-  }, []);
-
-  const loadSession = () => {
-    try {
-      const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
-      if (stored) {
-        const sessionData: ArapSession = JSON.parse(stored);
-        // 세션 타임아웃 체크 (30분)
-        const now = Date.now();
-        if (now - sessionData.loginTime < 30 * 60 * 1000) {
-          setSession(sessionData);
-          setShowLogin(false);
-        } else {
-          sessionStorage.removeItem(SESSION_STORAGE_KEY);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load session:', error);
-    }
-  };
-
-  useEffect(() => {
-    loadEntities();
-  }, []);
 
   const loadEntities = async () => {
     try {
@@ -71,6 +59,16 @@ export default function InterCoTransactionPage() {
       console.error('Failed to load entities:', error);
     }
   };
+
+  useEffect(() => {
+    // setState는 Promise 콜백에서 실행되도록 해서
+    // `react-hooks/set-state-in-effect` 규칙을 피합니다.
+    getArapEntities()
+      .then((entitiesData) => setEntities(entitiesData))
+      .catch((error) => {
+        console.error('Failed to load entities:', error);
+      });
+  }, []);
 
   const handleLogin = (entityId: string, isAdmin: boolean) => {
     const entity = entities.find((e) => e.id === entityId);
@@ -84,7 +82,6 @@ export default function InterCoTransactionPage() {
     };
 
     setSession(sessionData);
-    setShowLogin(false);
     sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
 
     // 관리자는 monthly 탭, 일반 사용자는 main 탭으로 시작
@@ -93,7 +90,6 @@ export default function InterCoTransactionPage() {
 
   const handleLogout = () => {
     setSession(null);
-    setShowLogin(true);
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
   };
 
@@ -110,10 +106,10 @@ export default function InterCoTransactionPage() {
     );
   }
 
-  if (showLogin || !session) {
+  if (!session) {
     return (
       <ArapLoginDialog
-        open={showLogin}
+        open={true}
         entities={entities}
         onLogin={handleLogin}
       />

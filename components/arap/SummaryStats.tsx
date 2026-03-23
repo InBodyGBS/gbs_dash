@@ -19,18 +19,15 @@ export function SummaryStats({ entities, matrix, selectedYear, selectedMonth }: 
   const [submittedEntityIds, setSubmittedEntityIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadSubmittedEntities();
+    getSubmittedEntityIds(selectedYear, selectedMonth)
+      .then((ids) => {
+        setSubmittedEntityIds(new Set(ids));
+      })
+      .catch((error) => {
+        console.error('Failed to load submitted entities:', error);
+        setSubmittedEntityIds(new Set());
+      });
   }, [selectedYear, selectedMonth]);
-
-  const loadSubmittedEntities = async () => {
-    try {
-      const ids = await getSubmittedEntityIds(selectedYear, selectedMonth);
-      setSubmittedEntityIds(new Set(ids));
-    } catch (error) {
-      console.error('Failed to load submitted entities:', error);
-      setSubmittedEntityIds(new Set());
-    }
-  };
 
   // 전체 거래쌍 수 계산 (n*(n-1)/2)
   const totalPairs = (entities.length * (entities.length - 1)) / 2;

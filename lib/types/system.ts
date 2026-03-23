@@ -88,7 +88,7 @@ export interface Process {
   entity_id: string;
   category: ProcessCategory;
   description: string | null;
-  flowchart_data: Record<string, any>;
+  flowchart_data: Record<string, unknown>;
   version: number;
   status: ProcessStatus;
   created_by: string;

@@ -85,7 +85,7 @@ export function exportSystemsToExcel(
 
   // Excel 데이터 생성 (법인별 행)
   const excelData = subsidiaries.map((subsidiary) => {
-    const row: Record<string, any> = {
+    const row: Record<string, string> = {
       'Entity': subsidiary.name,
       'Code': subsidiary.code,
       'Country': subsidiary.country,

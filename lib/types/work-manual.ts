@@ -12,5 +12,5 @@ export interface WorkManual {
   file_type: WorkManualType | null;
   uploaded_by: string | null;
   uploaded_at: string;
-  content?: any; // JSONB
+  content?: unknown; // JSONB
 }
