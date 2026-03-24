@@ -30,7 +30,7 @@ export default function WorkManualPage() {
     };
 
     loadDefaultManual();
-  }, [refreshKey]); // refreshKey가 변경될 때마다 다시 시도
+  }, [refreshKey, selectedManual]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 h-full flex flex-col">

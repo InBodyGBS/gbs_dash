@@ -7,11 +7,11 @@
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Download, Loader2, GripVertical } from 'lucide-react';
+import { Download, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { System, SystemCategory } from '@/lib/types/system';
-import { updateSystemName, upsertSystem } from '@/lib/services/systemService';
+import { updateSystemName } from '@/lib/services/systemService';
 import { exportSystemsToExcel } from '@/lib/utils/exportExcel';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';

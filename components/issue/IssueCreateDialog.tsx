@@ -32,6 +32,9 @@ interface IssueCreateDialogProps {
   onSuccess: () => void;
 }
 
+type ErrorLike = { message?: string; details?: string; hint?: string; code?: string };
+const toErrorLike = (error: unknown): ErrorLike => (error ?? {}) as ErrorLike;
+
 export function IssueCreateDialog({
   open,
   onOpenChange,
@@ -61,7 +64,7 @@ export function IssueCreateDialog({
       return;
     }
 
-    const issueData: any = {
+    const issueData: IssueFormData = {
       title: formData.title!,
       category: formData.category!,
       entity_id: formData.entity_id!,
@@ -99,7 +102,7 @@ export function IssueCreateDialog({
 
     try {
       setLoading(true);
-      const newIssue = await createIssue(issueData);
+      await createIssue(issueData);
       toast.success('이슈가 등록되었습니다');
       onSuccess();
       onOpenChange(false);
@@ -115,24 +118,25 @@ export function IssueCreateDialog({
         inquired_by: '',
         type: undefined,
       });
-    } catch (error: any) {
-      console.error('❌ Detailed Error:', error);
+    } catch (error: unknown) {
+      const err = toErrorLike(error);
+      console.error('❌ Detailed Error:', err);
       
       // Supabase 에러 메시지 추출
       let errorMessage = '이슈 등록 실패';
-      if (error?.message) {
-        errorMessage = error.message;
-      } else if (error?.details) {
-        errorMessage = error.details;
-      } else if (error?.hint) {
-        errorMessage = error.hint;
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.details) {
+        errorMessage = err.details;
+      } else if (err.hint) {
+        errorMessage = err.hint;
       }
       
       console.error('Error details:', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
+        message: err.message,
+        details: err.details,
+        hint: err.hint,
+        code: err.code,
       });
       
       toast.error('이슈 등록 실패', {

@@ -6,6 +6,33 @@
 import { supabase } from '@/lib/supabase/client';
 import type { GBSCalendarEvent } from '@/lib/types/gbs-calendar';
 
+type GBSCalendarRow = {
+  id: string;
+  date: string;
+  end_date: string | null;
+  time: string | null;
+  title: string;
+  assignee: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
+const isTableMissingError = (error: unknown): boolean => {
+  const message = getErrorMessage(error);
+  const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: string }).code : undefined;
+  return (
+    code === '42P01' ||
+    message.includes('does not exist') ||
+    message.includes('Could not find the table')
+  );
+};
+
 /**
  * 모든 일정 조회
  */
@@ -30,7 +57,7 @@ export async function getGBSCalendarEvents(): Promise<GBSCalendarEvent[]> {
       throw error;
     }
 
-    return (data || []).map((item) => ({
+    return ((data || []) as unknown as GBSCalendarRow[]).map((item) => ({
       id: item.id,
       date: item.date,
       end_date: item.end_date || undefined,
@@ -40,17 +67,13 @@ export async function getGBSCalendarEvents(): Promise<GBSCalendarEvent[]> {
       created_at: item.created_at,
       updated_at: item.updated_at,
     }));
-  } catch (error: any) {
-    console.error('Error fetching calendar events:', error);
+  } catch (error: unknown) {
+    console.error('Error fetching calendar events:', getErrorMessage(error));
     // 테이블이 없을 경우 빈 배열 반환
-    if (
-      error.code === '42P01' ||
-      error.message?.includes('does not exist') ||
-      error.message?.includes('Could not find the table')
-    ) {
+    if (isTableMissingError(error)) {
       return [];
     }
-    throw new Error(`일정 조회 실패: ${error.message || '알 수 없는 오류'}`);
+    throw new Error(`일정 조회 실패: ${getErrorMessage(error)}`);
   }
 }
 
@@ -85,15 +108,16 @@ export async function createGBSCalendarEvent(
     throw new Error(`일정 추가 실패: ${error.message}`);
   }
 
+  const created = data as unknown as GBSCalendarRow;
   return {
-    id: data.id,
-    date: data.date,
-    end_date: data.end_date || undefined,
-    time: data.time || undefined,
-    title: data.title,
-    assignee: data.assignee || undefined,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
+    id: created.id,
+    date: created.date,
+    end_date: created.end_date || undefined,
+    time: created.time || undefined,
+    title: created.title,
+    assignee: created.assignee || undefined,
+    created_at: created.created_at,
+    updated_at: created.updated_at,
   };
 }
 
@@ -130,15 +154,16 @@ export async function updateGBSCalendarEvent(
     throw new Error(`일정 수정 실패: ${error.message}`);
   }
 
+  const updated = data as unknown as GBSCalendarRow;
   return {
-    id: data.id,
-    date: data.date,
-    end_date: data.end_date || undefined,
-    time: data.time || undefined,
-    title: data.title,
-    assignee: data.assignee || undefined,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
+    id: updated.id,
+    date: updated.date,
+    end_date: updated.end_date || undefined,
+    time: updated.time || undefined,
+    title: updated.title,
+    assignee: updated.assignee || undefined,
+    created_at: updated.created_at,
+    updated_at: updated.updated_at,
   };
 }
 
@@ -190,7 +215,7 @@ export async function deleteAllGBSCalendarEvents(): Promise<void> {
     return; // 삭제할 일정이 없음
   }
 
-  const ids = data.map((item) => item.id);
+  const ids = ((data || []) as unknown as Array<{ id: string }>).map((item) => item.id);
   const { error } = await supabase
     .from('gbs_calendar_events')
     .delete()

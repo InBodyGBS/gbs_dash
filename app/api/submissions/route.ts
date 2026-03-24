@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     if (finalQuarterId) {
-      versionQuery = (versionQuery as any).eq('quarter_id', finalQuarterId);
+      versionQuery = versionQuery.eq('quarter_id', finalQuarterId);
     }
 
     const { data: existingRows } = await versionQuery;

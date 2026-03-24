@@ -30,6 +30,12 @@ interface WorkManualListProps {
   refreshKey?: number;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function WorkManualList({
   onSelect,
   selectedId,
@@ -45,10 +51,10 @@ export function WorkManualList({
         setLoading(true);
         const data = await getWorkManuals();
         setManuals(data);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to load work manuals:', error);
         toast.error('파일 목록 로드 실패', {
-          description: error.message || '파일 목록을 불러오는 중 오류가 발생했습니다.',
+          description: getErrorMessage(error),
         });
       } finally {
         setLoading(false);
@@ -74,9 +80,9 @@ export function WorkManualList({
       // 목록 새로고침
       const data = await getWorkManuals();
       setManuals(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('삭제 실패', {
-        description: error.message || '파일 삭제 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

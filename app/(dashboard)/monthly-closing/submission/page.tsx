@@ -13,6 +13,12 @@ import { SubmissionList } from '@/components/monthly-closing/SubmissionList';
 
 const STORAGE_KEY = 'monthly-closing-submission-state';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export default function MonthlySubmissionPage() {
   const savedState = (() => {
     if (typeof window === 'undefined') return null;
@@ -57,9 +63,9 @@ export default function MonthlySubmissionPage() {
         const { data, error } = await supabase.from('subsidiaries').select('*').order('name');
         if (error) throw error;
         setSubsidiaries(data || []);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to load subsidiaries:', error);
-        toast.error('법인 목록 로드 실패', { description: error.message || '알 수 없는 오류' });
+        toast.error('법인 목록 로드 실패', { description: getErrorMessage(error) });
       } finally {
         setLoadingSubsidiaries(false);
       }

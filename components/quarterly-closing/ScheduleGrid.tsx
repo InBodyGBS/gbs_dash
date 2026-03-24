@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { ScheduleItem, Quarter, DocumentSubmission } from '@/lib/types/quarterly-closing';
 import { getCategoryById } from '@/lib/constants/closing-categories';
+import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import { calculateBySubsidiary } from '@/lib/utils/achievement-rate';
 
 interface ScheduleGridProps {
@@ -39,7 +40,6 @@ export const ScheduleGrid = ({
   selectedCategory,
   onCellClick,
   onCategoryDrop,
-  onItemDelete,
   onItemConfirm,
   onEntityOrderChange,
 }: ScheduleGridProps) => {
@@ -383,7 +383,7 @@ export const ScheduleGrid = ({
                   {items.length > 0 ? (
                     <div className="flex flex-col gap-0.5 min-h-[2rem] max-h-[6rem] overflow-y-auto">
                       {items.map((item) => {
-                        const category = getCategoryById(item.category as any);
+                        const category = getCategoryById(item.category as ClosingCategoryId);
                         if (!category) return null;
 
                         // 레이블 축약 (첫 단어의 첫 3글자)
@@ -423,7 +423,7 @@ export const ScheduleGrid = ({
                       {dateSubmissions
                         .filter(sub => !items.some(item => item.category === sub.category))
                         .map((sub) => {
-                          const category = getCategoryById(sub.category as any);
+                          const category = getCategoryById(sub.category as ClosingCategoryId);
                           if (!category) return null;
                           const shortLabel = category.label.split(' ')[0].substring(0, 3).toUpperCase();
                           return (
@@ -442,7 +442,7 @@ export const ScheduleGrid = ({
                     // 스케줄 항목은 없지만 제출 자료가 있는 경우
                     <div className="flex flex-col gap-0.5 min-h-[2rem] max-h-[6rem] overflow-y-auto">
                       {dateSubmissions.map((sub) => {
-                        const category = getCategoryById(sub.category as any);
+                        const category = getCategoryById(sub.category as ClosingCategoryId);
                         if (!category) return null;
                         const shortLabel = category.label.split(' ')[0].substring(0, 3).toUpperCase();
                         return (

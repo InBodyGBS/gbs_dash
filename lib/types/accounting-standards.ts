@@ -33,8 +33,8 @@ export interface CardNews {
   content: string;
   content_en: string | null;
   key_points: string[] | null;
-  examples: any | null;
-  visual_data: any | null;
+  examples: Record<string, unknown> | unknown[] | string | number | boolean | null;
+  visual_data: VisualData | null;
   tags: string[] | null;
   is_important: boolean;
   created_at: string;
@@ -72,8 +72,8 @@ export interface CardNewsFull {
   content: string;
   content_en: string | null;
   key_points: string[] | null;
-  examples: any | null;
-  visual_data: any | null;
+  examples: Record<string, unknown> | unknown[] | string | number | boolean | null;
+  visual_data: VisualData | null;
   tags: string[] | null;
   is_important: boolean;
   category_name: string;
@@ -102,9 +102,9 @@ export interface VisualData {
   type: 'table' | 'chart';
   data: {
     headers?: string[];
-    rows?: any[][];
+    rows?: unknown[][];
     labels?: string[];
     values?: number[];
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }

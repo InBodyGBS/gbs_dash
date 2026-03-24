@@ -5,7 +5,7 @@
  * Schedule 페이지에서 제출 기록을 표시
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Download, FileSpreadsheet, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,12 @@ interface SubmissionLogTableProps {
   selectedSubsidiaryId?: string | null;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function SubmissionLogTable({
   selectedYear,
   selectedQuarter,
@@ -90,12 +96,7 @@ export function SubmissionLogTable({
     loadSubsidiaries();
   }, []);
 
-  // 제출 로그 로드
-  useEffect(() => {
-    loadSubmissions();
-  }, [filterYear, filterQuarter, filterSubsidiaryId, filterCategory]);
-
-  const loadSubmissions = async () => {
+  const loadSubmissions = useCallback(async () => {
     setLoading(true);
     try {
       let query = supabase
@@ -154,17 +155,21 @@ export function SubmissionLogTable({
           throw error;
         }
       } else {
-        setSubmissions((data || []) as any[]);
+        setSubmissions((data || []) as SubmissionLog[]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load submissions:', error);
       toast.error('제출 로그 조회 실패', {
-        description: error.message || '제출 로그를 불러오는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterYear, filterQuarter, filterSubsidiaryId, filterCategory]);
+
+  useEffect(() => {
+    void loadSubmissions();
+  }, [loadSubmissions]);
 
   const handleDownload = async (submission: SubmissionLog) => {
     try {
@@ -178,9 +183,9 @@ export function SubmissionLogTable({
       toast.success('다운로드 시작', {
         description: `${submission.file_name} 다운로드가 시작되었습니다.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('다운로드 실패', {
-        description: error.message || '파일 다운로드 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

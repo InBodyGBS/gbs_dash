@@ -10,10 +10,16 @@ import { getWorkManuals, getWorkManualUrl } from '@/lib/services/workManualServi
 import { WorkAssignmentCard } from '@/components/gbs/WorkAssignmentCard';
 import { WorkAssignmentDialog } from '@/components/gbs/WorkAssignmentDialog';
 import { parseWorkAssignmentFile } from '@/lib/utils/parseWorkAssignment';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import type { WorkManual } from '@/lib/types/work-manual';
 import type { WorkAssignment } from '@/lib/utils/parseWorkAssignment';
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
 
 export default function WorkAssignmentPage() {
   const [manuals, setManuals] = useState<WorkManual[]>([]);
@@ -70,10 +76,10 @@ export default function WorkAssignmentPage() {
         }
         console.log(`Total assignments parsed: ${allAssignments.length}`);
         setAssignments(allAssignments);
-      } catch (error: any) {
-        console.error('Failed to load work assignments:', error);
+      } catch (error: unknown) {
+        console.error('Failed to load work assignments:', getErrorMessage(error));
         toast.error('파일 목록 로드 실패', {
-          description: error.message || '업무분장표 목록을 불러오는 중 오류가 발생했습니다.',
+          description: getErrorMessage(error),
         });
       } finally {
         setLoading(false);

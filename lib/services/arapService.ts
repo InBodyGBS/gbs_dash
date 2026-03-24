@@ -16,6 +16,40 @@ import type {
   AccountType,
 } from '@/lib/types/arap';
 
+type ErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  name?: string;
+  stack?: string;
+  status?: unknown;
+  statusCode?: unknown;
+  statusText?: unknown;
+  error?: unknown;
+};
+
+type SubmissionRowWithDetails = ArapSubmission & {
+  submission_details: ArapSubmissionDetail[] | ArapSubmissionDetail | null;
+};
+
+type SubmissionRowForStatus = { id: string; match_status: MatchStatus };
+
+type SubmissionDetailLite = {
+  counterparty_entity_id: string;
+  account_type: AccountType;
+  currency: string;
+  amount: number | string;
+};
+
+type SubmissionWithDetailList = {
+  submission_details: SubmissionDetailLite[] | SubmissionDetailLite | null;
+};
+
+function toErrorLike(error: unknown): ErrorLike {
+  return (error ?? {}) as ErrorLike;
+}
+
 /**
  * 모든 Entity 조회 (subsidiaries 테이블 사용)
  */
@@ -46,12 +80,13 @@ export async function getArapEntities() {
       created_at: sub.created_at,
       updated_at: sub.created_at,
     }));
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('Error in getArapEntities:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
     });
     throw error;
   }
@@ -74,13 +109,12 @@ export async function createArapSubmission(
       try {
         const fileName = `${entityId}/${fiscal_year}/${fiscal_month}/${Date.now()}_${file.name}`;
         
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('arap-submissions')
           .upload(fileName, file);
 
         if (uploadError) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const uploadErrorAny = uploadError as any;
+          const uploadErrorAny = uploadError as unknown as ErrorLike;
           // 에러 객체를 안전하게 직렬화
           const errorDetails = {
             message: uploadError.message || 'Unknown error',
@@ -119,12 +153,13 @@ export async function createArapSubmission(
         } else {
           filePath = fileName;
         }
-      } catch (fileError: any) {
-        const errorMessage = fileError?.message || String(fileError) || 'Unknown error';
+      } catch (fileError) {
+        const err = toErrorLike(fileError);
+        const errorMessage = err.message || String(fileError) || 'Unknown error';
         const errorDetails = {
           message: errorMessage,
-          name: fileError?.name || 'Unknown',
-          stack: fileError?.stack || 'No stack trace',
+          name: err.name || 'Unknown',
+          stack: err.stack || 'No stack trace',
           ...(fileError && typeof fileError === 'object' ? fileError : {}),
         };
         
@@ -179,10 +214,11 @@ export async function createArapSubmission(
     if (!submission) {
       throw new Error('Submission was not created');
     }
+    const submissionRow = submission as unknown as { id: string };
 
     // 4. Submission Details 생성
     const details = items.map((item) => ({
-      submission_id: submission.id,
+      submission_id: submissionRow.id,
       invoice_date: item.invoice_date || null,
       counterparty_entity_id: item.counterparty_entity_id,
       account_type: item.account_type,
@@ -206,7 +242,7 @@ export async function createArapSubmission(
       });
       
       // Submission은 생성되었지만 Details 생성 실패 - Submission 삭제
-      await supabase.from('arap_submissions').delete().eq('id', submission.id);
+      await supabase.from('arap_submissions').delete().eq('id', submissionRow.id);
       
       throw new Error(`Failed to create submission details: ${detailsError.message}`);
     }
@@ -214,12 +250,13 @@ export async function createArapSubmission(
     // 5. 매칭 상태 재계산 (에러가 나도 무시)
     try {
       await recalculateMatchStatus(fiscal_year, fiscal_month);
-    } catch (matchError: any) {
+    } catch (matchError) {
+      const err = toErrorLike(matchError);
       console.error('⚠️ Failed to recalculate match status:', {
-        message: matchError?.message,
-        code: matchError?.code,
-        details: matchError?.details,
-        stack: matchError?.stack,
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        stack: err.stack,
       });
       // 매칭 상태 재계산 실패해도 저장은 성공으로 처리
     }
@@ -228,13 +265,14 @@ export async function createArapSubmission(
       ...(submission as unknown as ArapSubmission),
       submission_details: (detailsData || []) as unknown as ArapSubmissionDetail[],
     } as ArapSubmissionWithDetails;
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('❌ Error in createArapSubmission:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      stack: error?.stack,
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
+      stack: err.stack,
     });
     throw error;
   }
@@ -286,8 +324,7 @@ export async function getArapSubmissions(
     }
 
     // submission_details가 배열이 아닌 경우 처리
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const submissions = ((data || []) as any[]).map((sub: ArapSubmission & { submission_details: ArapSubmissionDetail[] | ArapSubmissionDetail | null }) => ({
+    const submissions = ((data || []) as unknown as SubmissionRowWithDetails[]).map((sub) => ({
       ...sub,
       submission_details: Array.isArray(sub.submission_details)
         ? sub.submission_details
@@ -295,16 +332,17 @@ export async function getArapSubmissions(
     }));
 
     return submissions as ArapSubmissionWithDetails[];
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('❌ Error fetching ARAP submissions:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
     });
     
     // 테이블이 없을 경우 빈 배열 반환
-    if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
+    if (err.code === 'PGRST116' || err.message?.includes('does not exist')) {
       return [];
     }
     
@@ -350,16 +388,17 @@ export async function getMatchStatusSummary(
     }
 
     return summaries;
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('Error in getMatchStatusSummary:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
     });
     
     // 테이블이 없을 경우 빈 배열 반환
-    if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
+    if (err.code === 'PGRST116' || err.message?.includes('does not exist')) {
       return [];
     }
     
@@ -446,9 +485,10 @@ export async function getMonthlyStatus(
           
           // DB에 저장된 match_status 사용 (성능 최적화)
           // recalculateMatchStatus가 저장 시 업데이트하므로 최신 상태 반영
-          const hasMatched = submissions?.some((s: any) => s.match_status === 'matched');
-          const hasPending = submissions?.some((s: any) => s.match_status === 'pending');
-          const hasMismatched = submissions?.some((s: any) => s.match_status === 'mismatched');
+          const typedSubmissions = (submissions || []) as SubmissionRowForStatus[];
+          const hasMatched = typedSubmissions.some((s) => s.match_status === 'matched');
+          const hasPending = typedSubmissions.some((s) => s.match_status === 'pending');
+          const hasMismatched = typedSubmissions.some((s) => s.match_status === 'mismatched');
 
           let status: MatchStatus = 'no_data';
           if (submissionCount > 0) {
@@ -474,11 +514,12 @@ export async function getMonthlyStatus(
             status,
             submission_count: submissionCount,
           });
-        } catch (monthError: any) {
+        } catch (monthError) {
+          const err = toErrorLike(monthError);
           // 개별 월 조회 에러는 로깅하고 계속 진행
           console.warn(`Error processing month ${month} for ${entity.entity_name}:`, {
-            message: monthError?.message || String(monthError),
-            code: monthError?.code,
+            message: err.message || String(monthError),
+            code: err.code,
           });
           
           statuses.push({
@@ -494,15 +535,16 @@ export async function getMonthlyStatus(
     }
 
     return statuses;
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     // 에러 객체를 더 안전하게 직렬화
     const errorInfo = {
-      message: error?.message || String(error),
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      name: error?.name,
-      stack: error?.stack,
+      message: err.message || String(error),
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
+      name: err.name,
+      stack: err.stack,
     };
     
     console.error('Error in getMonthlyStatus:', errorInfo);
@@ -564,16 +606,17 @@ export async function getEntityMatchMatrix(
     }
 
     return matrix;
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('Error in getEntityMatchMatrix:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
     });
     
     // 테이블이 없을 경우 빈 배열 반환
-    if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
+    if (err.code === 'PGRST116' || err.message?.includes('does not exist')) {
       return [];
     }
     
@@ -663,14 +706,14 @@ async function calculateMatchStatus(
     const bToAAp: Record<string, number> = {};
 
     // Entity A → Entity B
-    aSubmissions?.forEach((sub: any) => {
+    ((aSubmissions as unknown as SubmissionWithDetailList[] | null | undefined))?.forEach((sub) => {
       const details = Array.isArray(sub.submission_details) 
         ? sub.submission_details 
         : sub.submission_details 
         ? [sub.submission_details] 
         : [];
       
-      details.forEach((detail: any) => {
+      details.forEach((detail) => {
         if (detail && detail.counterparty_entity_id === entityBId) {
           const currency = detail.currency;
           const amount = Number(detail.amount) || 0;
@@ -684,14 +727,14 @@ async function calculateMatchStatus(
     });
 
     // Entity B → Entity A
-    bSubmissions?.forEach((sub: any) => {
+    ((bSubmissions as unknown as SubmissionWithDetailList[] | null | undefined))?.forEach((sub) => {
       const details = Array.isArray(sub.submission_details) 
         ? sub.submission_details 
         : sub.submission_details 
         ? [sub.submission_details] 
         : [];
       
-      details.forEach((detail: any) => {
+      details.forEach((detail) => {
         if (detail && detail.counterparty_entity_id === entityAId) {
           const currency = detail.currency;
           const amount = Number(detail.amount) || 0;
@@ -786,15 +829,16 @@ async function calculateMatchStatus(
       difference: totalDifference,
       currency_breakdown: currencyBreakdown,
     };
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     // 에러 객체를 더 안전하게 직렬화
     const errorInfo = {
-      message: error?.message || String(error),
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      name: error?.name,
-      stack: error?.stack,
+      message: err.message || String(error),
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
+      name: err.name,
+      stack: err.stack,
     };
     
     console.error('Error in calculateMatchStatus:', errorInfo);
@@ -898,12 +942,13 @@ export async function recalculateMatchStatus(
         }
       }
     }
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('❌ Error in recalculateMatchStatus:', {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      stack: error?.stack,
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      stack: err.stack,
     });
     throw error;
   }
@@ -932,15 +977,18 @@ export async function getSubmittedEntityIds(
     }
 
     // 중복 제거하여 고유한 entity_id만 반환
-    const uniqueEntityIds = Array.from(new Set((data || []).map((s: any) => s.entity_id)));
+    const uniqueEntityIds = Array.from(
+      new Set(((data || []) as Array<{ entity_id: string }>).map((s) => s.entity_id)),
+    );
     return uniqueEntityIds;
-  } catch (error: any) {
+  } catch (error) {
+    const err = toErrorLike(error);
     console.error('Error fetching submitted entity IDs:', {
-      message: error?.message,
-      code: error?.code,
+      message: err.message,
+      code: err.code,
     });
     
-    if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
+    if (err.code === 'PGRST116' || err.message?.includes('does not exist')) {
       return [];
     }
     
@@ -970,11 +1018,12 @@ export async function deleteArapSubmission(submissionId: string): Promise<void> 
     .select('file_path')
     .eq('id', submissionId)
     .single();
+  const typedSubmission = submission as unknown as { file_path?: string | null } | null;
 
-  if (submission?.file_path) {
+  if (typedSubmission?.file_path) {
     await supabase.storage
       .from('arap-submissions')
-      .remove([submission.file_path]);
+      .remove([typedSubmission.file_path]);
   }
 
   // Submission 삭제 (CASCADE로 details도 함께 삭제됨)

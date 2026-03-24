@@ -5,8 +5,8 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Building2, Calendar } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getArapEntities, getEntityMatchMatrix, getSubmittedEntityIds } from '@/lib/services/arapService';
@@ -23,6 +23,15 @@ interface AdminEntityViewProps {
   onYearChange: (year: number) => void;
   onMonthChange: (month: number) => void;
 }
+
+type ErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
+const toErrorLike = (error: unknown): ErrorLike => (error ?? {}) as ErrorLike;
 
 export function AdminEntityView({
   selectedYear,
@@ -48,11 +57,7 @@ export function AdminEntityView({
     entity2: ArapEntity;
   } | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [selectedYear, selectedMonth]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [entitiesData, matrixData, submittedIds] = await Promise.all([
@@ -63,16 +68,17 @@ export function AdminEntityView({
       setEntities(entitiesData);
       setMatrix(matrixData);
       setSubmittedEntityIds(new Set(submittedIds));
-    } catch (error: any) {
-      console.error('Failed to load data:', error);
+    } catch (error: unknown) {
+      const err = toErrorLike(error);
+      console.error('Failed to load data:', err);
       console.error('Error details:', {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint,
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        hint: err.hint,
       });
       // 테이블이 없을 경우 빈 배열로 설정
-      if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
+      if (err.code === 'PGRST116' || err.message?.includes('does not exist')) {
         console.warn('ARAP tables not found. Please run the schema migration first.');
         setEntities([]);
         setMatrix([]);
@@ -81,7 +87,11 @@ export function AdminEntityView({
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const getStatusColor = (status: MatchStatus) => {
     switch (status) {

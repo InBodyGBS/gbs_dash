@@ -73,9 +73,6 @@ export function exportSystemsToExcel(
   categories: SystemCategory[],
   filename?: string
 ) {
-  // 법인 정보 매핑
-  const subsidiaryMap = new Map(subsidiaries.map((s) => [s.id, s]));
-  
   // 시스템 데이터를 맵으로 변환
   const systemsMap = new Map<string, System>();
   systems.forEach((system) => {

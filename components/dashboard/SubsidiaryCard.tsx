@@ -114,7 +114,7 @@ export const SubsidiaryCard = ({ subsidiaryId, onClose }: SubsidiaryCardProps) =
     };
 
     fetchData();
-  }, [subsidiaryId]);
+  }, [subsidiaryId, selectedYear]);
 
   // 연도별 데이터 로드
   useEffect(() => {

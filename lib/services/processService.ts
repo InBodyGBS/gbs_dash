@@ -6,8 +6,7 @@ export interface ProcessRecord {
   entity_id: string;
   category: string;
   description: string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  flowchart_data: any;
+  flowchart_data: Record<string, unknown>;
   version: number;
   status: string;
   created_by: string;
@@ -44,8 +43,7 @@ export async function updateProcess(
 ): Promise<ProcessRecord> {
   const { data, error } = await supabase
     .from('processes')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(updates as any)
+    .update(updates as Record<string, unknown>)
     .eq('id', id)
     .select()
     .single();
@@ -59,8 +57,7 @@ export async function createProcess(
 ): Promise<ProcessRecord> {
   const { data, error } = await supabase
     .from('processes')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .insert(processData as any)
+    .insert(processData as Record<string, unknown>)
     .select()
     .single();
 

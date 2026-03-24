@@ -29,16 +29,37 @@ import { ShapePalette } from './ShapePalette';
 import { NodePropertiesPanel } from './NodePropertiesPanel';
 import { ProcessNode, DecisionNode, StartEndNode, type ProcessNodeData } from './ProcessNodes';
 
+type FlowShape = {
+  id: string;
+  type: 'process' | 'decision' | 'startEnd';
+  x?: number;
+  y?: number;
+  text?: string;
+  assignee?: string;
+  estimatedHours?: number;
+};
+
+type FlowConnection = {
+  id?: string;
+  from?: string;
+  to?: string;
+  fromShapeId?: string;
+  toShapeId?: string;
+  label?: unknown;
+};
+
+type FlowchartData = {
+  swimlanes: unknown[];
+  columns: unknown[];
+  shapes: FlowShape[];
+  connections: FlowConnection[];
+};
+
 // Props 인터페이스
 interface ProcessFlowEditorProps {
   processId: string;
-  initialData?: {
-    swimlanes: any[];
-    columns: any[];
-    shapes: any[];
-    connections: any[];
-  };
-  onSave?: (data: any) => void;
+  initialData?: FlowchartData;
+  onSave?: (data: FlowchartData) => void;
   readonly?: boolean;
 }
 
@@ -65,7 +86,7 @@ function ProcessFlowEditorInner({
     if (initialData) {
       // JSONB의 shapes를 React Flow nodes로 변환
       const loadedNodes: Node<ProcessNodeData>[] =
-        initialData.shapes?.map((shape: any) => ({
+        initialData.shapes?.map((shape) => ({
           id: shape.id,
           type: shape.type === 'process' ? 'process' : shape.type === 'decision' ? 'decision' : 'startEnd',
           position: { x: shape.x || 250, y: shape.y || 100 },
@@ -78,15 +99,20 @@ function ProcessFlowEditorInner({
         })) || [];
 
       // JSONB의 connections를 React Flow edges로 변환
-      const loadedEdges: Edge[] =
-        initialData.connections?.map((conn: any) => ({
-          id: conn.id || `edge-${conn.from || conn.fromShapeId}-${conn.to || conn.toShapeId}`,
-          source: conn.from || conn.fromShapeId,
-          target: conn.to || conn.toShapeId,
+      const loadedEdges: Edge[] = (initialData.connections || []).reduce<Edge[]>((acc, conn) => {
+        const source = conn.from || conn.fromShapeId;
+        const target = conn.to || conn.toShapeId;
+        if (!source || !target) return acc;
+        acc.push({
+          id: conn.id || `edge-${source}-${target}`,
+          source,
+          target,
           type: 'smoothstep',
           animated: false,
-          label: conn.label,
-        })) || [];
+          label: typeof conn.label === 'string' ? conn.label : undefined,
+        });
+        return acc;
+      }, []);
 
       setNodes(loadedNodes);
       setEdges(loadedEdges);

@@ -157,7 +157,7 @@ export function TaskList({ projectId, tasks, onUpdate }: TaskListProps) {
       };
 
       if (editingTask) {
-        const updateData: any = { ...taskData };
+        const updateData: typeof taskData & { completed_date?: string | null } = { ...taskData };
         // 완료 상태로 변경 시 completed_date 설정
         if (formData.status === '완료' && editingTask.status !== '완료') {
           updateData.completed_date = new Date().toISOString();

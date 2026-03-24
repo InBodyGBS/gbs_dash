@@ -17,6 +17,15 @@ interface CalendarItem {
   categoryColor: string;
 }
 
+type SubsidiaryLite = { id: string; name: string };
+type ScheduleItemLite = {
+  id: string;
+  planned_date: string;
+  subsidiary_id: string;
+  category: string;
+  status: string;
+};
+
 type ViewMode = 'monthly' | 'yearly';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -55,12 +64,12 @@ export function ScheduleCalendar() {
       ]);
 
       const subsMap = new Map<string, string>(
-        ((subsResult.data || []) as any[])
+        ((subsResult.data || []) as SubsidiaryLite[])
           .filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
-          .map((s: any) => [s.id, s.name])
+          .map((s) => [s.id, s.name])
       );
 
-      const mapped: CalendarItem[] = ((scheduleResult.data || []) as any[])
+      const mapped: CalendarItem[] = ((scheduleResult.data || []) as ScheduleItemLite[])
         .filter((item) => subsMap.has(item.subsidiary_id))
         .map((item) => {
           const cat = CLOSING_CATEGORIES.find((c) => c.id === item.category);
@@ -190,7 +199,11 @@ export function ScheduleCalendar() {
           <button
             onClick={() => {
               const d = new Date(currentDate);
-              viewMode === 'monthly' ? d.setMonth(d.getMonth() - 1) : d.setFullYear(d.getFullYear() - 1);
+              if (viewMode === 'monthly') {
+                d.setMonth(d.getMonth() - 1);
+              } else {
+                d.setFullYear(d.getFullYear() - 1);
+              }
               setCurrentDate(d);
             }}
             className="p-1 rounded hover:bg-gray-100"
@@ -203,7 +216,11 @@ export function ScheduleCalendar() {
           <button
             onClick={() => {
               const d = new Date(currentDate);
-              viewMode === 'monthly' ? d.setMonth(d.getMonth() + 1) : d.setFullYear(d.getFullYear() + 1);
+              if (viewMode === 'monthly') {
+                d.setMonth(d.getMonth() + 1);
+              } else {
+                d.setFullYear(d.getFullYear() + 1);
+              }
               setCurrentDate(d);
             }}
             className="p-1 rounded hover:bg-gray-100"

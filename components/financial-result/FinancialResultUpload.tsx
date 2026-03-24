@@ -17,6 +17,19 @@ interface FinancialResultUploadProps {
   onUploadSuccess: () => void;
 }
 
+type ExcelUploadRow = {
+  Entity?: string;
+  Period?: string;
+  Rev_Account?: string;
+  'Amount(KRW)'?: number | string;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function FinancialResultUpload({ onUploadSuccess }: FinancialResultUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
@@ -39,7 +52,7 @@ export function FinancialResultUpload({ onUploadSuccess }: FinancialResultUpload
           }
           
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelUploadRow[];
           
           // 필요한 컬럼 검증
           const requiredColumns = ['Entity', 'Period', 'Rev_Account', 'Amount(KRW)'];
@@ -81,8 +94,8 @@ export function FinancialResultUpload({ onUploadSuccess }: FinancialResultUpload
           }
           
           resolve(parsedData);
-        } catch (error: any) {
-          reject(new Error(`Excel 파일 파싱 실패: ${error.message}`));
+        } catch (error: unknown) {
+          reject(new Error(`Excel 파일 파싱 실패: ${getErrorMessage(error)}`));
         }
       };
       reader.onerror = () => reject(new Error('파일 읽기 실패'));
@@ -136,10 +149,10 @@ export function FinancialResultUpload({ onUploadSuccess }: FinancialResultUpload
 
       setSelectedFile(null);
       onUploadSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload Error:', error);
       toast.error('업로드 실패', {
-        description: error.message || '파일 업로드 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setUploading(false);

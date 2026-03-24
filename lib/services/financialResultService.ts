@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabase/client';
 import type { FinancialResultFile, FinancialResultData, QuarterComparison } from '@/lib/types/financial-result';
-import { findSubsidiaryIdByEntity, normalizeEntityName, getEntityToSubsidiaryMapping } from '@/lib/utils/entityMapping';
+import { findSubsidiaryIdByEntity, normalizeEntityName } from '@/lib/utils/entityMapping';
 
 const BUCKET_NAME = 'financial-result';
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -115,7 +115,7 @@ export async function uploadFinancialResultFile(
     }
 
     return data as unknown as FinancialResultFile;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Upload Financial Result File Error:', error);
     throw error;
   }
@@ -132,6 +132,13 @@ export interface ExcelRowData {
   'Rev_Account': string;
   'Amount(KRW)': number;
 }
+
+type FinancialResultRowLite = {
+  entity: string;
+  rev_account: string;
+  amount_krw: number;
+  subsidiaries?: { name?: string };
+};
 
 /**
  * 데이터 저장
@@ -181,7 +188,7 @@ export async function saveFinancialResultData(
         throw new Error(`데이터 저장 실패: ${error.message}`);
       }
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('Save Financial Result Data Error:', error);
     throw error;
   }
@@ -215,7 +222,7 @@ export async function getFinancialResultFiles(
     }
 
     return (data || []) as unknown as FinancialResultFile[];
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get Financial Result Files Error:', error);
     throw error;
   }
@@ -242,7 +249,7 @@ export async function getFinancialResultDataByFile(
     }
 
     return (data || []) as unknown as FinancialResultData[];
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get Financial Result Data Error:', error);
     throw error;
   }
@@ -333,20 +340,20 @@ export async function getQuarterComparison(
 
     // 데이터 매핑
     const previousMap = new Map<string, number>();
-    (previousData || []).forEach((row) => {
+    ((previousData || []) as unknown as FinancialResultRowLite[]).forEach((row) => {
       const key = `${row.entity}_${row.rev_account}`;
       previousMap.set(key, row.amount_krw);
     });
 
     const previousYearMap = new Map<string, number>();
-    (previousYearData || []).forEach((row) => {
+    ((previousYearData || []) as unknown as FinancialResultRowLite[]).forEach((row) => {
       const key = `${row.entity}_${row.rev_account}`;
       previousYearMap.set(key, row.amount_krw);
     });
 
     // 비교 데이터 생성
     const parsed = parsePeriod(targetPeriod);
-    const comparisons: QuarterComparison[] = (currentData || []).map((row) => {
+    const comparisons: QuarterComparison[] = ((currentData || []) as unknown as FinancialResultRowLite[]).map((row) => {
       const key = `${row.entity}_${row.rev_account}`;
       const currentAmount = row.amount_krw;
       const previousAmount = previousMap.get(key) || null;
@@ -385,7 +392,7 @@ export async function getQuarterComparison(
     });
 
     return comparisons;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get Quarter Comparison Error:', error);
     throw error;
   }
@@ -429,7 +436,9 @@ export async function getAllFinancialEntities(): Promise<Array<{ entity: string;
     const entityMap = new Map<string, string | null>();
     
     // financial_result_data에서 entity 추출 (이미 매핑된 것)
-    (financialData || []).forEach((row: any) => {
+    (
+      (financialData || []) as Array<{ entity: string; subsidiaries?: { name?: string | null } | null }>
+    ).forEach((row) => {
       if (!entityMap.has(row.entity)) {
         entityMap.set(row.entity, row.subsidiaries?.name || null);
       }
@@ -463,7 +472,7 @@ export async function getAllFinancialEntities(): Promise<Array<{ entity: string;
 
     // subsidiaries의 code를 사용하여 entity 매핑
     const codeToNameMap = new Map<string, string>();
-    (subsidiariesData || []).forEach((sub: any) => {
+    ((subsidiariesData || []) as Array<{ code: string | null; name: string }>).forEach((sub) => {
       if (sub.code) {
         codeToNameMap.set(sub.code, sub.name);
       }
@@ -489,7 +498,7 @@ export async function getAllFinancialEntities(): Promise<Array<{ entity: string;
       .sort((a, b) => a.entity.localeCompare(b.entity));
 
     return allEntities;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get All Financial Entities Error:', error);
     throw error;
   }
@@ -509,7 +518,7 @@ export async function getFileDownloadUrl(filePath: string): Promise<string> {
     }
 
     return data.signedUrl;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Get File Download URL Error:', error);
     throw error;
   }

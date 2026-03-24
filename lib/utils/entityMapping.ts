@@ -3,7 +3,6 @@
  */
 
 import { supabase } from '@/lib/supabase/client';
-import type { Subsidiary } from '@/lib/supabase/types';
 
 /**
  * Entity 이름을 Subsidiary ID로 매핑

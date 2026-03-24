@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { GripVertical } from 'lucide-react';
 import type { Subsidiary } from '@/lib/supabase/types';
-import type { MonthlyClosingCategoryId } from '@/lib/constants/monthly-closing-categories';
 import { MONTHLY_CLOSING_CATEGORIES } from '@/lib/constants/monthly-closing-categories';
 import type { MonthlyReviewStatus, MonthlySubmission } from '@/lib/types/monthly-closing-submissions';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -22,6 +21,12 @@ interface MonthlyOverviewGridProps {
     patch: { reviewing?: boolean; confirm?: boolean }
   ) => Promise<void>;
 }
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
 
 export function MonthlyOverviewGrid({
   subsidiaries,
@@ -60,8 +65,8 @@ export function MonthlyOverviewGrid({
         reviewing: field === 'reviewing' ? value : existing?.reviewing ?? false,
         confirm: field === 'confirm' ? value : existing?.confirm ?? false,
       });
-    } catch (error: any) {
-      toast.error('저장 실패', { description: error.message || '리뷰 상태 저장 중 오류가 발생했습니다.' });
+    } catch (error: unknown) {
+      toast.error('저장 실패', { description: getErrorMessage(error) });
     } finally {
       setUpdatingKey(null);
     }

@@ -96,7 +96,7 @@ export async function uploadTBFile(
     .single();
 
   if (error) throw new Error(`업로드 기록 저장 실패: ${error.message}`);
-  return data as TBUpload;
+  return data as unknown as TBUpload;
 }
 
 /**
@@ -144,7 +144,7 @@ export async function getTBUploads(
 
   const { data, error } = await query;
   if (error) throw new Error(`업로드 목록 조회 실패: ${error.message}`);
-  return (data || []) as TBUpload[];
+  return (data || []) as unknown as TBUpload[];
 }
 
 /**
@@ -176,16 +176,17 @@ export async function deleteTBUpload(uploadId: string): Promise<void> {
     .select('file_path')
     .eq('id', uploadId)
     .single();
+  const typedUpload = upload as unknown as { file_path?: string | null } | null;
 
   if (fetchError) {
     throw new Error(`업로드 정보 조회 실패: ${fetchError.message}`);
   }
 
   // Storage 파일 삭제 (있는 경우)
-  if (upload?.file_path) {
+  if (typedUpload?.file_path) {
     const { error: storageError } = await supabase.storage
       .from(BUCKET_NAME)
-      .remove([upload.file_path]);
+      .remove([typedUpload.file_path]);
     
     if (storageError) {
       console.warn(`Storage 파일 삭제 실패 (무시됨): ${storageError.message}`);
@@ -217,7 +218,7 @@ export async function getStdPLMaster(): Promise<StdPLMaster[]> {
     .order('display_order');
 
   if (error) throw new Error(`P&L 마스터 조회 실패: ${error.message}`);
-  return (data || []) as StdPLMaster[];
+  return (data || []) as unknown as StdPLMaster[];
 }
 
 /**
@@ -234,7 +235,7 @@ export async function getStdPLMasterByCode(plCode: string): Promise<StdPLMaster 
     if (error.code === 'PGRST116') return null; // Not found
     throw new Error(`P&L 마스터 조회 실패: ${error.message}`);
   }
-  return data as StdPLMaster;
+  return data as unknown as StdPLMaster;
 }
 
 // ============================================
@@ -251,7 +252,7 @@ export async function getStdBSMaster(): Promise<StdBSMaster[]> {
     .order('display_order');
 
   if (error) throw new Error(`BS 마스터 조회 실패: ${error.message}`);
-  return (data || []) as StdBSMaster[];
+  return (data || []) as unknown as StdBSMaster[];
 }
 
 /**
@@ -268,7 +269,7 @@ export async function getStdBSMasterByCode(bsCode: string): Promise<StdBSMaster 
     if (error.code === 'PGRST116') return null; // Not found
     throw new Error(`BS 마스터 조회 실패: ${error.message}`);
   }
-  return data as StdBSMaster;
+  return data as unknown as StdBSMaster;
 }
 
 // ============================================
@@ -297,7 +298,7 @@ export async function getCOAMappings(
   if (error) throw new Error(`매핑 목록 조회 실패: ${error.message}`);
 
   // 마스터 정보 조인
-  const mappings = (data || []) as COAMapping[];
+  const mappings = (data || []) as unknown as COAMapping[];
   
   // P&L 마스터 조회
   const plCodes = mappings.filter(m => m.statement_type === 'PL').map(m => m.std_code);
@@ -352,7 +353,7 @@ export async function upsertCOAMapping(mapping: COAMappingInput): Promise<COAMap
     .single();
 
   if (error) throw new Error(`매핑 저장 실패: ${error.message}`);
-  return data as COAMapping;
+  return data as unknown as COAMapping;
 }
 
 /**
@@ -438,8 +439,9 @@ export async function parseCOAMappingExcel(file: File): Promise<COAMappingInput[
         }
 
         resolve(parsedMappings);
-      } catch (err: any) {
-        reject(new Error(`파일 파싱 실패: ${err.message}`));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        reject(new Error(`파일 파싱 실패: ${message}`));
       }
     };
     reader.onerror = () => reject(new Error('파일 읽기 실패'));
@@ -467,7 +469,9 @@ export async function bulkUpsertCOAMappings(
     if (plCodeError) {
       throw new Error(`P&L 마스터 조회 실패: ${plCodeError.message}`);
     }
-    validPLCodeSet = new Set((validPLCodes || []).map((p: any) => p.pl_code));
+    validPLCodeSet = new Set(
+      ((validPLCodes || []) as Array<{ pl_code: string }>).map((p) => p.pl_code),
+    );
   }
 
   // BS Code 유효성 검사
@@ -479,7 +483,9 @@ export async function bulkUpsertCOAMappings(
     if (bsCodeError) {
       throw new Error(`BS 마스터 조회 실패: ${bsCodeError.message}`);
     }
-    validBSCodeSet = new Set((validBSCodes || []).map((b: any) => b.bs_code));
+    validBSCodeSet = new Set(
+      ((validBSCodes || []) as Array<{ bs_code: string }>).map((b) => b.bs_code),
+    );
   }
 
   // 유효하지 않은 Code 필터링
@@ -576,8 +582,8 @@ export async function getUnmappedAccounts(uploadId: string): Promise<UnmappedAcc
     .single();
 
   if (uploadError) throw new Error(`업로드 조회 실패: ${uploadError.message}`);
-
-  const entityCode = upload.entity_code;
+  const typedUpload = upload as unknown as { entity_code: string };
+  const entityCode = typedUpload.entity_code;
 
   // TB 원장 조회
   const { data: rawData, error: rawError } = await supabase
@@ -596,12 +602,14 @@ export async function getUnmappedAccounts(uploadId: string): Promise<UnmappedAcc
 
   if (mapError) throw new Error(`매핑 조회 실패: ${mapError.message}`);
 
-  const mappedCodes = new Set(mappings?.map((m: any) => m.local_account_code) || []);
+  const mappedCodes = new Set(
+    ((mappings || []) as Array<{ local_account_code: string }>).map((m) => m.local_account_code),
+  );
 
   // 매핑되지 않은 계정 필터링 + statement_type 추천
-  return (rawData || [])
-    .filter((row: any) => !mappedCodes.has(row.account_code))
-    .map((row: any) => {
+  return ((rawData || []) as unknown as TBRawData[])
+    .filter((row) => !mappedCodes.has(row.account_code))
+    .map((row) => {
       // Balance 부호로 statement_type 추천
       // 일반적으로: 자산/비용 = 차변(+), 부채/자본/수익 = 대변(-)
       // P&L 계정은 당기 발생액, BS 계정은 누적 잔액
@@ -643,6 +651,12 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
     .single();
 
   if (uploadError) throw new Error(`업로드 조회 실패: ${uploadError.message}`);
+  const typedUpload = upload as unknown as {
+    entity_code: string;
+    subsidiary_id: string;
+    period_year: number;
+    period_month: number;
+  };
 
   // TB 원장 조회
   const { data: rawData, error: rawError } = await supabase
@@ -656,14 +670,14 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
   const { data: mappings, error: mapError } = await supabase
     .from('coa_mapping')
     .select('*')
-    .eq('entity_code', upload.entity_code)
+    .eq('entity_code', typedUpload.entity_code)
     .eq('is_active', true);
 
   if (mapError) throw new Error(`매핑 조회 실패: ${mapError.message}`);
 
   // 매핑 Map 생성 (local_account_code → { statement_type, std_code })
   const mappingMap = new Map<string, { statement_type: StatementType; std_code: string }>();
-  (mappings || []).forEach((m: any) => {
+  ((mappings || []) as unknown as COAMapping[]).forEach((m) => {
     mappingMap.set(m.local_account_code, {
       statement_type: m.statement_type,
       std_code: m.std_code,
@@ -689,7 +703,7 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
     return -balance;
   };
 
-  (rawData || []).forEach((row: any) => {
+  ((rawData || []) as unknown as TBRawData[]).forEach((row) => {
     const mapping = mappingMap.get(row.account_code);
     if (!mapping) {
       unmappedCount++;
@@ -719,14 +733,23 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
   await supabase.from('bs_results').delete().eq('upload_id', uploadId);
 
   // P&L 결과 저장
-  const plResults: any[] = [];
+  const plResults: Array<{
+    upload_id: string;
+    entity_code: string;
+    subsidiary_id: string;
+    period_year: number;
+    period_month: number;
+    std_pl_code: string;
+    amount: number;
+    currency: string;
+  }> = [];
   plCodeAmounts.forEach((amount, plCode) => {
     plResults.push({
       upload_id: uploadId,
-      entity_code: upload.entity_code,
-      subsidiary_id: upload.subsidiary_id,
-      period_year: upload.period_year,
-      period_month: upload.period_month,
+      entity_code: typedUpload.entity_code,
+      subsidiary_id: typedUpload.subsidiary_id,
+      period_year: typedUpload.period_year,
+      period_month: typedUpload.period_month,
       std_pl_code: plCode,
       amount: amount,
       currency: 'KRW',
@@ -739,14 +762,23 @@ export async function generateStatements(uploadId: string): Promise<{ plResults:
   }
 
   // BS 결과 저장
-  const bsResults: any[] = [];
+  const bsResults: Array<{
+    upload_id: string;
+    entity_code: string;
+    subsidiary_id: string;
+    period_year: number;
+    period_month: number;
+    std_bs_code: string;
+    amount: number;
+    currency: string;
+  }> = [];
   bsCodeAmounts.forEach((amount, bsCode) => {
     bsResults.push({
       upload_id: uploadId,
-      entity_code: upload.entity_code,
-      subsidiary_id: upload.subsidiary_id,
-      period_year: upload.period_year,
-      period_month: upload.period_month,
+      entity_code: typedUpload.entity_code,
+      subsidiary_id: typedUpload.subsidiary_id,
+      period_year: typedUpload.period_year,
+      period_month: typedUpload.period_month,
       std_bs_code: bsCode,
       amount: amount,
       currency: 'KRW',
@@ -900,7 +932,7 @@ export async function getAllEntityPLSummaries(
 
   // Entity별 그룹화
   const entityMap = new Map<string, { results: PLResult[]; entityName: string }>();
-  data.forEach((row: any) => {
+  ((data as unknown) as Array<PLResult & { subsidiaries?: { name?: string | null } | null }>).forEach((row) => {
     const key = row.entity_code;
     if (!entityMap.has(key)) {
       entityMap.set(key, {

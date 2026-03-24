@@ -48,8 +48,7 @@ export interface FinancialDataWithSubsidiary extends FinancialData {
 /**
  * Helper type for a permissive table entry that satisfies GenericTable
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyTable = { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any>; Relationships: [] };
+type AnyTable = { Row: Record<string, unknown>; Insert: Record<string, unknown>; Update: Record<string, unknown>; Relationships: [] };
 
 /**
  * Supabase 데이터베이스 스키마

@@ -31,6 +31,12 @@ import {
 } from '@/lib/services/gbsCalendarService';
 import { toast } from 'sonner';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export default function GBSCalendarPage() {
   const [events, setEvents] = useState<GBSCalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,18 +59,19 @@ export default function GBSCalendarPage() {
       if (data.length === 0) {
         console.info('일정이 없습니다. 일정을 추가하려면 Supabase SQL Editor에서 docs/gbs-calendar-schema.sql을 실행하여 테이블을 생성하세요.');
       }
-    } catch (error: any) {
-      console.error('Failed to load calendar events:', error);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      console.error('Failed to load calendar events:', errorMessage);
       
       // 테이블이 없는 경우 사용자에게 안내
-      if (error.message?.includes('테이블이 없습니다') || error.message?.includes('Could not find the table')) {
+      if (errorMessage.includes('테이블이 없습니다') || errorMessage.includes('Could not find the table')) {
         toast.error('데이터베이스 테이블이 없습니다', {
           description: 'Supabase SQL Editor에서 docs/gbs-calendar-schema.sql을 실행하여 테이블을 생성하세요.',
           duration: 10000,
         });
       } else {
         toast.error('일정 로드 실패', {
-          description: error.message || '일정을 불러오는 중 오류가 발생했습니다.',
+          description: errorMessage,
         });
       }
     } finally {
@@ -111,10 +118,10 @@ export default function GBSCalendarPage() {
           description: '일정이 성공적으로 추가되었습니다.',
         });
       }
-    } catch (error: any) {
-      console.error('Failed to save event:', error);
+    } catch (error: unknown) {
+      console.error('Failed to save event:', getErrorMessage(error));
       toast.error('일정 저장 실패', {
-        description: error.message || '일정을 저장하는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };
@@ -126,10 +133,10 @@ export default function GBSCalendarPage() {
       toast.success('일정 삭제 완료', {
         description: '일정이 성공적으로 삭제되었습니다.',
       });
-    } catch (error: any) {
-      console.error('Failed to delete event:', error);
+    } catch (error: unknown) {
+      console.error('Failed to delete event:', getErrorMessage(error));
       toast.error('일정 삭제 실패', {
-        description: error.message || '일정을 삭제하는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };
@@ -141,10 +148,10 @@ export default function GBSCalendarPage() {
       toast.success('전체 일정 삭제 완료', {
         description: '모든 일정이 성공적으로 삭제되었습니다.',
       });
-    } catch (error: any) {
-      console.error('Failed to delete all events:', error);
+    } catch (error: unknown) {
+      console.error('Failed to delete all events:', getErrorMessage(error));
       toast.error('전체 일정 삭제 실패', {
-        description: error.message || '일정을 삭제하는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

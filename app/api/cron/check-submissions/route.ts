@@ -125,7 +125,11 @@ export async function GET(request: NextRequest) {
       error_message: isError ? emailResult.error : null,
     });
 
-    isError ? results.failed++ : results.sent++;
+    if (isError) {
+      results.failed++;
+    } else {
+      results.sent++;
+    }
   }
 
   return NextResponse.json({

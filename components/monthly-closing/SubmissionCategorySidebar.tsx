@@ -15,6 +15,12 @@ interface SubmissionCategorySidebarProps {
   onCategorySelect: (category: MonthlyClosingCategoryId) => void;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function SubmissionCategorySidebar({
   selectedCategory,
   onCategorySelect,
@@ -27,9 +33,9 @@ export function SubmissionCategorySidebar({
       toast.success('템플릿 다운로드 완료', {
         description: `${category?.label || categoryId} 템플릿이 다운로드되었습니다.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('템플릿 다운로드 실패', {
-        description: error.message || '템플릿 다운로드 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

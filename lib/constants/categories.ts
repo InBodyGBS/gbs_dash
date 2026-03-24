@@ -10,8 +10,6 @@ import {
   ArrowLeftRight,
   Settings,
   FileCheck,
-  FolderOpen,
-  Users,
   Megaphone,
   ShieldCheck,
   MessageSquare,

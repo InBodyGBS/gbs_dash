@@ -22,8 +22,7 @@
 import { supabase } from '@/lib/supabase/client';
 import type { VoeInquiry, VoeInquiryInsert, VoeStatus } from '@/lib/types/voe';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const voeTable = () => (supabase as any).from('voe_inquiries');
+const voeTable = () => supabase.from('voe_inquiries' as never);
 
 /** 전체 문의 조회 (관리자용) */
 export async function getVoeInquiries(): Promise<VoeInquiry[]> {
@@ -32,7 +31,7 @@ export async function getVoeInquiries(): Promise<VoeInquiry[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data || []) as VoeInquiry[];
+  return (data || []) as unknown as VoeInquiry[];
 }
 
 /** 특정 법인의 문의 조회: 내가 보낸 문의(entity_to_gbs) + GBS가 보낸 문의(gbs_to_entity) */
@@ -43,7 +42,7 @@ export async function getVoeInquiriesByEntity(entityName: string): Promise<VoeIn
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data || []) as VoeInquiry[];
+  return (data || []) as unknown as VoeInquiry[];
 }
 
 /** GBS → Entity 문의 생성 (Quarterly Closing Reviewing 에서 호출) */
@@ -65,22 +64,22 @@ export async function createGbsToEntityInquiry(params: {
       direction: 'gbs_to_entity',
       source_category: params.sourceCategory,
       source_quarter_id: params.sourceQuarterId,
-    })
+    } as never)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
-  return data as VoeInquiry;
+  return data as unknown as VoeInquiry;
 }
 
 export async function createVoeInquiry(inquiry: VoeInquiryInsert): Promise<VoeInquiry> {
   const { data, error } = await voeTable()
-    .insert(inquiry)
+    .insert(inquiry as never)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
-  return data as VoeInquiry;
+  return data as unknown as VoeInquiry;
 }
 
 export async function updateVoeStatus(
@@ -99,6 +98,6 @@ export async function updateVoeStatus(
     update.responded_at = new Date().toISOString();
   }
 
-  const { error } = await voeTable().update(update).eq('id', id);
+  const { error } = await voeTable().update(update as never).eq('id', id);
   if (error) throw new Error(error.message);
 }

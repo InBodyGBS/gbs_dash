@@ -139,7 +139,7 @@ export function CardNewsDetailDialog({
                           <p className="font-medium mb-1">{key}</p>
                           {Array.isArray(value) ? (
                             <ul className="list-disc list-inside space-y-1">
-                              {value.map((item: any, idx: number) => (
+                              {value.map((item: unknown, idx: number) => (
                                 <li key={idx}>{String(item)}</li>
                               ))}
                             </ul>
@@ -170,9 +170,9 @@ export function CardNewsDetailDialog({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {card.visual_data.data.rows?.map((row: any[], rowIdx: number) => (
+                          {card.visual_data.data.rows?.map((row: unknown[], rowIdx: number) => (
                             <TableRow key={rowIdx}>
-                              {row.map((cell: any, cellIdx: number) => (
+                              {row.map((cell: unknown, cellIdx: number) => (
                                 <TableCell key={cellIdx}>{String(cell)}</TableCell>
                               ))}
                             </TableRow>

@@ -5,7 +5,7 @@
  * Q&A chat interface for closing topics
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -57,13 +57,7 @@ export function ChatDialog({
   // Check if current user is GBS team member
   const isGBSTeam = GBS_TEAM_EMAILS.includes(currentUserEmail.toLowerCase());
 
-  useEffect(() => {
-    if (open && topicId) {
-      loadQuestions();
-    }
-  }, [open, topicId]);
-
-  const loadQuestions = async () => {
+  const loadQuestions = useCallback(async () => {
     setLoading(true);
     try {
       // GBS team can see all questions, regular users see only public/answered
@@ -75,7 +69,13 @@ export function ChatDialog({
     } finally {
       setLoading(false);
     }
-  };
+  }, [topicId, isGBSTeam]);
+
+  useEffect(() => {
+    if (open && topicId) {
+      void loadQuestions();
+    }
+  }, [open, topicId, loadQuestions]);
 
   const handleSubmit = async () => {
     if (!newQuestion.trim()) {

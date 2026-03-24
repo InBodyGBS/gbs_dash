@@ -17,7 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { getMatchStatusSummary } from '@/lib/services/arapService';
 import type { ArapEntity, MatchStatusSummary } from '@/lib/types/arap';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 
 interface TransactionDetailPopupProps {
@@ -40,13 +40,7 @@ export function TransactionDetailPopup({
   const [summary, setSummary] = useState<MatchStatusSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      loadDetails();
-    }
-  }, [open, entity1.id, entity2.id, year, month]);
-
-  const loadDetails = async () => {
+  const loadDetails = useCallback(async () => {
     try {
       setLoading(true);
       const summaries = await getMatchStatusSummary(year, month);
@@ -61,16 +55,13 @@ export function TransactionDetailPopup({
     } finally {
       setLoading(false);
     }
-  };
+  }, [year, month, entity1.id, entity2.id]);
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  useEffect(() => {
+    if (open) {
+      void loadDetails();
+    }
+  }, [open, loadDetails]);
 
   const handleDownload = async () => {
     if (!summary) return;

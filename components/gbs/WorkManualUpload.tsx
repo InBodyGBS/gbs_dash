@@ -6,8 +6,7 @@
 
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Upload } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
@@ -18,6 +17,12 @@ import type { WorkManualType } from '@/lib/types/work-manual';
 interface WorkManualUploadProps {
   onUploadSuccess: () => void;
 }
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
 
 export function WorkManualUpload({ onUploadSuccess }: WorkManualUploadProps) {
   const [uploading, setUploading] = useState(false);
@@ -43,9 +48,9 @@ export function WorkManualUpload({ onUploadSuccess }: WorkManualUploadProps) {
         description: `${file.name}이(가) ${fileType} 유형으로 성공적으로 업로드되었습니다.`,
       });
       onUploadSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('업로드 실패', {
-        description: error.message || '파일 업로드 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setUploading(false);

@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { getProjects, deleteProject } from '@/lib/services/projectService';
 import { ProjectCard } from '@/components/system/ProjectCard';
 import { ProjectDialog } from '@/components/system/ProjectDialog';
-import type { Project, ProjectStatus } from '@/lib/types/system';
+import type { Project } from '@/lib/types/system';
 import type { Subsidiary } from '@/lib/supabase/types';
 
 export default function ProjectPage() {

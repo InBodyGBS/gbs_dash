@@ -97,8 +97,8 @@ JSON 응답:
     );
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error('AI API error:', response.status);
+      const errBody = await response.json();
+      console.error('AI API error:', response.status, errBody);
       throw new Error(`API 호출 실패: ${response.status}`);
     }
 

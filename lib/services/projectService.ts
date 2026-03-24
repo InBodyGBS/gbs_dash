@@ -53,12 +53,11 @@ export async function createProject(projectData: {
 }): Promise<Project> {
   const { data, error } = await supabase
     .from('projects')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       ...projectData,
       status: projectData.status || '계획중',
       progress: 0,
-    } as any)
+    } as Record<string, unknown>)
     .select()
     .single();
 
@@ -86,8 +85,7 @@ export async function updateProject(
 ): Promise<Project> {
   const { data, error } = await supabase
     .from('projects')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(updates as any)
+    .update(updates as Record<string, unknown>)
     .eq('id', id)
     .select()
     .single();
@@ -138,13 +136,12 @@ export async function createTask(taskData: {
 }): Promise<Task> {
   const { data, error } = await supabase
     .from('tasks')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       ...taskData,
       status: taskData.status || '계획중',
       progress: taskData.progress || 0,
       order_index: taskData.order_index || 0,
-    } as any)
+    } as Record<string, unknown>)
     .select()
     .single();
 
@@ -173,8 +170,7 @@ export async function updateTask(
 ): Promise<Task> {
   const { data, error } = await supabase
     .from('tasks')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(updates as any)
+    .update(updates as Record<string, unknown>)
     .eq('id', id)
     .select()
     .single();
@@ -238,8 +234,7 @@ export async function createTaskHistory(historyData: {
 }): Promise<TaskHistory> {
   const { data, error } = await supabase
     .from('task_histories')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .insert(historyData as any)
+    .insert(historyData as Record<string, unknown>)
     .select()
     .single();
 
@@ -261,8 +256,7 @@ export async function updateTaskHistory(
 ): Promise<TaskHistory> {
   const { data, error } = await supabase
     .from('task_histories')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .update(updates as any)
+    .update(updates as Record<string, unknown>)
     .eq('id', id)
     .select()
     .single();

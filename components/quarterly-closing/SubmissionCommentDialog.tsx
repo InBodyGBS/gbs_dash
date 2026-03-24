@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { format } from 'date-fns';
-import { Send, Edit2, Trash2, X, Download } from 'lucide-react';
+import { Send, Edit2, Trash2, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,6 +23,12 @@ interface SubmissionCommentDialogProps {
   submission: Submission | null;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function SubmissionCommentDialog({
   open,
   onClose,
@@ -36,18 +42,7 @@ export function SubmissionCommentDialog({
   const [editMessage, setEditMessage] = useState('');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (open && submission) {
-      loadComments();
-    } else {
-      setComments([]);
-      setMessage('');
-      setEditingId(null);
-      setEditMessage('');
-    }
-  }, [open, submission]);
-
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     if (!submission) return;
 
     try {
@@ -60,15 +55,26 @@ export function SubmissionCommentDialog({
           scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
         }
       }, 100);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load comments:', error);
       toast.error('댓글 로드 실패', {
-        description: error.message || '댓글을 불러오는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [submission]);
+
+  useEffect(() => {
+    if (open && submission) {
+      void loadComments();
+    } else {
+      setComments([]);
+      setMessage('');
+      setEditingId(null);
+      setEditMessage('');
+    }
+  }, [open, submission, loadComments]);
 
   const handleSend = async () => {
     if (!submission || !message.trim()) return;
@@ -85,9 +91,9 @@ export function SubmissionCommentDialog({
           scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
         }
       }, 100);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('댓글 작성 실패', {
-        description: error.message || '댓글을 작성하는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setSending(false);
@@ -113,9 +119,9 @@ export function SubmissionCommentDialog({
       setEditingId(null);
       setEditMessage('');
       toast.success('댓글이 수정되었습니다.');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('댓글 수정 실패', {
-        description: error.message || '댓글을 수정하는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };
@@ -127,9 +133,9 @@ export function SubmissionCommentDialog({
       await deleteSubmissionComment(commentId);
       setComments(comments.filter((c) => c.id !== commentId));
       toast.success('댓글이 삭제되었습니다.');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('댓글 삭제 실패', {
-        description: error.message || '댓글을 삭제하는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

@@ -41,6 +41,12 @@ import {
 import type { TBUpload, TBParsedRow } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export default function UploadPage() {
   // 필터 상태
   const [selectedEntityCode, setSelectedEntityCode] = useState<string>('');
@@ -57,16 +63,16 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // 데이터 로드
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    loadUploads();
+  const loadUploads = useCallback(async () => {
+    try {
+      const data = await getTBUploads(undefined, parseInt(selectedYear));
+      setUploads(data);
+    } catch (error) {
+      console.error('Failed to load uploads:', error);
+    }
   }, [selectedYear]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const { data: subsData } = await supabase
@@ -75,22 +81,21 @@ export default function UploadPage() {
         .order('name');
       setSubsidiaries(subsData || []);
       await loadUploads();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('데이터 로딩 실패');
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadUploads]);
 
-  const loadUploads = async () => {
-    try {
-      const data = await getTBUploads(undefined, parseInt(selectedYear));
-      setUploads(data);
-    } catch (error: any) {
-      console.error('Failed to load uploads:', error);
-    }
-  };
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    void loadUploads();
+  }, [loadUploads]);
 
   // Entity 선택 시 subsidiary_id도 세팅
   const handleEntitySelect = (code: string) => {
@@ -109,7 +114,7 @@ export default function UploadPage() {
           const workbook = XLSX.read(data, { type: 'binary' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet) as Array<Record<string, unknown>>;
 
           if (jsonData.length === 0) {
             reject(new Error('Excel 파일이 비어있습니다.'));
@@ -173,6 +178,13 @@ export default function UploadPage() {
               const debit = Number(row[debitCol!] || 0);
               const credit = Number(row[creditCol!] || 0);
               const balance = balanceCol ? Number(row[balanceCol!] || 0) : debit - credit;
+              const rawDescription = row['Description'] ?? row['description'];
+              const description =
+                typeof rawDescription === 'string'
+                  ? rawDescription
+                  : rawDescription != null
+                  ? String(rawDescription)
+                  : undefined;
 
               return {
                 accountCode: String(row[codeCol!]).trim(),
@@ -180,7 +192,7 @@ export default function UploadPage() {
                 debit,
                 credit,
                 balance,
-                description: row['Description'] || row['description'] || undefined,
+                description,
               };
             });
 
@@ -190,8 +202,8 @@ export default function UploadPage() {
           }
 
           resolve(parsedRows);
-        } catch (err: any) {
-          reject(new Error(`파일 파싱 실패: ${err.message}`));
+        } catch (err) {
+          reject(new Error(`파일 파싱 실패: ${getErrorMessage(err)}`));
         }
       };
       reader.onerror = () => reject(new Error('파일 읽기 실패'));
@@ -272,9 +284,9 @@ export default function UploadPage() {
 
       setSelectedFile(null);
       await loadUploads();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Upload Error:', error);
-      toast.error('업로드 실패', { description: error.message });
+      toast.error('업로드 실패', { description: getErrorMessage(error) });
     } finally {
       setUploading(false);
     }
@@ -298,9 +310,9 @@ export default function UploadPage() {
       await deleteTBUpload(uploadId);
       toast.success('업로드 삭제 완료', { description: fileName });
       await loadUploads();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Delete error:', error);
-      toast.error('삭제 실패', { description: error.message });
+      toast.error('삭제 실패', { description: getErrorMessage(error) });
     } finally {
       setDeleting(null);
     }

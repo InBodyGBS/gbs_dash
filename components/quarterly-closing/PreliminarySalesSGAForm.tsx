@@ -1,14 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Save, Calculator } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { savePreliminarySalesSGA, getPreliminarySalesSGA } from '@/lib/services/preliminarySalesSGAService';
-import type { PreliminarySalesSGA } from '@/lib/types/preliminary-sales-sga';
 
 interface PreliminarySalesSGAFormProps {
   quarterId?: string | null;
@@ -24,6 +22,12 @@ interface FormData {
   sga: number | null;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function PreliminarySalesSGAForm({
   quarterId,
   subsidiaryId,
@@ -38,33 +42,33 @@ export function PreliminarySalesSGAForm({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 기존 데이터 로드
-  useEffect(() => {
-    if (quarterId && subsidiaryId && !quarterId.startsWith('temp-') && !quarterId.startsWith('custom-')) {
-      loadExistingData();
-    }
-  }, [quarterId, subsidiaryId]);
-
-  const loadExistingData = async () => {
+  const loadExistingData = useCallback(async () => {
+    if (!quarterId || !subsidiaryId) return;
     try {
       setLoading(true);
       const data = await getPreliminarySalesSGA(quarterId, subsidiaryId);
-      
-      // 기존 데이터로 폼 업데이트
-      const updatedFormData = formData.map((item) => {
-        const existing = data.find((d) => d.period === item.period);
-        return existing
-          ? { period: item.period, sales: existing.sales, sga: existing.sga }
-          : item;
-      });
-      setFormData(updatedFormData);
-    } catch (error: any) {
+
+      setFormData((prev) =>
+        prev.map((item) => {
+          const existing = data.find((d) => d.period === item.period);
+          return existing
+            ? { period: item.period, sales: existing.sales, sga: existing.sga }
+            : item;
+        }),
+      );
+    } catch (error: unknown) {
       console.error('Failed to load existing data:', error);
       // 에러가 있어도 계속 진행 (데이터가 없을 수 있음)
     } finally {
       setLoading(false);
     }
-  };
+  }, [quarterId, subsidiaryId]);
+
+  useEffect(() => {
+    if (quarterId && subsidiaryId && !quarterId.startsWith('temp-') && !quarterId.startsWith('custom-')) {
+      void loadExistingData();
+    }
+  }, [quarterId, subsidiaryId, loadExistingData]);
 
   const handleInputChange = (period: Period, field: 'sales' | 'sga', value: string) => {
     setFormData((prev) =>
@@ -100,9 +104,9 @@ export function PreliminarySalesSGAForm({
         description: 'Preliminary Sales/SG&A 데이터가 성공적으로 저장되었습니다.',
       });
       onSaveSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('저장 실패', {
-        description: error.message || '데이터 저장 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setSaving(false);

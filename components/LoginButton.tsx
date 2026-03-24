@@ -12,7 +12,7 @@ export function LoginButton() {
       await signInWithEmail(email, password);
       alert('로그인 성공!');
       window.location.reload();
-    } catch (error) {
+    } catch {
       alert('로그인 실패');
     }
   };

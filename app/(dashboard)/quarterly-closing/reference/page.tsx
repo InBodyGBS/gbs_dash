@@ -5,7 +5,7 @@
  * Year-End Closing Guide and Q&A
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,22 +26,9 @@ export default function ReferencePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
-  const [subsidiaryId, setSubsidiaryId] = useState<string | null>(null);
+  const [subsidiaryId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadTopics();
-    loadUserInfo();
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      handleSearch(searchQuery);
-    } else {
-      setFilteredTopics(topics);
-    }
-  }, [searchQuery, topics]);
-
-  const loadTopics = async () => {
+  const loadTopics = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getTopics();
@@ -54,9 +41,9 @@ export default function ReferencePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadUserInfo = async () => {
+  const loadUserInfo = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -73,9 +60,9 @@ export default function ReferencePage() {
     } catch (error) {
       console.error('Failed to load user info:', error);
     }
-  };
+  }, []);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
       setFilteredTopics(topics);
       return;
@@ -88,7 +75,20 @@ export default function ReferencePage() {
       console.error('Search failed:', error);
       toast.error('Search failed');
     }
-  };
+  }, [topics]);
+
+  useEffect(() => {
+    void loadTopics();
+    void loadUserInfo();
+  }, [loadTopics, loadUserInfo]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      void handleSearch(searchQuery);
+    } else {
+      setFilteredTopics(topics);
+    }
+  }, [searchQuery, topics, handleSearch]);
 
   const handleTopicClick = (topicId: string) => {
     const topic = topics.find((t) => t.id === topicId);

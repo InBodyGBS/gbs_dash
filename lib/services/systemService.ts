@@ -48,7 +48,6 @@ export async function getSystemByEntityAndCategory(
 export async function upsertSystem(systemData: SystemFormData): Promise<System> {
   const { data, error } = await supabase
     .from('systems')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .upsert(
       {
         entity_id: systemData.entity_id,
@@ -59,7 +58,7 @@ export async function upsertSystem(systemData: SystemFormData): Promise<System> 
         implementation_date: systemData.implementation_date || null,
         notes: systemData.notes || null,
         created_by: systemData.created_by,
-      } as any,
+      } as Record<string, unknown>,
       {
         onConflict: 'entity_id,category',
       }
@@ -95,8 +94,7 @@ export async function updateSystemName(
     // 업데이트
     const { data, error } = await supabase
       .from('systems')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .update({ system_name: systemName ?? null } as any)
+      .update({ system_name: systemName ?? null } as Record<string, unknown>)
       .eq('id', existing.id)
       .select()
       .single();

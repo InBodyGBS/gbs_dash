@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 import { updateIssue, deleteIssue } from '@/lib/services/issueService';
 import type { Issue, IssueCategory, IssueStatus } from '@/lib/types/issue';
 import type { Subsidiary } from '@/lib/supabase/types';
-import { CATEGORY_COLORS, CATEGORY_LABELS, ISSUE_CATEGORIES, ISSUE_STATUS_LIST } from '@/lib/constants/issue-categories';
+import { CATEGORY_COLORS, ISSUE_CATEGORIES, ISSUE_STATUS_LIST } from '@/lib/constants/issue-categories';
 
 interface IssueDetailDialogProps {
   issue: Issue;

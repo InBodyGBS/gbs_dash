@@ -6,6 +6,17 @@
 import { supabase } from '@/lib/supabase/client';
 import type { PreliminarySalesSGA, PreliminarySalesSGAFormData } from '@/lib/types/preliminary-sales-sga';
 
+type PreliminarySalesSGARow = {
+  id: string;
+  quarter_id: string | null;
+  subsidiary_id: string | null;
+  period: string;
+  sales: string | number | null;
+  sga: string | number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 /**
  * Preliminary Sales/SG&A 데이터 조회
  */
@@ -37,13 +48,13 @@ export async function getPreliminarySalesSGA(
       throw new Error(`데이터 조회 실패: ${error.message}`);
     }
 
-    return (data || []).map((item) => ({
+    return ((data || []) as unknown as PreliminarySalesSGARow[]).map((item) => ({
       id: item.id,
       quarter_id: item.quarter_id,
       subsidiary_id: item.subsidiary_id,
-      period: item.period,
-      sales: item.sales ? parseFloat(item.sales) : null,
-      sga: item.sga ? parseFloat(item.sga) : null,
+      period: item.period as PreliminarySalesSGA['period'],
+      sales: item.sales !== null ? Number(item.sales) : null,
+      sga: item.sga !== null ? Number(item.sga) : null,
       created_at: item.created_at,
       updated_at: item.updated_at,
     }));
@@ -138,13 +149,13 @@ export async function savePreliminarySalesSGA(
       throw new Error(`데이터 저장 실패: ${errorMessage}${errorCode}${errorHint}${errorDetails}`);
     }
 
-    return (insertedData || []).map((item) => ({
+    return ((insertedData || []) as unknown as PreliminarySalesSGARow[]).map((item) => ({
       id: item.id,
       quarter_id: item.quarter_id,
       subsidiary_id: item.subsidiary_id,
-      period: item.period,
-      sales: item.sales ? parseFloat(item.sales) : null,
-      sga: item.sga ? parseFloat(item.sga) : null,
+      period: item.period as PreliminarySalesSGA['period'],
+      sales: item.sales !== null ? Number(item.sales) : null,
+      sga: item.sga !== null ? Number(item.sga) : null,
       created_at: item.created_at,
       updated_at: item.updated_at,
     }));

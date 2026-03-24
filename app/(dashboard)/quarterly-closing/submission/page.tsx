@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 import {
@@ -24,6 +24,12 @@ import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter } from '@/lib/types/quarterly-closing';
 
 const STORAGE_KEY = 'quarterly-closing-submission-state';
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
 
 export default function SubmissionPage() {
   // localStorage에서 저장된 상태 복원
@@ -84,15 +90,10 @@ export default function SubmissionPage() {
     });
   }, [selectedYear, selectedQuarter, selectedSubsidiaryId]);
 
-  // 데이터 로드
-  useEffect(() => {
-    loadData();
-  }, [selectedYear, selectedQuarter]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       // Quarter 데이터 조회
-      const { data: quarterData, error: quarterError } = await supabase
+      const { data: quarterData } = await supabase
         .from('quarters')
         .select('*')
         .eq('year', parseInt(selectedYear))
@@ -155,11 +156,15 @@ export default function SubmissionPage() {
       setSubsidiaries(
         (subsData || []).filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load data:', error);
-      toast.error(`데이터 로딩 실패: ${error.message || '알 수 없는 오류'}`);
+      toast.error(`데이터 로딩 실패: ${getErrorMessage(error)}`);
     }
-  };
+  }, [selectedYear, selectedQuarter]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const handleUploadSuccess = () => {
     setRefreshKey((prev) => prev + 1);

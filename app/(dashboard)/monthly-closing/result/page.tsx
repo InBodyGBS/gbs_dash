@@ -6,7 +6,7 @@
  * Single Entity View + Drill-Down
  */
 
-import { useState, useEffect, useMemo, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import {
   Select,
@@ -32,13 +32,8 @@ import {
   Download,
   RefreshCw,
 } from 'lucide-react';
-import {
-  getPLResults,
-  calculatePLSummary,
-  getAllEntityPLSummaries,
-  getStdPLMaster,
-} from '@/lib/services/monthlyClosingService';
-import type { PLResult, PLSummary, StdPLMaster } from '@/lib/types/monthly-closing';
+import { getPLResults, getStdPLMaster } from '@/lib/services/monthlyClosingService';
+import type { PLResult, StdPLMaster } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
 import * as XLSX from 'xlsx';
 
@@ -95,6 +90,36 @@ interface PLDisplayLineYearly {
   canDrillDown?: boolean;
 }
 
+type ErrorWithMessage = {
+  message?: string;
+};
+
+type DrillDownAccount = {
+  id: string;
+  account_code: string;
+  account_name: string;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+type CoaMappingRow = {
+  local_account_code: string;
+};
+
+type TBUploadIdRow = {
+  id: string;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  const maybeError = error as ErrorWithMessage;
+  if (typeof maybeError?.message === 'string' && maybeError.message.length > 0) {
+    return maybeError.message;
+  }
+  return '알 수 없는 오류';
+};
+
 export default function ResultPage() {
   // localStorage 복원
   const loadSavedState = () => {
@@ -123,7 +148,7 @@ export default function ResultPage() {
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
-  const [drillDownData, setDrillDownData] = useState<{ plCode: string; accounts: any[]; month: number } | null>(null);
+  const [drillDownData, setDrillDownData] = useState<{ plCode: string; accounts: DrillDownAccount[]; month: number } | null>(null);
   const [drillDownOpen, setDrillDownOpen] = useState(false);
 
   // 상태 저장
@@ -138,27 +163,7 @@ export default function ResultPage() {
     } catch {}
   }, [selectedEntityCode, selectedYear, selectedMonth, activeTab]);
 
-  // 초기 로드
-  useEffect(() => {
-    loadSubsidiaries();
-    loadPLMaster();
-  }, []);
-
-  // 탭 1, 2: 누적값/월별값 데이터 로드
-  useEffect(() => {
-    if ((activeTab === 'cumulative' || activeTab === 'monthly') && selectedEntityCode && selectedYear && selectedMonth) {
-      loadSingleMonthPL();
-    }
-  }, [activeTab, selectedEntityCode, selectedYear, selectedMonth]);
-
-  // 탭 3: 12개월 전체 데이터 로드
-  useEffect(() => {
-    if (activeTab === 'yearly' && selectedEntityCode && selectedYear) {
-      loadYearlyMonthlyPL();
-    }
-  }, [activeTab, selectedEntityCode, selectedYear]);
-
-  const loadSubsidiaries = async () => {
+  const loadSubsidiaries = useCallback(async () => {
     try {
       setLoading(true);
       const { data } = await supabase.from('subsidiaries').select('*').order('name');
@@ -168,19 +173,19 @@ export default function ResultPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadPLMaster = async () => {
+  const loadPLMaster = useCallback(async () => {
     try {
       const data = await getStdPLMaster();
       setPLMaster(data);
-    } catch (error: any) {
-      console.error('Failed to load PL Master:', error);
+    } catch (error: unknown) {
+      console.error('Failed to load PL Master:', getErrorMessage(error));
     }
-  };
+  }, []);
 
   // 탭 1, 2: 단일 월 데이터 로드 (누적값 및 월별값)
-  const loadSingleMonthPL = async () => {
+  const loadSingleMonthPL = useCallback(async () => {
     if (!selectedEntityCode || !selectedYear || !selectedMonth) return;
     
     setDataLoading(true);
@@ -230,16 +235,16 @@ export default function ResultPage() {
         
         setMonthlyResults(monthly);
       }
-    } catch (error: any) {
-      console.error('Failed to load single month P&L:', error);
+    } catch (error: unknown) {
+      console.error('Failed to load single month P&L:', getErrorMessage(error));
       toast.error('P&L 데이터 로드 실패');
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [selectedEntityCode, selectedYear, selectedMonth]);
 
   // 탭 3: 12개월 월별 데이터 로드 (각 월 = 해당 월 누적 - 직전월 누적)
-  const loadYearlyMonthlyPL = async () => {
+  const loadYearlyMonthlyPL = useCallback(async () => {
     if (!selectedEntityCode || !selectedYear) return;
     
     setDataLoading(true);
@@ -311,13 +316,30 @@ export default function ResultPage() {
       });
 
       setYearlyMonthlyData(newMonthlyData);
-    } catch (error: any) {
-      console.error('Failed to load yearly monthly P&L:', error);
+    } catch (error: unknown) {
+      console.error('Failed to load yearly monthly P&L:', getErrorMessage(error));
       toast.error('월별 P&L 데이터 로드 실패');
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [selectedEntityCode, selectedYear]);
+
+  useEffect(() => {
+    void loadSubsidiaries();
+    void loadPLMaster();
+  }, [loadSubsidiaries, loadPLMaster]);
+
+  useEffect(() => {
+    if ((activeTab === 'cumulative' || activeTab === 'monthly') && selectedEntityCode && selectedYear && selectedMonth) {
+      void loadSingleMonthPL();
+    }
+  }, [activeTab, selectedEntityCode, selectedYear, selectedMonth, loadSingleMonthPL]);
+
+  useEffect(() => {
+    if (activeTab === 'yearly' && selectedEntityCode && selectedYear) {
+      void loadYearlyMonthlyPL();
+    }
+  }, [activeTab, selectedEntityCode, selectedYear, loadYearlyMonthlyPL]);
 
   // Drill-down 데이터 로드
   const loadDrillDown = async (plCode: string, month: number) => {
@@ -345,10 +367,10 @@ export default function ResultPage() {
 
       if (!mappings || mappings.length === 0) return;
 
-      const accountCodes = mappings.map((m: any) => m.local_account_code);
+      const accountCodes = (mappings as CoaMappingRow[]).map((m) => m.local_account_code);
 
       // 원장 데이터 조회
-      const uploadId = (upload as any)?.id;
+      const uploadId = (upload as TBUploadIdRow).id;
       if (!uploadId) return;
       
       const { data: rawData } = await supabase
@@ -359,18 +381,18 @@ export default function ResultPage() {
 
       setDrillDownData({
         plCode,
-        accounts: rawData || [],
+        accounts: ((rawData || []) as DrillDownAccount[]),
         month,
       });
       setDrillDownOpen(true);
-    } catch (error: any) {
-      console.error('Failed to load drill-down:', error);
+    } catch (error: unknown) {
+      console.error('Failed to load drill-down:', getErrorMessage(error));
       toast.error('Drill-down 데이터 로드 실패');
     }
   };
 
   // P&L 표시 라인 생성 (단일 월 - 누적값 또는 월별값)
-  const createSingleMonthDisplayLines = (results: PLResult[]): PLDisplayLineSingle[] => {
+  const createSingleMonthDisplayLines = useCallback((results: PLResult[]): PLDisplayLineSingle[] => {
     if (results.length === 0 || !plMaster.length) return [];
 
     // P&L Code별 금액 Map
@@ -633,17 +655,17 @@ export default function ResultPage() {
         marginValue: netMargin,
       },
     ];
-  };
+  }, [plMaster]);
 
   // 탭 1: 누적값 표시 라인
   const cumulativeDisplayLines = useMemo(() => {
     return createSingleMonthDisplayLines(cumulativeResults);
-  }, [cumulativeResults, plMaster]);
+  }, [cumulativeResults, createSingleMonthDisplayLines]);
 
   // 탭 2: 월별값 표시 라인
   const monthlyDisplayLines = useMemo(() => {
     return createSingleMonthDisplayLines(monthlyResults);
-  }, [monthlyResults, plMaster]);
+  }, [monthlyResults, createSingleMonthDisplayLines]);
 
   // 탭 3: 12개월 월별 데이터 표시 라인
   const yearlyDisplayLines: PLDisplayLineYearly[] = useMemo(() => {
@@ -1183,7 +1205,7 @@ export default function ResultPage() {
       const wsData = yearlyDisplayLines
         .filter((l) => !l.isMargin)
         .map((line) => {
-          const row: any = {
+          const row: Record<string, string | number> = {
             'P&L Code': line.plCode || '',
             'P&L Line': line.label,
           };
@@ -1784,7 +1806,7 @@ export default function ResultPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {drillDownData.accounts.map((acc: any) => (
+                  {drillDownData.accounts.map((acc) => (
                     <tr key={acc.id} className="border-b hover:bg-gray-50">
                       <td className="py-2 px-3 font-mono text-xs">{acc.account_code}</td>
                       <td className="py-2 px-3">{acc.account_name}</td>

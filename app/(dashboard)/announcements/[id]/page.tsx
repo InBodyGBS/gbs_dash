@@ -90,7 +90,7 @@ export default function AnnouncementDetailPage() {
       setLoading(false);
     };
     load();
-  }, [id]);
+  }, [id, router]);
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.author.trim()) {
@@ -98,16 +98,15 @@ export default function AnnouncementDetailPage() {
       return;
     }
     setSaving(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from('announcements')
+    const { error } = await supabase
+      .from('announcements' as never)
       .update({
         type: form.type,
         title: form.title.trim(),
         author: form.author.trim(),
         content: form.content.trim() || null,
         updated_at: new Date().toISOString(),
-      })
+      } as never)
       .eq('id', id);
     setSaving(false);
     if (error) {
@@ -125,10 +124,9 @@ export default function AnnouncementDetailPage() {
       return;
     }
     setSubmitting(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: newComment, error } = await (supabase as any)
-      .from('announcement_comments')
-      .insert({ announcement_id: id, author: commentAuthor.trim(), content: commentContent.trim() })
+    const { data: newComment, error } = await supabase
+      .from('announcement_comments' as never)
+      .insert({ announcement_id: id, author: commentAuthor.trim(), content: commentContent.trim() } as never)
       .select()
       .single();
     setSubmitting(false);

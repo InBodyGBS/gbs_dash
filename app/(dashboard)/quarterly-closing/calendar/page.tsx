@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { getCategoryById } from '@/lib/constants/closing-categories';
+import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import { CategoryBar } from '@/components/quarterly-closing/CategoryBar';
 import { ScheduleGrid } from '@/components/quarterly-closing/ScheduleGrid';
 import { useScheduleData } from '@/lib/hooks/useScheduleData';
@@ -75,7 +76,7 @@ export default function CalendarPage() {
               <h2 className="text-2xl font-bold text-gray-900">Calendar</h2>
               {selectedCategory && (
                 <p className="text-sm text-gray-600 mt-1">
-                  필터: {getCategoryById(selectedCategory as any)?.label || selectedCategory}
+                  필터: {getCategoryById(selectedCategory as ClosingCategoryId)?.label || selectedCategory}
                   <Button
                     variant="ghost"
                     size="sm"

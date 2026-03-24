@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { User, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { CATEGORIES } from '@/lib/constants/categories';
 import { formatDate } from '@/lib/utils/format';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -32,6 +32,18 @@ interface UserProfile {
   email: string;
   team: string | null;
 }
+
+type UserProfileRow = {
+  name: string;
+  email: string;
+  team: string | null;
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
 
 /**
  * 현재 경로로부터 페이지 제목 추출
@@ -70,10 +82,11 @@ export const Header = ({ title }: HeaderProps) => {
               team: null,
             });
           } else {
+            const typedProfile = profile as unknown as UserProfileRow;
             setUserProfile({
-              name: profile.name,
-              email: profile.email,
-              team: profile.team,
+              name: typedProfile.name,
+              email: typedProfile.email,
+              team: typedProfile.team,
             });
           }
         }
@@ -93,9 +106,9 @@ export const Header = ({ title }: HeaderProps) => {
       toast.success('로그아웃되었습니다.');
       router.push('/login');
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('로그아웃 실패', {
-        description: error.message || '로그아웃 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

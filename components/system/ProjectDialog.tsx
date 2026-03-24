@@ -4,7 +4,7 @@
  * 프로젝트 생성/수정 Dialog
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import {
   Dialog,
@@ -25,18 +25,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Trash2, X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Project, Task, SystemCategory, ProjectStatus, TaskStatus } from '@/lib/types/system';
+import type { Project, Task, SystemCategory, ProjectStatus } from '@/lib/types/system';
 import type { Subsidiary } from '@/lib/supabase/types';
 import {
   createProject,
   updateProject,
   deleteProject,
   getTasks,
-  createTask,
-  updateTask,
-  deleteTask,
   updateProjectProgress,
 } from '@/lib/services/projectService';
 import { format } from 'date-fns';
@@ -84,6 +81,16 @@ export function ProjectDialog({
     description: '',
   });
 
+  const loadTasks = useCallback(async () => {
+    if (!project) return;
+    try {
+      const taskList = await getTasks(project.id);
+      setTasks(taskList);
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+    }
+  }, [project]);
+
   useEffect(() => {
     if (project) {
       setFormData({
@@ -96,7 +103,7 @@ export function ProjectDialog({
         due_date: project.due_date ? format(new Date(project.due_date), 'yyyy-MM-dd') : '',
         description: project.description || '',
       });
-      loadTasks();
+      void loadTasks();
     } else {
       setFormData({
         title: '',
@@ -111,17 +118,7 @@ export function ProjectDialog({
       setTasks([]);
     }
     setActiveTab('overview');
-  }, [project, open]);
-
-  const loadTasks = async () => {
-    if (!project) return;
-    try {
-      const taskList = await getTasks(project.id);
-      setTasks(taskList);
-    } catch (error) {
-      console.error('Failed to load tasks:', error);
-    }
-  };
+  }, [project, open, loadTasks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

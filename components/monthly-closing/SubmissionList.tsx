@@ -35,6 +35,12 @@ interface SubmissionListProps {
   refreshKey?: number;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function SubmissionList({
   periodYear,
   periodMonth,
@@ -56,10 +62,10 @@ export function SubmissionList({
           selectedSubsidiaryId
         );
         setSubmissions(data);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to load monthly submissions:', error);
         toast.error('제출 목록 로드 실패', {
-          description: error.message || '제출 목록을 불러오는 중 오류가 발생했습니다.',
+          description: getErrorMessage(error),
         });
       } finally {
         setLoading(false);
@@ -121,8 +127,8 @@ export function SubmissionList({
                 link.click();
                 document.body.removeChild(link);
                 toast.success('다운로드 시작', { description: `${s.file_name} 다운로드가 시작되었습니다.` });
-              } catch (error: any) {
-                toast.error('다운로드 실패', { description: error.message || '파일 다운로드 중 오류가 발생했습니다.' });
+              } catch (error: unknown) {
+                toast.error('다운로드 실패', { description: getErrorMessage(error) });
               }
             }}
             onDelete={async (s) => {
@@ -130,8 +136,8 @@ export function SubmissionList({
                 await deleteMonthlySubmission(s.id, s.file_path);
                 toast.success('파일 삭제 완료', { description: `${s.file_name}이(가) 삭제되었습니다.` });
                 setSubmissions((prev) => prev.filter((x) => x.id !== s.id));
-              } catch (error: any) {
-                toast.error('삭제 실패', { description: error.message || '파일 삭제 중 오류가 발생했습니다.' });
+              } catch (error: unknown) {
+                toast.error('삭제 실패', { description: getErrorMessage(error) });
               }
             }}
             getCategoryLabel={getCategoryLabel}
@@ -214,8 +220,8 @@ function SubmissionItem({
               const url = await getMonthlySubmissionUrl(submission.file_path);
               await navigator.clipboard.writeText(url);
               toast.success('링크 복사 완료', { description: '다운로드 링크가 클립보드에 복사되었습니다.' });
-            } catch (error: any) {
-              toast.error('링크 복사 실패', { description: error.message || '링크 복사 중 오류가 발생했습니다.' });
+            } catch (error: unknown) {
+              toast.error('링크 복사 실패', { description: getErrorMessage(error) });
             }
           }}
           className="flex items-center gap-1"

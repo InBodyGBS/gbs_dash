@@ -267,7 +267,7 @@ export function useScheduleData() {
       const fiscalQuarter = parseInt(selectedQuarter);
       let fiscalQuarterId: string | null = null;
 
-      const { data: fiscalQuarterData, error: fiscalQuarterError } = await supabase
+      const { data: fiscalQuarterData } = await supabase
         .from('quarters')
         .select('id')
         .eq('year', fiscalYear)

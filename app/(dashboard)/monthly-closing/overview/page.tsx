@@ -16,6 +16,12 @@ import {
 
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export default function MonthlyOverviewPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
@@ -35,9 +41,9 @@ export default function MonthlyOverviewPage() {
         const { data, error } = await supabase.from('subsidiaries').select('*').order('name');
         if (error) throw error;
         setSubsidiaries(data || []);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to load subsidiaries:', error);
-        toast.error('법인 목록 로드 실패', { description: error.message || '알 수 없는 오류' });
+        toast.error('법인 목록 로드 실패', { description: getErrorMessage(error) });
       }
     };
     loadSubsidiaries();
@@ -53,9 +59,9 @@ export default function MonthlyOverviewPage() {
         ]);
         setSubmissions(subsData);
         setReviewStatuses(reviewData);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to load monthly overview:', error);
-        toast.error('Overview 데이터 로드 실패', { description: error.message || '알 수 없는 오류' });
+        toast.error('Overview 데이터 로드 실패', { description: getErrorMessage(error) });
       } finally {
         setLoading(false);
       }

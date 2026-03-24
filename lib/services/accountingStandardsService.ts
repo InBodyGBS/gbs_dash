@@ -47,12 +47,13 @@ export async function getCardCategories(
 
     if (standardError) throw standardError;
     if (!standard) return [];
+    const typedStandard = standard as unknown as { id: string };
 
     // standard_id로 카테고리 조회
     const { data, error } = await supabase
       .from('card_categories')
       .select('*')
-      .eq('standard_id', standard.id)
+      .eq('standard_id', typedStandard.id)
       .order('display_order');
 
     if (error) throw error;

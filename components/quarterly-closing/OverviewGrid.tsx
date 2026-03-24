@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { GripVertical, MessageSquare, CheckCheck, RotateCcw } from 'lucide-react';
+import { GripVertical, MessageSquare, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Subsidiary } from '@/lib/supabase/types';
@@ -18,7 +18,6 @@ import type { ReviewStatus } from '@/lib/types/category-review';
 import { getCategoryReviewStatuses, upsertCategoryReviewStatus } from '@/lib/services/categoryReviewService';
 import { ReviewCommentDialog } from './ReviewCommentDialog';
 
-const ENTITY_ORDER_KEY = 'quarterly-closing-entity-order';
 const CATEGORY_ORDER_KEY = 'quarterly-closing-overview-category-order';
 
 interface OverviewGridProps {
@@ -38,7 +37,6 @@ export const OverviewGrid = ({
   quarter,
   subsidiaries,
   scheduleItems,
-  submissions,
   selectedCategory,
   onEntityOrderChange,
   onCategoryOrderChange,

@@ -6,7 +6,7 @@
  * PRD 3.2 기반 (P&L + BS 통합 뷰)
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +65,12 @@ import type {
 import type { Subsidiary } from '@/lib/supabase/types';
 import * as XLSX from 'xlsx';
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export default function MappingPage() {
   // 상태
   const [mappings, setMappings] = useState<COAMapping[]>([]);
@@ -84,25 +90,7 @@ export default function MappingPage() {
   const [activeTab, setActiveTab] = useState<'mappings' | 'unmapped'>('mappings');
   const [uploading, setUploading] = useState(false);
 
-  // 초기 로드
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    if (selectedEntityCode) {
-      loadMappings();
-      loadEntityUploads();
-    }
-  }, [selectedEntityCode]);
-
-  useEffect(() => {
-    if (selectedUploadId) {
-      loadUnmappedAccounts();
-    }
-  }, [selectedUploadId]);
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
       const [subsData, plMasterData, bsMasterData] = await Promise.all([
@@ -113,43 +101,60 @@ export default function MappingPage() {
       setSubsidiaries(subsData.data || []);
       setPLMaster(plMasterData);
       setBSMaster(bsMasterData);
-    } catch (error: any) {
+    } catch {
       toast.error('데이터 로딩 실패');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadMappings = async () => {
+  const loadMappings = useCallback(async () => {
     try {
       const data = await getCOAMappings(selectedEntityCode || undefined);
       setMappings(data);
-    } catch (error: any) {
-      toast.error('매핑 목록 로드 실패', { description: error.message });
+    } catch (error) {
+      toast.error('매핑 목록 로드 실패', { description: getErrorMessage(error) });
     }
-  };
+  }, [selectedEntityCode]);
 
-  const loadEntityUploads = async () => {
+  const loadEntityUploads = useCallback(async () => {
     try {
       const data = await getTBUploads(selectedEntityCode);
       setUploads(data);
       if (data.length > 0) {
         setSelectedUploadId(data[0].id);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load uploads:', error);
     }
-  };
+  }, [selectedEntityCode]);
 
-  const loadUnmappedAccounts = async () => {
+  const loadUnmappedAccounts = useCallback(async () => {
     if (!selectedUploadId) return;
     try {
       const data = await getUnmappedAccounts(selectedUploadId);
       setUnmappedAccounts(data);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load unmapped accounts:', error);
     }
-  };
+  }, [selectedUploadId]);
+
+  useEffect(() => {
+    void loadInitialData();
+  }, [loadInitialData]);
+
+  useEffect(() => {
+    if (selectedEntityCode) {
+      void loadMappings();
+      void loadEntityUploads();
+    }
+  }, [selectedEntityCode, loadMappings, loadEntityUploads]);
+
+  useEffect(() => {
+    if (selectedUploadId) {
+      void loadUnmappedAccounts();
+    }
+  }, [selectedUploadId, loadUnmappedAccounts]);
 
   // P&L/BS 카운트
   const plCount = useMemo(() => mappings.filter(m => m.statement_type === 'PL' || !m.statement_type).length, [mappings]);
@@ -197,8 +202,8 @@ export default function MappingPage() {
       setEditingId(null);
       await loadMappings();
       if (selectedUploadId) await loadUnmappedAccounts();
-    } catch (error: any) {
-      toast.error('매핑 저장 실패', { description: error.message });
+    } catch (error) {
+      toast.error('매핑 저장 실패', { description: getErrorMessage(error) });
     }
   };
 
@@ -209,8 +214,8 @@ export default function MappingPage() {
       await deleteCOAMapping(id);
       toast.success('매핑 삭제 완료');
       await loadMappings();
-    } catch (error: any) {
-      toast.error('매핑 삭제 실패', { description: error.message });
+    } catch (error) {
+      toast.error('매핑 삭제 실패', { description: getErrorMessage(error) });
     }
   };
 
@@ -258,8 +263,8 @@ export default function MappingPage() {
       await generateStatements(selectedUploadId);
       toast.success('P&L/BS 재생성 완료');
       await loadUnmappedAccounts();
-    } catch (error: any) {
-      toast.error('P&L/BS 재생성 실패', { description: error.message });
+    } catch (error) {
+      toast.error('P&L/BS 재생성 실패', { description: getErrorMessage(error) });
     }
   };
 
@@ -306,10 +311,10 @@ export default function MappingPage() {
 
       // 매핑 목록 새로고침
       await loadMappings();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Excel upload error:', error);
       toast.error('엑셀 업로드 실패', { 
-        description: error.message || '알 수 없는 오류가 발생했습니다.',
+        description: getErrorMessage(error),
         duration: 5000,
       });
     } finally {

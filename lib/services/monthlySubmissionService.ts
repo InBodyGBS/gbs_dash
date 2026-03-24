@@ -45,8 +45,8 @@ export async function createMonthlySubmission(formData: MonthlySubmissionFormDat
       .order('version', { ascending: false })
       .limit(1);
 
-    const nextVersion =
-      existingSubmissions && existingSubmissions.length > 0 ? existingSubmissions[0].version + 1 : 1;
+    const latestSubmission = (existingSubmissions?.[0] as unknown as { version?: number } | undefined);
+    const nextVersion = typeof latestSubmission?.version === 'number' ? latestSubmission.version + 1 : 1;
 
     // Storage 파일 경로
     const filePath = `monthly-closing/${periodYear}/${periodMonth}/${subsidiaryId}/${category}/${uuidv4()}.${fileExt}`;
@@ -101,7 +101,7 @@ export async function createMonthlySubmission(formData: MonthlySubmissionFormDat
       throw new Error(`데이터베이스 저장 실패: ${dbError.message}`);
     }
 
-    return data as MonthlySubmission;
+    return data as unknown as MonthlySubmission;
   } catch (error) {
     console.error('Error creating monthly submission:', error);
     throw error;
@@ -133,7 +133,7 @@ export async function getMonthlySubmissions(
       throw new Error(`제출 목록 조회 실패: ${error.message}`);
     }
 
-    return (data || []) as MonthlySubmission[];
+    return (data || []) as unknown as MonthlySubmission[];
   } catch (error) {
     console.error('Error getting monthly submissions:', error);
     throw error;
@@ -183,7 +183,7 @@ export async function getMonthlyReviewStatuses(
       throw new Error(`Review 상태 조회 실패: ${error.message}`);
     }
 
-    return (data || []) as MonthlyReviewStatus[];
+    return (data || []) as unknown as MonthlyReviewStatus[];
   } catch (error) {
     console.error('Error getting monthly review statuses:', error);
     throw error;
@@ -219,6 +219,6 @@ export async function upsertMonthlyReviewStatus(
     throw new Error(`Review 상태 저장 실패: ${error.message}`);
   }
 
-  return data as MonthlyReviewStatus;
+  return data as unknown as MonthlyReviewStatus;
 }
 

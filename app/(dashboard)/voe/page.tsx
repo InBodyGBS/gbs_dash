@@ -12,15 +12,6 @@ const STATUS_STYLES: Record<VoeStatus, { label: string; bg: string; text: string
   Resolved:      { label: 'Resolved',    bg: 'bg-green-100',  text: 'text-green-700'  },
 };
 
-const CATEGORY_COLORS: Record<string, string> = {
-  General:    '#6B7280',
-  Accounting: '#3B82F6',
-  Tax:        '#8B5CF6',
-  Closing:    '#F59E0B',
-  System:     '#10B981',
-  Other:      '#9CA3AF',
-};
-
 type FilterStatus = 'All' | VoeStatus;
 const FILTERS: FilterStatus[] = ['All', 'Pending', 'In Progress', 'Resolved'];
 

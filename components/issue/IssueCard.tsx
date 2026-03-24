@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Issue } from '@/lib/types/issue';
 import type { Subsidiary } from '@/lib/supabase/types';
-import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/lib/constants/issue-categories';
+import { CATEGORY_COLORS } from '@/lib/constants/issue-categories';
 
 interface IssueCardProps {
   issue: Issue;
@@ -14,7 +14,6 @@ interface IssueCardProps {
 
 export function IssueCard({ issue, subsidiary, onClick }: IssueCardProps) {
   const categoryColor = CATEGORY_COLORS[issue.category];
-  const categoryLabel = CATEGORY_LABELS[issue.category];
 
   return (
     <div

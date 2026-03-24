@@ -25,15 +25,14 @@
 import { supabase } from '@/lib/supabase/client';
 import type { CategoryReviewStatus, ReviewStatus } from '@/lib/types/category-review';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const reviewTable = () => (supabase as any).from('category_review_status');
+const reviewTable = () => supabase.from('category_review_status' as never);
 
 export async function getCategoryReviewStatuses(quarterId: string): Promise<CategoryReviewStatus[]> {
   const { data, error } = await reviewTable()
     .select('*')
     .eq('quarter_id', quarterId);
   if (error) throw new Error(error.message);
-  return (data || []) as CategoryReviewStatus[];
+  return (data || []) as unknown as CategoryReviewStatus[];
 }
 
 export async function upsertCategoryReviewStatus(
@@ -58,7 +57,7 @@ export async function upsertCategoryReviewStatus(
   }
 
   const { data, error } = await reviewTable()
-    .upsert(update, { onConflict: 'quarter_id,subsidiary_id,category' })
+    .upsert(update as never, { onConflict: 'quarter_id,subsidiary_id,category' })
     .select()
     .single();
   if (error) throw new Error(error.message);

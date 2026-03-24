@@ -5,8 +5,8 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { FileText, Download, Calendar } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { FileText, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getArapSubmissions, getSubmissionFileUrl } from '@/lib/services/arapService';
@@ -20,6 +20,16 @@ interface AdminReviewPageProps {
   onMonthChange: (month: number) => void;
 }
 
+type ErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+  stack?: string;
+};
+
+const toErrorLike = (error: unknown): ErrorLike => (error ?? {}) as ErrorLike;
+
 export function AdminReviewPage({
   selectedYear,
   selectedMonth,
@@ -32,11 +42,7 @@ export function AdminReviewPage({
   const [loading, setLoading] = useState(true);
   const [schemaError, setSchemaError] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, [selectedYear, selectedMonth, selectedEntityId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setSchemaError(false);
@@ -63,19 +69,20 @@ export function AdminReviewPage({
       
       setSubmissions(submissionsData || []);
       setEntities(entitiesData || []);
-    } catch (error: any) {
-      console.error('❌ Failed to load Review data:', error);
+    } catch (error: unknown) {
+      const err = toErrorLike(error);
+      console.error('❌ Failed to load Review data:', err);
       console.error('Error details:', {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint,
-        stack: error?.stack,
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        hint: err.hint,
+        stack: err.stack,
       });
       
       // 테이블이 없을 경우 빈 배열로 설정
-      const errorMessage = String(error?.message || '');
-      const errorCode = String(error?.code || '');
+      const errorMessage = String(err.message || '');
+      const errorCode = String(err.code || '');
       
       if (
         errorCode === 'PGRST116' || 
@@ -96,7 +103,11 @@ export function AdminReviewPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedYear, selectedMonth, selectedEntityId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const handleDownload = async (submission: ArapSubmissionWithDetails) => {
     try {
@@ -118,7 +129,7 @@ export function AdminReviewPage({
         console.log('📊 Exporting latest manual submission to Excel:', latestSubmission);
         
         // Excel 데이터 준비 (최신 제출 데이터 사용)
-        const exportData = (latestSubmission.submission_details || []).map((detail: any) => {
+        const exportData = (latestSubmission.submission_details || []).map((detail) => {
           const counterparty = entities.find((e) => e.id === detail.counterparty_entity_id);
           return {
             'Invoice Date': detail.invoice_date || '',
@@ -166,9 +177,10 @@ export function AdminReviewPage({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (error: any) {
-      console.error('❌ Failed to download:', error);
-      alert(`Download failed: ${error?.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      const err = toErrorLike(error);
+      console.error('❌ Failed to download:', err);
+      alert(`Download failed: ${err.message || 'Unknown error'}`);
     }
   };
 

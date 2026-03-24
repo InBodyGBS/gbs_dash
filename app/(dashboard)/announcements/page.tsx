@@ -87,12 +87,11 @@ export default function AnnouncementsPage() {
       return;
     }
     setSubmitting(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from('announcements').insert({
+    const { error } = await supabase.from('announcements' as never).insert({
       type: form.type,
       title: form.title.trim(),
       author: form.author.trim(),
-    });
+    } as never);
     setSubmitting(false);
     if (error) {
       toast.error('등록 실패: ' + error.message);

@@ -29,6 +29,12 @@ interface AuditRecord {
   audit_report: string | null;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 interface EditableCellProps {
   value: string | null;
   onSave: (value: string | null) => Promise<void>;
@@ -133,10 +139,9 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
         const existing = recordsMap.get(subsidiaryId);
         if (existing?.id) {
           // UPDATE
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase as any)
-            .from('audit_records')
-            .update({ [category]: value, updated_at: new Date().toISOString() })
+          const { error } = await supabase
+            .from('audit_records' as never)
+            .update({ [category]: value, updated_at: new Date().toISOString() } as never)
             .eq('id', existing.id);
           if (error) throw error;
           setRecords((prev) =>
@@ -153,17 +158,16 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
             audit_report: null,
             [category]: value,
           };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data, error } = await (supabase as any)
-            .from('audit_records')
-            .insert(newRecord)
+          const { data, error } = await supabase
+            .from('audit_records' as never)
+            .insert(newRecord as never)
             .select()
             .single();
           if (error) throw error;
           setRecords((prev) => [...prev, data as unknown as AuditRecord]);
         }
-      } catch (err: any) {
-        toast.error('저장 실패: ' + err.message);
+      } catch (err: unknown) {
+        toast.error('저장 실패: ' + getErrorMessage(err));
       } finally {
         setSavingCells((prev) => { const n = new Set(prev); n.delete(key); return n; });
       }

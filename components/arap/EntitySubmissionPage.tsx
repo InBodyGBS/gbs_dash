@@ -6,14 +6,14 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Upload, Download, Plus, Trash2, Save, X, FileSpreadsheet } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Save, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
-import { createArapSubmission, getArapEntities, getArapSubmissions, deleteArapSubmission } from '@/lib/services/arapService';
+import { createArapSubmission, getArapEntities, getArapSubmissions } from '@/lib/services/arapService';
 import type { ArapSubmissionDetailInput, ArapEntity, AccountType } from '@/lib/types/arap';
 import * as XLSX from 'xlsx';
 
@@ -23,6 +23,41 @@ interface EntitySubmissionPageProps {
   selectedMonth: number;
   onSaveSuccess: () => void;
 }
+
+type ErrorLike = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
+type ExistingSubmissionDetail = {
+  invoice_date?: string | null;
+  counterparty_entity_id: string;
+  account_type: AccountType;
+  invoice_no?: string | null;
+  currency: string;
+  amount: number;
+  description?: string | null;
+};
+
+type ExistingSubmissionShape = {
+  submission_type: 'file' | 'manual';
+  submission_details?: ExistingSubmissionDetail[];
+  file_path?: string | null;
+};
+
+type UploadRow = {
+  Counterparty?: string;
+  'Account Type'?: string;
+  Currency?: string;
+  Amount?: unknown;
+  'Invoice Date'?: unknown;
+  'Invoice No'?: string;
+  Description?: string;
+};
+
+const toErrorLike = (error: unknown): ErrorLike => (error ?? {}) as ErrorLike;
 
 export function EntitySubmissionPage({
   entityId,
@@ -35,14 +70,9 @@ export function EntitySubmissionPage({
   const [submissionType, setSubmissionType] = useState<'file' | 'manual'>('manual');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [existingSubmission, setExistingSubmission] = useState<any>(null);
+  const [existingSubmission, setExistingSubmission] = useState<ExistingSubmissionShape | null>(null);
 
-  // Entity 목록 로드 및 기존 제출 데이터 로드
-  useEffect(() => {
-    loadData();
-  }, [entityId, selectedYear, selectedMonth]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const entitiesData = await getArapEntities();
       setEntities(entitiesData);
@@ -73,7 +103,7 @@ export function EntitySubmissionPage({
         setExistingSubmission(submission);
         
         // 저장된 데이터를 폼에 로드
-        const loadedItems: ArapSubmissionDetailInput[] = (submission.submission_details || []).map((detail: any) => ({
+        const loadedItems: ArapSubmissionDetailInput[] = (submission.submission_details || []).map((detail) => ({
           invoice_date: detail.invoice_date || null,
           counterparty_entity_id: detail.counterparty_entity_id,
           account_type: detail.account_type,
@@ -100,13 +130,14 @@ export function EntitySubmissionPage({
         setSubmissionType('manual');
         setUploadedFile(null);
       }
-    } catch (error: any) {
-      console.error('❌ Failed to load data:', error);
+    } catch (error: unknown) {
+      const err = toErrorLike(error);
+      console.error('❌ Failed to load data:', err);
       console.error('Error details:', {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint,
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        hint: err.hint,
       });
       // 에러가 나도 계속 진행
       setExistingSubmission(null);
@@ -114,7 +145,11 @@ export function EntitySubmissionPage({
       setSubmissionType('manual');
       setUploadedFile(null);
     }
-  };
+  }, [entityId, selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   // 템플릿 다운로드
   const handleDownloadTemplate = () => {
@@ -158,7 +193,7 @@ export function EntitySubmissionPage({
       const workbook = XLSX.read(data, { cellDates: true, cellNF: false, cellText: false });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'yyyy-mm-dd' }) as any[];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'yyyy-mm-dd' }) as UploadRow[];
 
       if (jsonData.length > 1000) {
         toast.error('Maximum 1,000 rows allowed');
@@ -166,7 +201,7 @@ export function EntitySubmissionPage({
       }
 
       // Excel 날짜 serial number를 yyyy-MM-dd 형식으로 변환하는 함수
-      const convertExcelDate = (value: any): string | null => {
+      const convertExcelDate = (value: unknown): string | null => {
         if (!value) return null;
         
         // 이미 yyyy-MM-dd 형식인 경우
@@ -217,7 +252,8 @@ export function EntitySubmissionPage({
           return;
         }
 
-        if (!['AR', 'AP', 'Others'].includes(row['Account Type'])) {
+        const accountType = row['Account Type'];
+        if (typeof accountType !== 'string' || !['AR', 'AP', 'Others'].includes(accountType)) {
           errors.push(`Row ${index + 2}: Invalid account type "${row['Account Type']}"`);
           return;
         }
@@ -236,7 +272,7 @@ export function EntitySubmissionPage({
         validatedItems.push({
           invoice_date: convertExcelDate(row['Invoice Date']),
           counterparty_entity_id: counterparty.id,
-          account_type: row['Account Type'] as AccountType,
+          account_type: accountType as AccountType,
           invoice_no: row['Invoice No'] || null,
           currency: row.Currency.toUpperCase(),
           amount: amount,
@@ -255,7 +291,7 @@ export function EntitySubmissionPage({
       // 기존 데이터에 추가 (중복 병행)
       setItems((prevItems) => [...prevItems, ...validatedItems]);
       setSubmissionType('file');
-      toast.success(`Added ${validatedItems.length} items from file (${validatedItems.length + (items.length || 0)} total)`);
+      toast.success(`Added ${validatedItems.length} item(s) from file`);
     } catch (error) {
       console.error('Failed to parse file:', error);
       toast.error('Failed to parse file');
@@ -290,7 +326,11 @@ export function EntitySubmissionPage({
   };
 
   // 행 업데이트
-  const handleUpdateRow = (index: number, field: keyof ArapSubmissionDetailInput, value: any) => {
+  const handleUpdateRow = (
+    index: number,
+    field: keyof ArapSubmissionDetailInput,
+    value: ArapSubmissionDetailInput[keyof ArapSubmissionDetailInput]
+  ) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
@@ -459,10 +499,11 @@ export function EntitySubmissionPage({
       });
       
       onSaveSuccess();
-    } catch (error: any) {
-      console.error('❌ Failed to save submission:', error);
+    } catch (error: unknown) {
+      const err = toErrorLike(error);
+      console.error('❌ Failed to save submission:', err);
       
-      const errorMessage = error?.message || 'Failed to save submission';
+      const errorMessage = err.message || 'Failed to save submission';
       toast.error(errorMessage, {
         duration: 5000,
       });

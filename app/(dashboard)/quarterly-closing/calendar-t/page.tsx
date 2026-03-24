@@ -36,6 +36,12 @@ import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
 
 const WEEK_DAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export default function CalendarTPage() {
   const {
     quarter,
@@ -228,15 +234,15 @@ export default function CalendarTPage() {
           status: 'planned' as const,
         }));
 
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('schedule_items')
           .upsert(upserts, { onConflict: 'quarter_id,subsidiary_id,category' });
 
         if (error) throw error;
         toast.success('완료 기한이 설정되었습니다.');
         await refetch();
-      } catch (err: any) {
-        toast.error(`설정 실패: ${err.message}`);
+      } catch (err: unknown) {
+        toast.error(`설정 실패: ${getErrorMessage(err)}`);
       } finally {
         setSaving(false);
       }
@@ -253,7 +259,7 @@ export default function CalendarTPage() {
 
       setSaving(true);
       try {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from('schedule_items')
           .delete()
           .eq('quarter_id', quarter.id)
@@ -263,8 +269,8 @@ export default function CalendarTPage() {
         if (error) throw error;
         toast.success('완료 기한이 삭제되었습니다.');
         await refetch();
-      } catch (err: any) {
-        toast.error(`삭제 실패: ${err.message}`);
+      } catch (err: unknown) {
+        toast.error(`삭제 실패: ${getErrorMessage(err)}`);
       } finally {
         setSaving(false);
       }

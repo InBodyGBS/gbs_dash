@@ -6,7 +6,7 @@
  * Entity별 Dashboard + 비교 탭 (전년도 동월, 전년도 동월 누적, 직전월)
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import {
   Select,
@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -46,6 +46,12 @@ import {
 } from 'recharts';
 
 type ComparisonType = 'mom' | 'yoy' | 'yoy_ytd';
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
 
 // 월별값 계산 헬퍼 함수 (Result 페이지와 동일한 로직)
 function calculateMonthlyDifference(
@@ -97,16 +103,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
-  // Subsidiaries 로드
-  useEffect(() => {
-    loadSubsidiaries();
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [selectedYear, selectedMonth, selectedEntity, comparisonType]);
-
-  const loadSubsidiaries = async () => {
+  const loadSubsidiaries = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('subsidiaries')
@@ -114,12 +111,12 @@ export default function DashboardPage() {
         .order('name');
       if (error) throw error;
       setSubsidiaries(data || []);
-    } catch (error: any) {
-      console.error('Failed to load subsidiaries:', error);
+    } catch (error: unknown) {
+      console.error('Failed to load subsidiaries:', getErrorMessage(error));
     }
-  };
+  }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setDataLoading(true);
     try {
       const year = parseInt(selectedYear);
@@ -274,14 +271,22 @@ export default function DashboardPage() {
       
       setSummaries(currentData);
       setPrevSummaries(compareData);
-    } catch (error: any) {
-      console.error('Failed to load dashboard:', error);
-      toast.error('데이터 로드 실패');
+    } catch (error: unknown) {
+      console.error('Failed to load dashboard:', getErrorMessage(error));
+      toast.error('데이터 로드 실패', { description: getErrorMessage(error) });
     } finally {
       setDataLoading(false);
       setLoading(false);
     }
-  };
+  }, [selectedYear, selectedMonth, selectedEntity, comparisonType, subsidiaries]);
+
+  useEffect(() => {
+    void loadSubsidiaries();
+  }, [loadSubsidiaries]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   // Summary 계산 (PRD 기반: Sales, GP%, Operating Income, Net Income)
   const dashboardData = useMemo(() => {
@@ -294,7 +299,6 @@ export default function DashboardPage() {
 
     const prevTotalSales = prevSummaries.reduce((sum, s) => sum + s.sales, 0);
     const prevTotalGP = prevSummaries.reduce((sum, s) => sum + s.grossProfit, 0);
-    const prevTotalOperatingIncome = prevSummaries.reduce((sum, s) => sum + s.operatingIncome, 0);
     const prevGPPercent = prevTotalSales !== 0 ? (prevTotalGP / prevTotalSales) * 100 : 0;
     const prevTotalNetIncome = prevSummaries.reduce((sum, s) => sum + s.netIncome, 0);
 
@@ -390,7 +394,7 @@ export default function DashboardPage() {
     }
 
     return items;
-  }, [summaries, dashboardData]);
+  }, [summaries, dashboardData, prevSummaries]);
 
   // 차트 데이터: Profitability Comparison
   const profitabilityChartData = useMemo(() => {

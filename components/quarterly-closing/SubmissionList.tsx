@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { FileSpreadsheet, Download, Trash2, MessageSquare, Copy, ExternalLink, Check } from 'lucide-react';
+import { FileSpreadsheet, Download, Trash2, MessageSquare, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -32,6 +32,12 @@ interface SubmissionListProps {
   onDeleteSuccess?: () => void;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function SubmissionList({
   selectedCategory,
   quarterId,
@@ -58,10 +64,10 @@ export function SubmissionList({
       setLoading(true);
       const data = await getSubmissions(selectedCategory, quarterId, subsidiaryId);
       setSubmissions(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load submissions:', error);
       toast.error('제출 목록 로드 실패', {
-        description: error.message || '제출 목록을 불러오는 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     } finally {
       setLoading(false);
@@ -82,9 +88,9 @@ export function SubmissionList({
       }
       // 서버에서 다시 로드하여 동기화
       await loadSubmissions();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('삭제 실패', {
-        description: error.message || '파일 삭제 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };
@@ -101,23 +107,9 @@ export function SubmissionList({
       toast.success('다운로드 시작', {
         description: `${submission.file_name} 다운로드가 시작되었습니다.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('다운로드 실패', {
-        description: error.message || '파일 다운로드 중 오류가 발생했습니다.',
-      });
-    }
-  };
-
-  const handleCopyLink = async (submission: Submission) => {
-    try {
-      const url = await getSubmissionUrl(submission.file_path);
-      await navigator.clipboard.writeText(url);
-      toast.success('링크 복사 완료', {
-        description: '다운로드 링크가 클립보드에 복사되었습니다.',
-      });
-    } catch (error: any) {
-      toast.error('링크 복사 실패', {
-        description: error.message || '링크 복사 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };
@@ -274,9 +266,9 @@ function SubmissionItem({
               toast.success('링크 복사 완료', {
                 description: '다운로드 링크가 클립보드에 복사되었습니다.',
               });
-            } catch (error: any) {
+            } catch (error: unknown) {
               toast.error('링크 복사 실패', {
-                description: error.message || '링크 복사 중 오류가 발생했습니다.',
+                description: getErrorMessage(error),
               });
             }
           }}

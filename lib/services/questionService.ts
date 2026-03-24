@@ -75,14 +75,13 @@ export async function createQuestion(
 ): Promise<ClosingQuestion> {
   const { data, error } = await supabase
     .from('closing_questions')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .insert({
       ...questionData,
       status: 'pending',
       priority: questionData.priority || 'normal',
       is_public: false,
       tags: questionData.tags || [],
-    } as any)
+    } as Record<string, unknown>)
     .select()
     .single();
 
@@ -102,8 +101,7 @@ export async function updateQuestion(
     is_public?: boolean;
   }
 ): Promise<ClosingQuestion> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updateData: any = { ...updates };
+  const updateData: Record<string, unknown> = { ...updates };
 
   if (updates.answer && updates.answered_by) {
     updateData.answered_at = new Date().toISOString();
@@ -132,8 +130,7 @@ export async function recordQuestionView(
 ): Promise<QuestionView> {
   const { data, error } = await supabase
     .from('question_views')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .insert(viewData as any)
+    .insert(viewData as Record<string, unknown>)
     .select()
     .single();
 

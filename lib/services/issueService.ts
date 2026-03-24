@@ -73,7 +73,7 @@ export async function updateIssue(
     .single();
 
   if (error) throw error;
-  return data as Issue;
+  return data as unknown as Issue;
 }
 
 export async function deleteIssue(id: string): Promise<void> {

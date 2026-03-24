@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { FileText, Clock, CheckCircle, TrendingUp, Plus, Tag, Building2, Download, User, Calendar } from 'lucide-react';
+import { FileText, Clock, CheckCircle, Plus, Tag, Building2, Download, User, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -363,7 +363,7 @@ export default function IssuePage() {
               onValueChange={(value) =>
                 setFilters({
                   ...filters,
-                  statuses: value === 'all' ? [] : [value as any],
+                  statuses: value === 'all' ? [] : [value as Issue['status']],
                 })
               }
             >

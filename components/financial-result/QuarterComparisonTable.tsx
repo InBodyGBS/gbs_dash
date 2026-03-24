@@ -9,7 +9,6 @@ import { REV_ACCOUNT_ORDER } from '@/lib/types/financial-result';
 import { formatKRW } from '@/lib/utils/format';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
-import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface QuarterComparisonTableProps {
@@ -18,10 +17,15 @@ interface QuarterComparisonTableProps {
   showEntityColumn?: boolean;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function QuarterComparisonTable({
   data,
   entity,
-  showEntityColumn = false,
 }: QuarterComparisonTableProps) {
   // Entity별, 계정별 데이터 그룹화
   const entityData = useMemo(() => {
@@ -159,8 +163,11 @@ export function QuarterComparisonTable({
     : '';
 
   // 필터링된 Entity 목록
-  const displayEntities = entity ? [entity] : entities;
-  
+  const displayEntities = useMemo(
+    () => (entity ? [entity] : entities),
+    [entity, entities],
+  );
+
   // 표시용 Entity 이름 목록 (subsidiary name 우선) - useMemo로 최적화
   const displayEntityNames = useMemo(() => {
     return displayEntities.map((e) => getEntityDisplayName(e));
@@ -183,13 +190,13 @@ export function QuarterComparisonTable({
       const wb = XLSX.utils.book_new();
 
       // QoQ 분석 시트
-      const qoqSheetData: any[][] = [];
+      const qoqSheetData: Array<Array<string | number | null>> = [];
       
       // QoQ Base
       qoqSheetData.push([`QoQ 분석: ${prevPeriod}`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item ? item.base : 0);
@@ -202,7 +209,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: ${period}`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item ? item.compare : 0);
@@ -215,7 +222,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: 증감액 (${prevPeriod} → ${period})`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item ? item.change : 0);
@@ -228,7 +235,7 @@ export function QuarterComparisonTable({
       qoqSheetData.push([`QoQ 분석: 증감률(%) (${prevPeriod} → ${period})`]);
       qoqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = qoqData.get(entityName)?.get(account);
           row.push(item && item.rate !== null ? item.rate : null);
@@ -240,12 +247,12 @@ export function QuarterComparisonTable({
       XLSX.utils.book_append_sheet(wb, qoqWs, 'QoQ 분석');
 
       // YoY(Q) 분석 시트
-      const yoyqSheetData: any[][] = [];
+      const yoyqSheetData: Array<Array<string | number | null>> = [];
       
       yoyqSheetData.push([`YoY(Q) 분석: ${yoyPeriod}`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item ? item.base : 0);
@@ -257,7 +264,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: ${period}`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item ? item.compare : 0);
@@ -269,7 +276,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: 증감액 (${yoyPeriod} → ${period})`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item ? item.change : 0);
@@ -281,7 +288,7 @@ export function QuarterComparisonTable({
       yoyqSheetData.push([`YoY(Q) 분석: 증감률(%) (${yoyPeriod} → ${period})`]);
       yoyqSheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyqData.get(entityName)?.get(account);
           row.push(item && item.rate !== null ? item.rate : null);
@@ -293,12 +300,12 @@ export function QuarterComparisonTable({
       XLSX.utils.book_append_sheet(wb, yoyqWs, 'YoY(Q) 분석');
 
       // YoY(Y) 분석 시트
-      const yoyySheetData: any[][] = [];
+      const yoyySheetData: Array<Array<string | number | null>> = [];
       
       yoyySheetData.push([`YoY(Y) 분석: ${yoyPeriod}(누적)`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item ? item.base : 0);
@@ -310,7 +317,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: ${period}(누적)`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item ? item.compare : 0);
@@ -322,7 +329,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: 증감액 (${yoyPeriod} → ${period})`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item ? item.change : 0);
@@ -334,7 +341,7 @@ export function QuarterComparisonTable({
       yoyySheetData.push([`YoY(Y) 분석: 증감률(%) (${yoyPeriod} → ${period})`]);
       yoyySheetData.push(['계정', ...displayEntityNames]);
       REV_ACCOUNT_ORDER.forEach((account) => {
-        const row: any[] = [account];
+        const row: Array<string | number | null> = [account];
         displayEntities.forEach((entityName) => {
           const item = yoyyData.get(entityName)?.get(account);
           row.push(item && item.rate !== null ? item.rate : null);
@@ -352,10 +359,10 @@ export function QuarterComparisonTable({
       toast.success('다운로드 완료', {
         description: `${fileName} 파일이 다운로드되었습니다.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Excel Download Error:', error);
       toast.error('다운로드 실패', {
-        description: error.message || 'Excel 파일 생성 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };

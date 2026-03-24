@@ -20,6 +20,12 @@ interface SubmissionUploadProps {
   entityName?: string | null;
 }
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return '알 수 없는 오류';
+};
+
 export function SubmissionUpload({
   onUploadSuccess,
   category,
@@ -37,9 +43,9 @@ export function SubmissionUpload({
       toast.success('템플릿 다운로드 완료', {
         description: `${categoryLabel} 템플릿이 다운로드되었습니다.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error('템플릿 다운로드 실패', {
-        description: error.message || '템플릿 다운로드 중 오류가 발생했습니다.',
+        description: getErrorMessage(error),
       });
     }
   };
@@ -71,15 +77,15 @@ export function SubmissionUpload({
           description: `${file.name}이(가) 성공적으로 업로드되었습니다.`,
         });
         onUploadSuccess();
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast.error('업로드 실패', {
-          description: error.message || '파일 업로드 중 오류가 발생했습니다.',
+          description: getErrorMessage(error),
         });
       } finally {
         setUploading(false);
       }
     },
-    [category, quarterId, subsidiaryId, onUploadSuccess]
+    [category, quarterId, subsidiaryId, fiscalYear, entityName, onUploadSuccess]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

@@ -8,6 +8,18 @@ import { supabase } from '@/lib/supabase/client';
 import type { Submission, SubmissionComment, SubmissionFormData } from '@/lib/types/submission';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 
+type SubmissionVersionRow = { version?: number };
+type SubmissionCommentRow = {
+  id: string;
+  submission_id: string;
+  message: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  edited?: boolean | null;
+};
+type UserProfileLite = { id: string; name?: string | null; email?: string | null };
+
 /**
  * 서버사이드 API를 통한 파일 제출
  * schedule_items 자동 확정 포함
@@ -79,9 +91,8 @@ export async function createSubmission(
       .order('version', { ascending: false })
       .limit(1);
 
-    const nextVersion = existingSubmissions && existingSubmissions.length > 0
-      ? existingSubmissions[0].version + 1
-      : 1;
+    const latestSubmission = existingSubmissions?.[0] as unknown as SubmissionVersionRow | undefined;
+    const nextVersion = typeof latestSubmission?.version === 'number' ? latestSubmission.version + 1 : 1;
 
     // 파일 경로 생성
     const filePath = `${category}/${uuidv4()}.${fileExt}`;
@@ -317,14 +328,15 @@ export async function createSubmissionComment(
       throw new Error(`댓글 작성 실패: ${error.message}`);
     }
 
+    const created = data as unknown as SubmissionCommentRow;
     return {
-      id: data.id,
-      submission_id: data.submission_id,
-      message: data.message,
-      created_by: data.created_by,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      edited: data.edited || false,
+      id: created.id,
+      submission_id: created.submission_id,
+      message: created.message,
+      created_by: created.created_by,
+      created_at: created.created_at,
+      updated_at: created.updated_at,
+      edited: created.edited || false,
     };
   } catch (error) {
     console.error('Error creating submission comment:', error);
@@ -369,7 +381,7 @@ export async function getSubmissionComments(
           .in('id', userIds);
 
         if (!profileError && profiles) {
-          profiles.forEach((profile) => {
+          (profiles as unknown as UserProfileLite[]).forEach((profile) => {
             userMap.set(profile.id, {
               name: profile.name || null,
               email: profile.email || null,
@@ -385,7 +397,7 @@ export async function getSubmissionComments(
       }
     }
 
-    return (data || []).map((item) => {
+    return ((data || []) as unknown as SubmissionCommentRow[]).map((item) => {
       const userInfo = item.created_by ? userMap.get(item.created_by) : null;
       
       return {
@@ -395,7 +407,7 @@ export async function getSubmissionComments(
         created_by: item.created_by,
         created_at: item.created_at,
         updated_at: item.updated_at,
-        edited: item.edited || false,
+        edited: Boolean(item.edited),
         user_name: userInfo?.name || null,
         user_email: userInfo?.email || null,
       };
@@ -428,14 +440,15 @@ export async function updateSubmissionComment(
       throw new Error(`댓글 수정 실패: ${error.message}`);
     }
 
+    const updated = data as unknown as SubmissionCommentRow;
     return {
-      id: data.id,
-      submission_id: data.submission_id,
-      message: data.message,
-      created_by: data.created_by,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-      edited: data.edited || false,
+      id: updated.id,
+      submission_id: updated.submission_id,
+      message: updated.message,
+      created_by: updated.created_by,
+      created_at: updated.created_at,
+      updated_at: updated.updated_at,
+      edited: updated.edited || false,
     };
   } catch (error) {
     console.error('Error updating submission comment:', error);
