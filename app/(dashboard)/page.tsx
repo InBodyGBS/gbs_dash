@@ -139,7 +139,7 @@ export default function DashboardPage() {
                 <h2 className="font-semibold text-gray-900">Closing Schedule</h2>
               </div>
               <Link
-                href="/quarterly-closing/calendar"
+                href="/quarterly-closing/calendar-t"
                 className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
               >
                 View All <ChevronRight className="w-3 h-3" />

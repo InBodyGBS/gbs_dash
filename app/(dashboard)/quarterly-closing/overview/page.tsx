@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Quarterly Closing - Overview 페이지
+ * Financial Closing - Overview 페이지
  * 분기별 결산 제출 현황 개요
  */
 
@@ -23,14 +23,15 @@ export default function OverviewPage() {
   const {
     quarter,
     subsidiaries,
-    submissions,
+    submissionsScopedToMonth,
     loading,
     selectedYear,
-    selectedQuarter,
+    selectedMonth,
+    activeClosingCategories,
     selectedCategory,
     selectedEntityId,
     setSelectedYear,
-    setSelectedQuarter,
+    setSelectedMonth,
     setSelectedCategory,
     setSelectedEntityId,
     handleEntityOrderChange,
@@ -57,7 +58,7 @@ export default function OverviewPage() {
   if (!quarter) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">분기 데이터를 찾을 수 없습니다.</p>
+        <p className="text-gray-500">해당 연·월에 맞는 결산 분기 데이터를 찾을 수 없습니다.</p>
       </div>
     );
   }
@@ -89,10 +90,10 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {/* Year / Quarter selector */}
+          {/* Year / Month selector */}
           <div className="flex items-center gap-4 p-2 bg-gray-50 rounded-lg mb-2 flex-wrap">
             <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">귀속연도:</Label>
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">Year:</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
                 <SelectTrigger className="w-24">
                   <SelectValue />
@@ -105,15 +106,17 @@ export default function OverviewPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
-                <SelectTrigger className="w-20">
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</Label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[4.5rem]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">1Q</SelectItem>
-                  <SelectItem value="2">2Q</SelectItem>
-                  <SelectItem value="3">3Q</SelectItem>
-                  <SelectItem value="4">4Q</SelectItem>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <SelectItem key={m} value={String(m)}>
+                      {m}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -122,11 +125,12 @@ export default function OverviewPage() {
 
         {/* Submission summary + overview grid */}
         <div className="space-y-6">
-          {submissions.length > 0 && (
+          {submissionsScopedToMonth.length > 0 && (
             <div className="space-y-4">
               <SubmissionSummary
-                submissions={submissions}
+                submissions={submissionsScopedToMonth}
                 subsidiaries={subsidiaries}
+                activeCategories={activeClosingCategories}
                 onEntityFilter={setSelectedEntityId}
                 onCategoryFilter={setSelectedCategory}
                 selectedEntityId={selectedEntityId}
@@ -159,6 +163,8 @@ export default function OverviewPage() {
               }
               scheduleItems={filteredScheduleItems}
               submissions={filteredSubmissions}
+              categories={activeClosingCategories}
+              periodLabel={`${selectedYear}년 ${selectedMonth}월`}
               selectedCategory={selectedCategory}
               onEntityOrderChange={handleEntityOrderChange}
             />

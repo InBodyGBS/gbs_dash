@@ -12,8 +12,10 @@ import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import { calculateAchievementRate } from '@/lib/utils/achievement-rate';
 import { format, eachDayOfInterval, parseISO } from 'date-fns';
-import { getCategoryById, CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
-import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
+import {
+  getCategoryById,
+  getClosingCategoriesForMonth,
+} from '@/lib/constants/closing-categories';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quarterly-closing';
 
@@ -21,17 +23,27 @@ const STORAGE_KEY = 'quarterly-closing-schedule-state';
 const ENTITY_ORDER_KEY = 'quarterly-closing-entity-order';
 
 // ---------------------------------------------------------------------------
-// Helper: persist / restore selected year+quarter from localStorage
+// Helper: persist / restore selected year+month from localStorage
 // ---------------------------------------------------------------------------
 const loadSavedState = () => {
   if (typeof window === 'undefined') return null;
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
+      const parsed = JSON.parse(saved) as {
+        selectedYear?: string;
+        selectedMonth?: string;
+        selectedQuarter?: string;
+      };
+      let selectedMonth = parsed.selectedMonth;
+      if (selectedMonth == null && parsed.selectedQuarter != null) {
+        const q = parseInt(String(parsed.selectedQuarter), 10);
+        const endMonthByQ: Record<number, string> = { 1: '3', 2: '6', 3: '9', 4: '12' };
+        selectedMonth = endMonthByQ[q] || String(new Date().getMonth() + 1);
+      }
       return {
         selectedYear: parsed.selectedYear || '2025',
-        selectedQuarter: parsed.selectedQuarter || '1',
+        selectedMonth: selectedMonth || String(new Date().getMonth() + 1),
       };
     }
   } catch (error) {
@@ -40,12 +52,12 @@ const loadSavedState = () => {
   return null;
 };
 
-const saveState = (state: { selectedYear: string; selectedQuarter: string }) => {
+const saveState = (state: { selectedYear: string; selectedMonth: string }) => {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       selectedYear: state.selectedYear,
-      selectedQuarter: state.selectedQuarter,
+      selectedMonth: state.selectedMonth,
     }));
   } catch (error) {
     console.error('Failed to save state:', error);
@@ -86,22 +98,6 @@ const saveEntityOrder = (order: string[]) => {
 };
 
 // ---------------------------------------------------------------------------
-// Helper: fiscal period → work period
-// 귀속연도 nQ  →  업무기간 (n)Q+1  (4Q  →  (n+1)1Q)
-// ---------------------------------------------------------------------------
-const calculateWorkPeriod = (
-  fiscalYear: string,
-  fiscalQuarter: string,
-): { year: number; quarter: number } => {
-  const year = parseInt(fiscalYear);
-  const quarter = parseInt(fiscalQuarter);
-  if (quarter === 4) {
-    return { year: year + 1, quarter: 1 };
-  }
-  return { year, quarter: quarter + 1 };
-};
-
-// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 export function useScheduleData() {
@@ -111,7 +107,9 @@ export function useScheduleData() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(savedState?.selectedQuarter || '1');
+  const [selectedMonth, setSelectedMonth] = useState<string>(
+    savedState?.selectedMonth || String(new Date().getMonth() + 1),
+  );
 
   // Data state
   const [quarter, setQuarter] = useState<Quarter | null>(null);
@@ -202,10 +200,13 @@ export function useScheduleData() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const workPeriod = calculateWorkPeriod(selectedYear, selectedQuarter);
+      const fiscalYear = parseInt(selectedYear, 10);
+      const attributionMonth = parseInt(selectedMonth, 10) || 1;
+      const calendarQuarter = Math.min(4, Math.max(1, Math.ceil(attributionMonth / 3)));
+
       console.log('🔍 데이터 로딩 시작...', {
-        fiscalPeriod: `${selectedYear}년 ${selectedQuarter}Q`,
-        workPeriod: `${workPeriod.year}년 ${workPeriod.quarter}Q`,
+        fiscalPeriod: `${selectedYear}년 ${attributionMonth}월`,
+        quartersRow: `${fiscalYear}년 ${calendarQuarter}Q (DB 분기 행)`,
       });
 
       let quarterData: Quarter | null = null;
@@ -213,21 +214,21 @@ export function useScheduleData() {
       const { data, error: quarterError } = await supabase
         .from('quarters')
         .select('*')
-        .eq('year', workPeriod.year)
-        .eq('quarter', workPeriod.quarter)
+        .eq('year', fiscalYear)
+        .eq('quarter', calendarQuarter)
         .maybeSingle();
 
       if (data) {
         quarterData = data;
         console.log('✅ 분기 데이터 조회 성공:', quarterData);
       } else {
-        const quarterStartDate = new Date(workPeriod.year, (workPeriod.quarter - 1) * 3, 1);
-        const quarterEndDate = new Date(workPeriod.year, workPeriod.quarter * 3, 0);
+        const quarterStartDate = new Date(fiscalYear, (calendarQuarter - 1) * 3, 1);
+        const quarterEndDate = new Date(fiscalYear, calendarQuarter * 3, 0);
 
         quarterData = {
-          id: `temp-${workPeriod.year}-${workPeriod.quarter}`,
-          year: workPeriod.year,
-          quarter: workPeriod.quarter,
+          id: `temp-${fiscalYear}-${calendarQuarter}`,
+          year: fiscalYear,
+          quarter: calendarQuarter,
           start_date: format(quarterStartDate, 'yyyy-MM-dd'),
           end_date: format(quarterEndDate, 'yyyy-MM-dd'),
           created_at: new Date().toISOString(),
@@ -240,7 +241,12 @@ export function useScheduleData() {
       }
 
       if (!quarterData) {
-        console.error('❌ quarterData가 생성되지 않음', { selectedYear, selectedQuarter, workPeriod });
+        console.error('❌ quarterData가 생성되지 않음', {
+          selectedYear,
+          selectedMonth,
+          fiscalYear,
+          calendarQuarter,
+        });
         throw new Error('날짜 범위를 선택해주세요.');
       }
 
@@ -255,38 +261,32 @@ export function useScheduleData() {
 
       if (subsError) throw subsError;
 
-      const EXCLUDED_SUBSIDIARIES = ['Germany', 'UK', 'Singapore'];
-      const filteredSubs = (subsData || []).filter(
-        (s) => !EXCLUDED_SUBSIDIARIES.some((ex) => s.name.includes(ex)),
-      );
-      const orderedSubsidiaries = applyEntityOrder(filteredSubs);
+      const orderedSubsidiaries = applyEntityOrder(subsData || []);
       setSubsidiaries(orderedSubsidiaries);
 
-      // Fiscal quarter id (used by submissions table)
-      const fiscalYear = parseInt(selectedYear);
-      const fiscalQuarter = parseInt(selectedQuarter);
+      // Quarter id used by submissions (same calendar quarter row as schedule)
       let fiscalQuarterId: string | null = null;
 
       const { data: fiscalQuarterData } = await supabase
         .from('quarters')
         .select('id')
         .eq('year', fiscalYear)
-        .eq('quarter', fiscalQuarter)
+        .eq('quarter', calendarQuarter)
         .maybeSingle();
 
       if (fiscalQuarterData) {
         fiscalQuarterId = (fiscalQuarterData as { id: string }).id;
-        console.log(`✅ 귀속연도 Quarter 조회 성공:`, { fiscalYear, fiscalQuarter, fiscalQuarterId });
+        console.log(`✅ Quarter 조회 성공:`, { fiscalYear, calendarQuarter, fiscalQuarterId });
       } else {
-        console.log(`⚠️ 귀속연도 ${fiscalYear}년 ${fiscalQuarter}Q의 quarter가 없습니다. 생성 시도...`);
-        const quarterStartDate = new Date(fiscalYear, (fiscalQuarter - 1) * 3, 1);
-        const quarterEndDate = new Date(fiscalYear, fiscalQuarter * 3, 0);
+        console.log(`⚠️ ${fiscalYear}년 ${calendarQuarter}Q quarter가 없습니다. 생성 시도...`);
+        const quarterStartDate = new Date(fiscalYear, (calendarQuarter - 1) * 3, 1);
+        const quarterEndDate = new Date(fiscalYear, calendarQuarter * 3, 0);
 
         const { data: newFiscalQuarter, error: insertError } = await supabase
           .from('quarters')
           .insert({
             year: fiscalYear,
-            quarter: fiscalQuarter,
+            quarter: calendarQuarter,
             start_date: format(quarterStartDate, 'yyyy-MM-dd'),
             end_date: format(quarterEndDate, 'yyyy-MM-dd'),
           })
@@ -421,7 +421,7 @@ export function useScheduleData() {
         console.log(`📊 최종 merged submissions (temp quarter):`, {
           totalCount: mergedSubmissions.length,
           fiscalYear,
-          fiscalQuarter,
+          calendarQuarter,
           fiscalQuarterId,
           submissions: mergedSubmissions.map((s) => ({
             id: s.id,
@@ -503,7 +503,7 @@ export function useScheduleData() {
 
         console.log(`📊 submissions 조회 결과:`, {
           fiscalYear,
-          fiscalQuarter,
+          calendarQuarter,
           fiscalQuarterId,
           rawSubmissionsCount: submissionRows.length,
           filteredSubmissionsCount: submissionDocuments.length,
@@ -584,7 +584,7 @@ export function useScheduleData() {
         console.log(`📊 최종 merged submissions:`, {
           totalCount: mergedSubmissions.length,
           fiscalYear,
-          fiscalQuarter,
+          calendarQuarter,
           fiscalQuarterId,
           quarterDataId: quarterData.id,
           submissions: mergedSubmissions.map((s) => ({
@@ -767,7 +767,7 @@ export function useScheduleData() {
     console.log('📝 카테고리 상태 변경:', selectedCategory, '→', categoryId);
     const newCategory = selectedCategory === categoryId ? null : categoryId;
     setSelectedCategory(newCategory);
-    saveState({ selectedYear, selectedQuarter });
+    saveState({ selectedYear, selectedMonth });
   };
 
   const handleEntityOrderChange = (newOrder: Subsidiary[]) => {
@@ -958,31 +958,37 @@ export function useScheduleData() {
       return;
     }
 
-    const allDates = eachDayOfInterval({
-      start: parseISO(quarter.start_date),
-      end: parseISO(quarter.end_date),
-    });
+    const fy = parseInt(selectedYear, 10);
+    const monthNum = parseInt(selectedMonth, 10) || 1;
+    const monthStart = new Date(fy, monthNum - 1, 1);
+    const monthEnd = new Date(fy, monthNum, 0);
+    const allDates = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const ymPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;
+    const activeIds = new Set(
+      getClosingCategoriesForMonth(monthNum).map((c) => c.id),
+    );
 
     const headers = ['Entity', ...allDates.map((date) => format(date, 'MM/dd')), '성사율'];
 
     const rows = subsidiaries.map((subsidiary) => {
-      const rate = calculateAchievementRate(
-        scheduleItems.filter((item) => item.subsidiary_id === subsidiary.id),
+      const subItems = scheduleItems.filter(
+        (item) =>
+          item.subsidiary_id === subsidiary.id &&
+          activeIds.has(item.category) &&
+          item.planned_date.startsWith(ymPrefix),
       );
+      const rate = calculateAchievementRate(subItems);
 
       const row: string[] = [subsidiary.name.replace('InBody ', '')];
 
       allDates.forEach((date) => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        const items = scheduleItems.filter(
-          (item) =>
-            item.subsidiary_id === subsidiary.id && item.planned_date.startsWith(dateStr),
-        );
+        const items = subItems.filter((item) => item.planned_date.startsWith(dateStr));
 
         if (items.length > 0) {
           const categoryLabels = items
             .map((item) => {
-              const category = getCategoryById(item.category as ClosingCategoryId);
+              const category = getCategoryById(item.category);
               const status = item.status === 'confirmed' ? '✓' : '○';
               return category ? `${status}${category.label}` : '';
             })
@@ -1003,7 +1009,7 @@ export function useScheduleData() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Schedule');
 
-    const fileName = `Schedule_${quarter.year}Q${quarter.quarter}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+    const fileName = `Schedule_${fy}_${String(monthNum).padStart(2, '0')}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
     XLSX.writeFile(wb, fileName);
     toast.success('엑셀 파일이 다운로드되었습니다.');
   };
@@ -1014,16 +1020,23 @@ export function useScheduleData() {
       return;
     }
 
-    const headers = ['Entity', ...CLOSING_CATEGORIES.map((cat) => cat.label)];
+    const fy = parseInt(selectedYear, 10);
+    const monthNum = parseInt(selectedMonth, 10) || 1;
+    const ymPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;
+    const activeCats = getClosingCategoriesForMonth(monthNum);
+    const activeIds = new Set(activeCats.map((c) => c.id));
+
+    const headers = ['Entity', ...activeCats.map((cat) => cat.label)];
 
     const rows = subsidiaries.map((subsidiary) => {
       const row: string[] = [subsidiary.name.replace('InBody ', '')];
-      CLOSING_CATEGORIES.forEach((category) => {
+      activeCats.forEach((category) => {
         const hasItem = scheduleItems.some(
           (item) =>
             item.subsidiary_id === subsidiary.id &&
             item.category === category.id &&
-            item.quarter_id === quarter.id,
+            activeIds.has(item.category) &&
+            item.planned_date.startsWith(ymPrefix),
         );
         row.push(hasItem ? 'O' : 'X');
       });
@@ -1031,12 +1044,12 @@ export function useScheduleData() {
     });
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = [{ wch: 20 }, ...CLOSING_CATEGORIES.map(() => ({ wch: 15 }))];
+    ws['!cols'] = [{ wch: 20 }, ...activeCats.map(() => ({ wch: 15 }))];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Overview');
 
-    const fileName = `Overview_${quarter.year}Q${quarter.quarter}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
+    const fileName = `Overview_${fy}_${String(monthNum).padStart(2, '0')}_${format(new Date(), 'yyyyMMdd')}.xlsx`;
     XLSX.writeFile(wb, fileName);
     toast.success('엑셀 파일이 다운로드되었습니다.');
   };
@@ -1045,31 +1058,53 @@ export function useScheduleData() {
   // Effects
   // -------------------------------------------------------------------------
   useEffect(() => {
-    saveState({ selectedYear, selectedQuarter });
-  }, [selectedYear, selectedQuarter]);
+    saveState({ selectedYear, selectedMonth });
+  }, [selectedYear, selectedMonth]);
 
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedYear, selectedQuarter]);
+  }, [selectedYear, selectedMonth]);
 
   // -------------------------------------------------------------------------
   // Computed values
   // -------------------------------------------------------------------------
+  const activeClosingCategories = useMemo(
+    () => getClosingCategoriesForMonth(parseInt(selectedMonth, 10) || 1),
+    [selectedMonth],
+  );
+
+  const scheduleItemsScopedToMonth = useMemo(() => {
+    const fy = parseInt(selectedYear, 10);
+    const monthNum = parseInt(selectedMonth, 10) || 1;
+    const ymPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;
+    const activeIds = new Set(activeClosingCategories.map((c) => c.id));
+    return scheduleItems.filter(
+      (item) => activeIds.has(item.category) && item.planned_date.startsWith(ymPrefix),
+    );
+  }, [scheduleItems, selectedYear, selectedMonth, activeClosingCategories]);
+
+  const submissionsScopedToMonth = useMemo(() => {
+    const fy = parseInt(selectedYear, 10);
+    const monthNum = parseInt(selectedMonth, 10) || 1;
+    const ymPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;
+    const activeIds = new Set(activeClosingCategories.map((c) => c.id));
+    return submissions.filter((sub) => {
+      if (!activeIds.has(sub.category)) return false;
+      const dateStr = (sub.submitted_at || '').split('T')[0];
+      return dateStr.startsWith(ymPrefix);
+    });
+  }, [submissions, selectedYear, selectedMonth, activeClosingCategories]);
+
   const filteredScheduleItems = selectedCategory
-    ? scheduleItems.filter((item) => item.category === selectedCategory)
-    : scheduleItems;
+    ? scheduleItemsScopedToMonth.filter((item) => item.category === selectedCategory)
+    : scheduleItemsScopedToMonth;
 
   const filteredSubmissions = selectedCategory
-    ? submissions.filter((sub) => sub.category === selectedCategory)
-    : submissions;
+    ? submissionsScopedToMonth.filter((sub) => sub.category === selectedCategory)
+    : submissionsScopedToMonth;
 
   const achievementRate = calculateAchievementRate(filteredScheduleItems);
-
-  const workPeriod = useMemo(
-    () => calculateWorkPeriod(selectedYear, selectedQuarter),
-    [selectedYear, selectedQuarter],
-  );
 
   return {
     // state
@@ -1079,12 +1114,13 @@ export function useScheduleData() {
     submissions,
     loading,
     selectedYear,
-    selectedQuarter,
+    selectedMonth,
+    activeClosingCategories,
     selectedCategory,
     selectedEntityId,
     // setters
     setSelectedYear,
-    setSelectedQuarter,
+    setSelectedMonth,
     setSelectedCategory,
     setSelectedEntityId,
     // handlers
@@ -1101,7 +1137,7 @@ export function useScheduleData() {
     // computed
     filteredScheduleItems,
     filteredSubmissions,
+    submissionsScopedToMonth,
     achievementRate,
-    workPeriod,
   };
 }

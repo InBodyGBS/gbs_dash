@@ -2,8 +2,8 @@
 
 /**
  * Monthly Closing 레이아웃
- * 상단 3개 탭: Overview, Submission, Dashboard
- * Dashboard 탭 활성 시 하위 4개 탭: Upload, Mapping, Result, Dashboard
+ * 상단 3개 탭: Overview, Submission, Financial dash
+ * Financial dash 탭 활성 시 하위 4개 탭: Upload, Mapping, Result, Financial dash
  */
 
 import Link from 'next/link';
@@ -19,15 +19,15 @@ interface MonthlyClosingLayoutProps {
 const PRIMARY_TABS = [
   { value: 'overview', label: 'Overview', icon: Eye, href: '/monthly-closing/overview' },
   { value: 'submission', label: 'Submission', icon: FileSpreadsheet, href: '/monthly-closing/submission' },
-  { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/monthly-closing/dashboard' },
+  { value: 'dashboard', label: 'Financial dash', icon: LayoutDashboard, href: '/monthly-closing/dashboard' },
 ] as const;
 
-// Dashboard 하위 2차 탭
+// Financial dash 하위 2차 탭
 const DASHBOARD_SUBTABS = [
   { value: 'upload', label: 'Upload', icon: Upload, href: '/monthly-closing/upload' },
   { value: 'mapping', label: 'Mapping', icon: GitBranch, href: '/monthly-closing/mapping' },
   { value: 'result', label: 'Result', icon: BarChart3, href: '/monthly-closing/result' },
-  { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/monthly-closing/dashboard' },
+  { value: 'dashboard', label: 'Financial dash', icon: LayoutDashboard, href: '/monthly-closing/dashboard' },
 ] as const;
 
 export default function MonthlyClosingLayout({ children }: MonthlyClosingLayoutProps) {

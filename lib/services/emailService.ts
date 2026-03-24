@@ -42,7 +42,7 @@ function buildReminderHtml(p: ReminderEmailPayload, appUrl: string): string {
     <html lang="ko">
     <head><meta charset="UTF-8"></head>
     <body style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 24px;">
-      <h2 style="color: #971B2F;">Quarterly Closing 제출 독촉</h2>
+      <h2 style="color: #971B2F;">Financial Closing 제출 독촉</h2>
       <p>안녕하세요,</p>
       <p>아래 항목의 제출 기한이 초과되었습니다. 빠른 시일 내에 제출 부탁드립니다.</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">

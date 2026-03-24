@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Quarterly Closing - Calendar (T) 테스트 페이지
- * 전통적인 달력 그리드 뷰: 카테고리별 Planned Date 설정 + 제출 법인 표시
+ * Financial Closing — Calendar
+ * Year/Month 선택은 귀속(결산) 월이며, 그리드는 항상 귀속월의 다음 달을 표시합니다 (예: 3월 결산 → 4월 캘린더).
  */
 
 import { useState, useMemo, useCallback } from 'react';
@@ -12,11 +12,10 @@ import {
   endOfMonth,
   eachDayOfInterval,
   getDay,
-  addMonths,
-  subMonths,
   isToday,
   isSameDay,
   parseISO,
+  addMonths,
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,7 +31,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/client';
 import { useScheduleData } from '@/lib/hooks/useScheduleData';
-import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import { getCategoryById } from '@/lib/constants/closing-categories';
 
 const WEEK_DAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
@@ -50,13 +49,36 @@ export default function CalendarTPage() {
     submissions,
     loading,
     selectedYear,
-    selectedQuarter,
+    selectedMonth,
     setSelectedYear,
-    setSelectedQuarter,
+    setSelectedMonth,
+    activeClosingCategories,
     refetch,
   } = useScheduleData();
 
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const attributionMonthNum = parseInt(selectedMonth, 10) || 1;
+  const attributionYearNum = parseInt(selectedYear, 10);
+
+  /** 겉으로 보이는 캘린더 월 = 귀속월 + 1 */
+  const currentMonth = useMemo(() => {
+    const attributionStart = new Date(attributionYearNum, attributionMonthNum - 1, 1);
+    return addMonths(attributionStart, 1);
+  }, [attributionYearNum, attributionMonthNum]);
+
+  const calendarYmPrefix = format(currentMonth, 'yyyy-MM');
+
+  const activeCategoryIds = useMemo(
+    () => new Set(activeClosingCategories.map((c) => c.id)),
+    [activeClosingCategories],
+  );
+
+  const shiftCalendarMonth = (delta: number) => {
+    const y = parseInt(selectedYear, 10);
+    const m = parseInt(selectedMonth, 10);
+    const d = new Date(y, m - 1 + delta, 1);
+    setSelectedYear(String(d.getFullYear()));
+    setSelectedMonth(String(d.getMonth() + 1));
+  };
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const [legendCategory, setLegendCategory] = useState<string | null>(null);
@@ -66,15 +88,19 @@ export default function CalendarTPage() {
   // Compute: category planned dates (one date per category — the consensus date)
   // -------------------------------------------------------------------------
   const categoryPlannedDates = useMemo(() => {
-    // categoryId → dateStr (pick first non-null occurrence per category)
     const map = new Map<string, string>();
     for (const item of scheduleItems) {
-      if (item.planned_date && !map.has(item.category)) {
+      if (
+        item.planned_date &&
+        item.planned_date.startsWith(calendarYmPrefix) &&
+        activeCategoryIds.has(item.category) &&
+        !map.has(item.category)
+      ) {
         map.set(item.category, item.planned_date);
       }
     }
     return map;
-  }, [scheduleItems]);
+  }, [scheduleItems, calendarYmPrefix, activeCategoryIds]);
 
   // dateStr → array of category entries planned on that date
   const plannedByDate = useMemo(() => {
@@ -83,7 +109,7 @@ export default function CalendarTPage() {
       { categoryId: string; categoryLabel: string; categoryColor: string }[]
     >();
     for (const [catId, dateStr] of categoryPlannedDates) {
-      const cat = CLOSING_CATEGORIES.find((c) => c.id === catId);
+      const cat = getCategoryById(catId);
       if (!cat) continue;
       const existing = map.get(dateStr) ?? [];
       existing.push({
@@ -106,9 +132,11 @@ export default function CalendarTPage() {
     >();
     for (const sub of submissions) {
       const dateStr = sub.submitted_at.split('T')[0];
+      if (!dateStr.startsWith(calendarYmPrefix)) continue;
+      if (!activeCategoryIds.has(sub.category)) continue;
       const subsidiary = subsidiaries.find((s) => s.id === sub.subsidiary_id);
       if (!subsidiary) continue;
-      const cat = CLOSING_CATEGORIES.find((c) => c.id === sub.category);
+      const cat = getCategoryById(sub.category);
       const existing = map.get(dateStr) ?? [];
       existing.push({
         subsidiaryName: subsidiary.name.replace('InBody ', ''),
@@ -118,7 +146,7 @@ export default function CalendarTPage() {
       map.set(dateStr, existing);
     }
     return map;
-  }, [submissions, subsidiaries]);
+  }, [submissions, subsidiaries, calendarYmPrefix, activeCategoryIds]);
 
   // -------------------------------------------------------------------------
   // Legend selection: filtered views for calendar cells
@@ -138,7 +166,7 @@ export default function CalendarTPage() {
     const filtered = new Map<string, typeof submissionsByDate extends Map<string, infer V> ? V : never>();
     for (const [date, subs] of submissionsByDate) {
       const match = subs.filter((s) => {
-        if (legendCategory) return s.color === (CLOSING_CATEGORIES.find(c => c.id === legendCategory)?.color);
+        if (legendCategory) return s.color === getCategoryById(legendCategory)?.color;
         if (legendSubsidiary) {
           const sub = subsidiaries.find(x => x.id === legendSubsidiary);
           return sub ? s.subsidiaryName === sub.name.replace('InBody ', '') : false;
@@ -153,11 +181,16 @@ export default function CalendarTPage() {
   // Legend panel: category summary
   const legendCategoryInfo = useMemo(() => {
     if (!legendCategory) return null;
-    const cat = CLOSING_CATEGORIES.find((c) => c.id === legendCategory);
+    const cat = getCategoryById(legendCategory);
     if (!cat) return null;
     const plannedDate = categoryPlannedDates.get(legendCategory) ?? null;
     const submittedSubIds = new Set(
-      submissions.filter((s) => s.category === legendCategory).map((s) => s.subsidiary_id),
+      submissions
+        .filter((s) => {
+          const d = (s.submitted_at || '').split('T')[0];
+          return s.category === legendCategory && d.startsWith(calendarYmPrefix);
+        })
+        .map((s) => s.subsidiary_id),
     );
     return {
       cat,
@@ -165,7 +198,7 @@ export default function CalendarTPage() {
       submitted: subsidiaries.filter((s) => submittedSubIds.has(s.id)),
       notSubmitted: subsidiaries.filter((s) => !submittedSubIds.has(s.id)),
     };
-  }, [legendCategory, categoryPlannedDates, submissions, subsidiaries]);
+  }, [legendCategory, categoryPlannedDates, submissions, subsidiaries, calendarYmPrefix]);
 
   // Legend panel: subsidiary summary
   const legendSubsidiaryInfo = useMemo(() => {
@@ -173,14 +206,19 @@ export default function CalendarTPage() {
     const sub = subsidiaries.find((s) => s.id === legendSubsidiary);
     if (!sub) return null;
     const submittedCatIds = new Set(
-      submissions.filter((s) => s.subsidiary_id === legendSubsidiary).map((s) => s.category),
+      submissions
+        .filter((s) => {
+          const d = (s.submitted_at || '').split('T')[0];
+          return s.subsidiary_id === legendSubsidiary && d.startsWith(calendarYmPrefix);
+        })
+        .map((s) => s.category),
     );
     return {
       sub,
-      submitted: CLOSING_CATEGORIES.filter((c) => submittedCatIds.has(c.id)),
-      notSubmitted: CLOSING_CATEGORIES.filter((c) => !submittedCatIds.has(c.id)),
+      submitted: activeClosingCategories.filter((c) => submittedCatIds.has(c.id)),
+      notSubmitted: activeClosingCategories.filter((c) => !submittedCatIds.has(c.id)),
     };
-  }, [legendSubsidiary, submissions, subsidiaries]);
+  }, [legendSubsidiary, submissions, subsidiaries, calendarYmPrefix, activeClosingCategories]);
 
   const isLegendActive = legendCategory !== null || legendSubsidiary !== null;
 
@@ -220,7 +258,7 @@ export default function CalendarTPage() {
         return;
       }
       if (quarter.id.startsWith('temp-') || quarter.id.startsWith('custom-')) {
-        toast.error('분기가 아직 저장되지 않았습니다. Calendar 탭에서 먼저 일정을 추가해주세요.');
+        toast.error('분기가 아직 저장되지 않았습니다. Overview 등에서 분기를 먼저 준비한 뒤 다시 시도해주세요.');
         return;
       }
 
@@ -302,11 +340,11 @@ export default function CalendarTPage() {
     ? (submissionsByDate.get(selectedDateStr) ?? [])
     : [];
   // 아직 어떤 날짜에도 설정되지 않은 카테고리 (추가 가능)
-  const unassignedCategories = CLOSING_CATEGORIES.filter(
+  const unassignedCategories = activeClosingCategories.filter(
     (cat) => !categoryIdsOnSelected.has(cat.id) && !categoryPlannedDates.has(cat.id),
   );
   // 다른 날짜에 이미 설정된 카테고리 (잠금 표시)
-  const lockedCategories = CLOSING_CATEGORIES.filter(
+  const lockedCategories = activeClosingCategories.filter(
     (cat) => !categoryIdsOnSelected.has(cat.id) && categoryPlannedDates.has(cat.id),
   );
 
@@ -316,11 +354,11 @@ export default function CalendarTPage() {
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="mb-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">Calendar (T)</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Calendar</h2>
 
-            {/* Year / Quarter selector */}
+            {/* Year / Month selector */}
             <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">귀속연도:</Label>
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">Year:</Label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
                 <SelectTrigger className="w-24">
                   <SelectValue />
@@ -333,19 +371,24 @@ export default function CalendarTPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
-                <SelectTrigger className="w-20">
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</Label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[4.5rem]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">1Q</SelectItem>
-                  <SelectItem value="2">2Q</SelectItem>
-                  <SelectItem value="3">3Q</SelectItem>
-                  <SelectItem value="4">4Q</SelectItem>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <SelectItem key={m} value={String(m)}>
+                      {m}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
+          <p className="text-xs text-gray-500">
+            귀속 월 기준 · 캘린더는 다음 달({format(currentMonth, 'M')}월)을 표시합니다
+          </p>
 
           {/* Month navigation + legend */}
           <div className="flex items-center justify-between">
@@ -353,7 +396,7 @@ export default function CalendarTPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentMonth((prev) => subMonths(prev, 1))}
+                onClick={() => shiftCalendarMonth(-1)}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -363,7 +406,7 @@ export default function CalendarTPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentMonth((prev) => addMonths(prev, 1))}
+                onClick={() => shiftCalendarMonth(1)}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -371,7 +414,13 @@ export default function CalendarTPage() {
                 variant="ghost"
                 size="sm"
                 className="text-sm text-gray-500"
-                onClick={() => setCurrentMonth(new Date())}
+                onClick={() => {
+                  const t = new Date();
+                  const thisMonthStart = new Date(t.getFullYear(), t.getMonth(), 1);
+                  const attribution = addMonths(thisMonthStart, -1);
+                  setSelectedYear(String(attribution.getFullYear()));
+                  setSelectedMonth(String(attribution.getMonth() + 1));
+                }}
               >
                 오늘
               </Button>
@@ -723,7 +772,7 @@ export default function CalendarTPage() {
                 <div className="p-4 space-y-4">
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      제출 완료 ({legendSubsidiaryInfo.submitted.length}/{CLOSING_CATEGORIES.length})
+                      제출 완료 ({legendSubsidiaryInfo.submitted.length}/{activeClosingCategories.length})
                     </p>
                     {legendSubsidiaryInfo.submitted.length > 0 ? (
                       <div className="space-y-1">
@@ -776,7 +825,7 @@ export default function CalendarTPage() {
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-xs font-semibold text-gray-500 mb-2">카테고리 범례 <span className="font-normal text-gray-400">(클릭하여 필터)</span></p>
             <div className="flex flex-wrap gap-2">
-              {CLOSING_CATEGORIES.map((cat) => {
+              {activeClosingCategories.map((cat) => {
                 const plannedDate = categoryPlannedDates.get(cat.id);
                 const isSelected = legendCategory === cat.id;
                 return (

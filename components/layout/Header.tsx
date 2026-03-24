@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
-import { CATEGORIES } from '@/lib/constants/categories';
+import { CATEGORIES, getDeepestMatchingChild } from '@/lib/constants/categories';
 import { formatDate } from '@/lib/utils/format';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -50,9 +50,20 @@ const getErrorMessage = (error: unknown): string => {
  */
 const getPageTitle = (pathname: string): string => {
   if (pathname === '/') return 'Dashboard';
-  
-  const category = CATEGORIES.find(c => c.path === pathname);
-  return category?.label || 'Dashboard';
+
+  const exact = CATEGORIES.find((c) => c.path && c.path === pathname);
+  if (exact) return exact.label;
+
+  if (pathname.startsWith('/monthly-closing/overview')) return 'Overview';
+  if (pathname.startsWith('/monthly-closing/submission')) return 'Submission';
+
+  for (const c of CATEGORIES) {
+    if (!c.children?.length) continue;
+    const child = getDeepestMatchingChild([...c.children], pathname);
+    if (child) return child.label;
+  }
+
+  return 'Dashboard';
 };
 
 export const Header = ({ title }: HeaderProps) => {

@@ -3,12 +3,12 @@
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import type { ClosingCategory, ClosingCategoryId } from '@/lib/constants/closing-categories';
 import { downloadSubmissionTemplate } from '@/lib/utils/submissionTemplate';
 import { toast } from 'sonner';
-import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 
 interface SubmissionCategorySidebarProps {
+  categories: ClosingCategory[];
   selectedCategory: ClosingCategoryId | null;
   onCategorySelect: (category: ClosingCategoryId) => void;
 }
@@ -20,6 +20,7 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 export function SubmissionCategorySidebar({
+  categories,
   selectedCategory,
   onCategorySelect,
 }: SubmissionCategorySidebarProps) {
@@ -27,7 +28,7 @@ export function SubmissionCategorySidebar({
     e.stopPropagation();
     try {
       downloadSubmissionTemplate(categoryId);
-      const category = CLOSING_CATEGORIES.find((cat) => cat.id === categoryId);
+      const category = categories.find((cat) => cat.id === categoryId);
       toast.success('템플릿 다운로드 완료', {
         description: `${category?.label || categoryId} 템플릿이 다운로드되었습니다.`,
       });
@@ -45,7 +46,7 @@ export function SubmissionCategorySidebar({
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="p-2 space-y-1">
-          {CLOSING_CATEGORIES.map((category) => {
+          {categories.map((category) => {
             const isSelected = selectedCategory === category.id;
             return (
               <div

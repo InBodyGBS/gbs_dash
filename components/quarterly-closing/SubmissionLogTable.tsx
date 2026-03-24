@@ -86,10 +86,7 @@ export function SubmissionLogTable({
       if (error) {
         console.error('Failed to load subsidiaries:', error);
       } else {
-        const EXCLUDED = ['Germany', 'UK', 'Singapore'];
-        setSubsidiaries(
-          (data || []).filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
-        );
+        setSubsidiaries(data || []);
       }
     };
 

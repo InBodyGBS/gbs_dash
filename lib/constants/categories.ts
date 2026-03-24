@@ -31,6 +31,21 @@ export interface Category {
   children?: SubCategory[];
 }
 
+/** 경로가 정확히 일치하거나 하위 경로일 때만 매칭 (부모 path가 조기 매칭되지 않도록) */
+export function pathMatchesChild(childPath: string, pathname: string): boolean {
+  return pathname === childPath || pathname.startsWith(`${childPath}/`);
+}
+
+/** 같은 그룹에서 가장 구체적으로 일치하는 하위 메뉴 (긴 path 우선) */
+export function getDeepestMatchingChild(
+  children: SubCategory[],
+  pathname: string
+): SubCategory | null {
+  const matches = children.filter((ch) => pathMatchesChild(ch.path, pathname));
+  if (matches.length === 0) return null;
+  return matches.reduce((a, b) => (a.path.length >= b.path.length ? a : b));
+}
+
 export const CATEGORIES: Category[] = [
   {
     id: 'announcements',
@@ -46,16 +61,27 @@ export const CATEGORIES: Category[] = [
     icon: Calendar,
     description: '마감 일정 관리',
     children: [
-      { id: 'quarterly-closing', label: 'Quarterly Closing', path: '/quarterly-closing' },
-      { id: 'monthly-closing', label: 'Monthly Closing', path: '/monthly-closing' },
+      { id: 'finance-guide', label: 'Finance guide', path: '/quarterly-closing/reference' },
+      { id: 'quarterly-closing', label: 'Financial Closing', path: '/quarterly-closing' },
     ],
   },
   {
     id: 'financial-result',
     label: 'Financial Result',
-    path: '/financial-result',
+    path: '',
     icon: TrendingUp,
-    description: '법인별 재무 실적',
+    description: '법인별 재무 실적 및 월마감',
+    children: [
+      { id: 'financial-result-main', label: 'Entity map', path: '/financial-result' },
+      {
+        id: 'monthly-financial-dash',
+        label: 'Financial dash',
+        path: '/monthly-closing/dashboard',
+      },
+      { id: 'monthly-upload', label: 'Upload', path: '/monthly-closing/upload' },
+      { id: 'monthly-mapping', label: 'Mapping', path: '/monthly-closing/mapping' },
+      { id: 'monthly-result', label: 'Result', path: '/monthly-closing/result' },
+    ],
   },
   {
     id: 'issue',

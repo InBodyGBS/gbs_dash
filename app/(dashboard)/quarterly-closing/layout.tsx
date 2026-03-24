@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Quarterly Closing 레이아웃
- * 5개 탭 네비게이션: Calendar, Calendar(T), Overview, Submission, Reference
+ * Financial Closing 레이아웃
+ * 탭: Calendar, Overview, Submission — Finance guide는 Closing → Finance guide(사이드바)에서 진입
  */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, LayoutGrid, Upload, BookOpen, FlaskConical } from 'lucide-react';
+import { LayoutGrid, Upload, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface QuarterlyClosingLayoutProps {
@@ -15,23 +15,28 @@ interface QuarterlyClosingLayoutProps {
 }
 
 const TABS = [
-  { value: 'calendar', label: 'Calendar', icon: CalendarDays, href: '/quarterly-closing/calendar' },
-  { value: 'calendar-t', label: 'Calendar (T)', icon: FlaskConical, href: '/quarterly-closing/calendar-t' },
+  { value: 'calendar-t', label: 'Calendar', icon: CalendarDays, href: '/quarterly-closing/calendar-t' },
   { value: 'overview', label: 'Overview', icon: LayoutGrid, href: '/quarterly-closing/overview' },
   { value: 'submission', label: 'Submission', icon: Upload, href: '/quarterly-closing/submission' },
-  { value: 'reference', label: 'Reference', icon: BookOpen, href: '/quarterly-closing/reference' },
 ] as const;
 
 export default function QuarterlyClosingLayout({ children }: QuarterlyClosingLayoutProps) {
   const pathname = usePathname();
+  const isFinanceGuide = pathname.includes('/quarterly-closing/reference');
+
+  if (isFinanceGuide) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto px-6 py-2">{children}</div>
+      </div>
+    );
+  }
 
   const getActiveTab = () => {
     if (pathname.includes('/calendar-t')) return 'calendar-t';
-    if (pathname.includes('/calendar')) return 'calendar';
     if (pathname.includes('/overview')) return 'overview';
     if (pathname.includes('/submission')) return 'submission';
-    if (pathname.includes('/reference')) return 'reference';
-    return 'calendar';
+    return 'calendar-t';
   };
 
   const activeTab = getActiveTab();

@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Building2, ChevronDown, ChevronRight } from 'lucide-react';
-import { CATEGORIES } from '@/lib/constants/categories';
+import { CATEGORIES, getDeepestMatchingChild, pathMatchesChild } from '@/lib/constants/categories';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -19,11 +19,17 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
   const pathname = usePathname();
   const activePath = currentPath || pathname;
 
+  const matchesFinancialResultBranch = (path: string) =>
+    path.startsWith('/financial-result') || path.startsWith('/monthly-closing');
+
   // 현재 경로가 하위 항목에 해당하면 해당 부모를 기본으로 열어둠
   const getInitialOpen = () => {
     const set = new Set<string>();
     CATEGORIES.forEach((cat) => {
-      if (cat.children?.some((child) => activePath.startsWith(child.path))) {
+      if (
+        cat.children?.some((child) => activePath.startsWith(child.path)) ||
+        (cat.id === 'financial-result' && matchesFinancialResultBranch(activePath))
+      ) {
         set.add(cat.id);
       }
     });
@@ -35,7 +41,10 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
   // 경로 변경 시 해당 부모 자동 열기
   useEffect(() => {
     CATEGORIES.forEach((cat) => {
-      if (cat.children?.some((child) => activePath.startsWith(child.path))) {
+      if (
+        cat.children?.some((child) => pathMatchesChild(child.path, activePath)) ||
+        (cat.id === 'financial-result' && matchesFinancialResultBranch(activePath))
+      ) {
         setOpenGroups((prev) => new Set(prev).add(cat.id));
       }
     });
@@ -69,8 +78,14 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
           const Icon = category.icon;
           const hasChildren = !!category.children?.length;
           const isOpen = openGroups.has(category.id);
-          const isActive = activePath === category.path;
-          const isChildActive = category.children?.some((c) => activePath.startsWith(c.path));
+          const isActive = !!category.path && activePath === category.path;
+          const activeChildInCategory =
+            category.children && category.children.length > 0
+              ? getDeepestMatchingChild([...category.children], activePath)
+              : null;
+          const isChildActive =
+            activeChildInCategory !== null ||
+            (category.id === 'financial-result' && matchesFinancialResultBranch(activePath));
 
           if (hasChildren) {
             return (
@@ -97,7 +112,7 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
                 {isOpen && (
                   <div className="bg-slate-950/40">
                     {category.children!.map((child) => {
-                      const isChildItemActive = activePath.startsWith(child.path);
+                      const isChildItemActive = activeChildInCategory?.id === child.id;
                       return (
                         <div
                           key={child.id}

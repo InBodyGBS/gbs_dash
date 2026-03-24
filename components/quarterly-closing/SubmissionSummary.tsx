@@ -18,11 +18,12 @@ import {
 import { Label } from '@/components/ui/label';
 import type { DocumentSubmission } from '@/lib/types/quarterly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
-import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import type { ClosingCategory } from '@/lib/constants/closing-categories';
 
 interface SubmissionSummaryProps {
   submissions: DocumentSubmission[];
   subsidiaries: Subsidiary[];
+  activeCategories: ClosingCategory[];
   onEntityFilter?: (subsidiaryId: string | null) => void;
   onCategoryFilter?: (categoryId: string | null) => void;
   selectedEntityId?: string | null;
@@ -32,6 +33,7 @@ interface SubmissionSummaryProps {
 export function SubmissionSummary({ 
   submissions, 
   subsidiaries,
+  activeCategories,
   onEntityFilter,
   onCategoryFilter,
   selectedEntityId,
@@ -55,7 +57,7 @@ export function SubmissionSummary({
   // 카테고리별 제출 건수 계산
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    CLOSING_CATEGORIES.forEach((cat) => {
+    activeCategories.forEach((cat) => {
       counts.set(cat.id, 0);
     });
     submissions.forEach((sub) => {
@@ -63,7 +65,7 @@ export function SubmissionSummary({
       counts.set(sub.category, count + 1);
     });
     return counts;
-  }, [submissions]);
+  }, [submissions, activeCategories]);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -109,7 +111,7 @@ export function SubmissionSummary({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">전체</SelectItem>
-              {CLOSING_CATEGORIES.map((cat) => {
+              {activeCategories.map((cat) => {
                 const count = categoryCounts.get(cat.id) || 0;
                 return (
                   <SelectItem key={cat.id} value={cat.id}>

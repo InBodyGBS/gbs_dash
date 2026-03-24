@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Reference Page
- * Year-End Closing Guide and Q&A
+ * Finance guide — Year-End Closing Guide and Q&A
+ * 좌측: Closing → Finance guide
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -123,7 +123,7 @@ export default function ReferencePage() {
       {/* Header - Fixed */}
       <div className="flex-shrink-0 mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Reference - Year-End Closing Guide
+          Finance guide — Year-End Closing Guide
         </h1>
         <p className="text-gray-600">
           Find closing adjustment guides and ask questions to the GBS team

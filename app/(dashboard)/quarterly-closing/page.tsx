@@ -1,10 +1,10 @@
 /**
- * Quarterly Closing 메인 페이지
- * /calendar로 자동 리다이렉트
+ * Financial Closing 메인 페이지
+ * Financial (T) 일정 화면으로 이동
  */
 
 import { redirect } from 'next/navigation';
 
 export default function QuarterlyClosingPage() {
-  redirect('/quarterly-closing/calendar');
+  redirect('/quarterly-closing/calendar-t');
 }

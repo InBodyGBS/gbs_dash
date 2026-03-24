@@ -16,7 +16,7 @@ import { SubmissionUpload } from '@/components/quarterly-closing/SubmissionUploa
 import { PreliminarySalesSGAForm } from '@/components/quarterly-closing/PreliminarySalesSGAForm';
 import { SubmissionList } from '@/components/quarterly-closing/SubmissionList';
 import { SubmissionCommentDialog } from '@/components/quarterly-closing/SubmissionCommentDialog';
-import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import { getClosingCategoriesForMonth } from '@/lib/constants/closing-categories';
 import { toast } from 'sonner';
 import type { Submission } from '@/lib/types/submission';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
@@ -38,10 +38,21 @@ export default function SubmissionPage() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(saved) as {
+          selectedYear?: string;
+          selectedMonth?: string;
+          selectedQuarter?: string;
+          selectedSubsidiaryId?: string;
+        };
+        let selectedMonth = parsed.selectedMonth;
+        if (selectedMonth == null && parsed.selectedQuarter != null) {
+          const q = parseInt(String(parsed.selectedQuarter), 10);
+          const endMonthByQ: Record<number, string> = { 1: '3', 2: '6', 3: '9', 4: '12' };
+          selectedMonth = endMonthByQ[q] || String(new Date().getMonth() + 1);
+        }
         return {
           selectedYear: parsed.selectedYear || '2025',
-          selectedQuarter: parsed.selectedQuarter || '1',
+          selectedMonth: selectedMonth || String(new Date().getMonth() + 1),
           selectedSubsidiaryId: parsed.selectedSubsidiaryId || 'all',
         };
       }
@@ -54,7 +65,7 @@ export default function SubmissionPage() {
   // 상태 저장
   const saveState = (state: {
     selectedYear: string;
-    selectedQuarter: string;
+    selectedMonth: string;
     selectedSubsidiaryId: string;
   }) => {
     if (typeof window === 'undefined') return;
@@ -66,13 +77,14 @@ export default function SubmissionPage() {
   };
 
   const savedState = loadSavedState();
+  const initialMonth = savedState?.selectedMonth || String(new Date().getMonth() + 1);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<ClosingCategoryId>(
-    CLOSING_CATEGORIES[0].id
+    () => getClosingCategoriesForMonth(parseInt(initialMonth, 10) || 1)[0].id,
   );
   const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
-  const [selectedQuarter, setSelectedQuarter] = useState<string>(savedState?.selectedQuarter || '1');
+  const [selectedMonth, setSelectedMonth] = useState<string>(initialMonth);
   const [selectedSubsidiaryId, setSelectedSubsidiaryId] = useState<string>(
     savedState?.selectedSubsidiaryId || 'all'
   );
@@ -85,19 +97,30 @@ export default function SubmissionPage() {
   useEffect(() => {
     saveState({
       selectedYear,
-      selectedQuarter,
+      selectedMonth,
       selectedSubsidiaryId,
     });
-  }, [selectedYear, selectedQuarter, selectedSubsidiaryId]);
+  }, [selectedYear, selectedMonth, selectedSubsidiaryId]);
+
+  useEffect(() => {
+    const m = parseInt(selectedMonth, 10) || 1;
+    const cats = getClosingCategoriesForMonth(m);
+    setSelectedCategory((prev) => (cats.some((c) => c.id === prev) ? prev : cats[0].id));
+  }, [selectedMonth]);
+
+  const submissionCategories = getClosingCategoriesForMonth(parseInt(selectedMonth, 10) || 1);
 
   const loadData = useCallback(async () => {
     try {
-      // Quarter 데이터 조회
+      const fy = parseInt(selectedYear, 10);
+      const monthNum = parseInt(selectedMonth, 10) || 1;
+      const calendarQuarter = Math.min(4, Math.max(1, Math.ceil(monthNum / 3)));
+
       const { data: quarterData } = await supabase
         .from('quarters')
         .select('*')
-        .eq('year', parseInt(selectedYear))
-        .eq('quarter', parseInt(selectedQuarter))
+        .eq('year', fy)
+        .eq('quarter', calendarQuarter)
         .maybeSingle();
 
       if (quarterData) {
@@ -108,16 +131,15 @@ export default function SubmissionPage() {
         });
         setQuarter(quarterData);
       } else {
-        // Quarter가 없으면 DB에 생성
         console.log(`⚠️ Submission 페이지 - Quarter 없음, 생성 시도...`);
-        const quarterStartDate = new Date(parseInt(selectedYear), (parseInt(selectedQuarter) - 1) * 3, 1);
-        const quarterEndDate = new Date(parseInt(selectedYear), parseInt(selectedQuarter) * 3, 0);
-        
+        const quarterStartDate = new Date(fy, (calendarQuarter - 1) * 3, 1);
+        const quarterEndDate = new Date(fy, calendarQuarter * 3, 0);
+
         const { data: newQuarter, error: insertError } = await supabase
           .from('quarters')
           .insert({
-            year: parseInt(selectedYear),
-            quarter: parseInt(selectedQuarter),
+            year: fy,
+            quarter: calendarQuarter,
             start_date: format(quarterStartDate, 'yyyy-MM-dd'),
             end_date: format(quarterEndDate, 'yyyy-MM-dd'),
           })
@@ -125,12 +147,11 @@ export default function SubmissionPage() {
           .single();
 
         if (insertError) {
-          // 생성 실패 시 임시 데이터 사용
           console.warn('Quarter 생성 실패, 임시 데이터 사용:', insertError);
           setQuarter({
-            id: `temp-${selectedYear}-${selectedQuarter}`,
-            year: parseInt(selectedYear),
-            quarter: parseInt(selectedQuarter),
+            id: `temp-${selectedYear}-${calendarQuarter}`,
+            year: fy,
+            quarter: calendarQuarter,
             start_date: format(quarterStartDate, 'yyyy-MM-dd'),
             end_date: format(quarterEndDate, 'yyyy-MM-dd'),
             created_at: new Date().toISOString(),
@@ -152,15 +173,12 @@ export default function SubmissionPage() {
         .order('name');
 
       if (subsError) throw subsError;
-      const EXCLUDED = ['Germany', 'UK', 'Singapore'];
-      setSubsidiaries(
-        (subsData || []).filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
-      );
+      setSubsidiaries(subsData || []);
     } catch (error: unknown) {
       console.error('Failed to load data:', error);
       toast.error(`데이터 로딩 실패: ${getErrorMessage(error)}`);
     }
-  }, [selectedYear, selectedQuarter]);
+  }, [selectedYear, selectedMonth]);
 
   useEffect(() => {
     void loadData();
@@ -183,9 +201,9 @@ export default function SubmissionPage() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex-shrink-0 p-6 border-b border-gray-200 bg-white">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Quarterly Reports Submission</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Financial Closing — Submission</h1>
         <p className="text-gray-600">
-          해외 법인이 표준화된 Excel 형식으로 분기별 보고서를 제출할 수 있습니다.
+          해외 법인이 표준화된 Excel 형식으로 월·분기 일정에 맞춰 보고서를 제출할 수 있습니다.
         </p>
       </div>
 
@@ -193,7 +211,7 @@ export default function SubmissionPage() {
       <div className="flex-shrink-0 p-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">귀속연도:</Label>
+            <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">Year:</Label>
             <div className="flex items-center gap-2">
               <Select value={selectedYear} onValueChange={setSelectedYear}>
                 <SelectTrigger className="w-24">
@@ -207,15 +225,17 @@ export default function SubmissionPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
-                <SelectTrigger className="w-20">
+              <Label className="text-sm font-medium text-gray-700 whitespace-nowrap">Month:</Label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[4.5rem]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1">1Q</SelectItem>
-                  <SelectItem value="2">2Q</SelectItem>
-                  <SelectItem value="3">3Q</SelectItem>
-                  <SelectItem value="4">4Q</SelectItem>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <SelectItem key={m} value={String(m)}>
+                      {m}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -243,6 +263,7 @@ export default function SubmissionPage() {
       <div className="flex-1 overflow-hidden flex">
         {/* 좌측 카테고리 사이드바 */}
         <SubmissionCategorySidebar
+          categories={submissionCategories}
           selectedCategory={selectedCategory}
           onCategorySelect={setSelectedCategory}
         />

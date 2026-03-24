@@ -12,7 +12,6 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quarterly-closing';
-import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
 import type { ClosingCategory } from '@/lib/constants/closing-categories';
 import type { ReviewStatus } from '@/lib/types/category-review';
 import { getCategoryReviewStatuses, upsertCategoryReviewStatus } from '@/lib/services/categoryReviewService';
@@ -25,6 +24,9 @@ interface OverviewGridProps {
   subsidiaries: Subsidiary[];
   scheduleItems: ScheduleItem[];
   submissions: DocumentSubmission[];
+  /** 표시·드래그 순서 기준 카테고리 (귀속 월별 세트) */
+  categories: ClosingCategory[];
+  periodLabel: string;
   selectedCategory?: string | null;
   onEntityOrderChange?: (newOrder: Subsidiary[]) => void;
   onCategoryOrderChange?: (newOrder: ClosingCategory[]) => void;
@@ -37,13 +39,15 @@ export const OverviewGrid = ({
   quarter,
   subsidiaries,
   scheduleItems,
+  categories,
+  periodLabel,
   selectedCategory,
   onEntityOrderChange,
   onCategoryOrderChange,
 }: OverviewGridProps) => {
   const [orderedSubsidiaries, setOrderedSubsidiaries] = useState<Subsidiary[]>(subsidiaries);
   const [draggedEntityIndex, setDraggedEntityIndex] = useState<number | null>(null);
-  const [orderedCategories, setOrderedCategories] = useState<ClosingCategory[]>([...CLOSING_CATEGORIES]);
+  const [orderedCategories, setOrderedCategories] = useState<ClosingCategory[]>([...categories]);
   const [draggedCategoryIndex, setDraggedCategoryIndex] = useState<number | null>(null);
 
   /** 셀별 review status 맵 */
@@ -58,14 +62,16 @@ export const OverviewGrid = ({
     categoryLabel: string;
   } | null>(null);
 
-  // 카테고리 순서 복원
+  const categoryIdsKey = categories.map((c) => c.id).join(',');
+
+  // 카테고리 세트가 바뀌면 순서 복원(로컬 스토리지 기준) 또는 기본 순서
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const savedOrder = localStorage.getItem(CATEGORY_ORDER_KEY);
       if (savedOrder) {
         const order: string[] = JSON.parse(savedOrder);
-        const ordered = [...CLOSING_CATEGORIES].sort((a, b) => {
+        const ordered = [...categories].sort((a, b) => {
           const ia = order.indexOf(a.id);
           const ib = order.indexOf(b.id);
           if (ia === -1 && ib === -1) return 0;
@@ -74,9 +80,13 @@ export const OverviewGrid = ({
           return ia - ib;
         });
         setOrderedCategories(ordered);
+      } else {
+        setOrderedCategories([...categories]);
       }
-    } catch { /* ignore */ }
-  }, []);
+    } catch {
+      setOrderedCategories([...categories]);
+    }
+  }, [categoryIdsKey, categories]);
 
   useEffect(() => { setOrderedSubsidiaries(subsidiaries); }, [subsidiaries]);
 
@@ -213,8 +223,6 @@ export const OverviewGrid = ({
   const filteredCategories = selectedCategory
     ? orderedCategories.filter((c) => c.id === selectedCategory)
     : orderedCategories;
-
-  const quarterLabel = `${quarter.year} ${quarter.quarter}Q`;
 
   return (
     <>
@@ -404,7 +412,7 @@ export const OverviewGrid = ({
           categoryLabel={commentDialog.categoryLabel}
           categoryId={commentDialog.categoryId}
           quarterId={quarter.id}
-          quarterLabel={quarterLabel}
+          quarterLabel={periodLabel}
         />
       )}
     </>
