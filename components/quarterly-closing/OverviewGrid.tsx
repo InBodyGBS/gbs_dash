@@ -39,6 +39,7 @@ export const OverviewGrid = ({
   quarter,
   subsidiaries,
   scheduleItems,
+  submissions,
   categories,
   periodLabel,
   selectedCategory,
@@ -113,8 +114,13 @@ export const OverviewGrid = ({
 
   const getScheduleItemStatus = (subsidiaryId: string, categoryId: string): 'confirmed' | 'planned' | null => {
     const items = scheduleItems.filter((i) => i.subsidiary_id === subsidiaryId && i.category === categoryId);
-    if (!items.length) return null;
-    return items.find((i) => i.status === 'confirmed') ? 'confirmed' : 'planned';
+    if (items.length) {
+      // submitted(파일 제출) 또는 confirmed(수동 확정) 모두 완료로 표시
+      return items.find((i) => i.status === 'confirmed') ? 'confirmed' : 'planned';
+    }
+    // schedule_item이 없어도 submission이 있으면 confirmed로 표시
+    const hasSubmission = submissions.some((s) => s.subsidiary_id === subsidiaryId && s.category === categoryId);
+    return hasSubmission ? 'confirmed' : null;
   };
 
   const getSubsidiarySummary = (subsidiaryId: string) => {

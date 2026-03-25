@@ -42,7 +42,7 @@ const loadSavedState = () => {
         selectedMonth = endMonthByQ[q] || String(new Date().getMonth() + 1);
       }
       return {
-        selectedYear: parsed.selectedYear || '2025',
+        selectedYear: parsed.selectedYear || String(new Date().getFullYear()),
         selectedMonth: selectedMonth || String(new Date().getMonth() + 1),
       };
     }
@@ -106,7 +106,7 @@ export function useScheduleData() {
   // Filter state
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
+  const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState<string>(
     savedState?.selectedMonth || String(new Date().getMonth() + 1),
   );
@@ -596,159 +596,11 @@ export function useScheduleData() {
           })),
         });
 
-        // Submissions → Schedule 반영
-        console.log(`🔄 Submissions → Schedule 반영 시작:`, {
-          scheduleItemsCount: scheduleItemsData.length,
-          submissionsCount: mergedSubmissions.length,
-          scheduleItems: scheduleItemsData.map((item) => ({
-            id: item.id,
-            quarter_id: item.quarter_id,
-            subsidiary_id: item.subsidiary_id,
-            category: item.category,
-            status: item.status,
-          })),
-          submissions: mergedSubmissions.map((sub) => ({
-            id: sub.id,
-            quarter_id: sub.quarter_id,
-            subsidiary_id: sub.subsidiary_id,
-            category: sub.category,
-          })),
-        });
-
-        // 1. Update existing items
-        const updatedScheduleItems = scheduleItemsData.map((item: ScheduleItem) => {
-          const matchingSubmissions = mergedSubmissions.filter(
-            (sub) => sub.subsidiary_id === item.subsidiary_id && sub.category === item.category,
-          );
-          const hasSubmission = matchingSubmissions.length > 0;
-
-          if (hasSubmission && item.status === 'planned') {
-            console.log(`🔄 ScheduleItem 자동 확정:`, {
-              itemId: item.id,
-              quarter_id: item.quarter_id,
-              subsidiary_id: item.subsidiary_id,
-              category: item.category,
-              previousStatus: item.status,
-              matchingSubmissions: matchingSubmissions.map((s) => ({ id: s.id, quarter_id: s.quarter_id })),
-            });
-            return {
-              ...item,
-              status: 'confirmed' as const,
-              confirmed_date: item.confirmed_date || new Date().toISOString().split('T')[0],
-            };
-          }
-          return item;
-        });
-
-        // 2. Create missing items
-        const itemsToCreate: Array<{
-          quarter_id: string;
-          subsidiary_id: string;
-          category: string;
-          planned_date: string;
-          status: 'confirmed';
-          confirmed_date: string;
-        }> = [];
-
-        mergedSubmissions.forEach((sub) => {
-          const hasScheduleItem = updatedScheduleItems.some(
-            (item) => item.subsidiary_id === sub.subsidiary_id && item.category === sub.category,
-          );
-
-          if (!hasScheduleItem) {
-            const plannedDate = sub.submitted_at
-              ? new Date(sub.submitted_at).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0];
-
-            itemsToCreate.push({
-              quarter_id: quarterData.id,
-              subsidiary_id: sub.subsidiary_id,
-              category: sub.category,
-              planned_date: plannedDate,
-              status: 'confirmed',
-              confirmed_date: plannedDate,
-            });
-          }
-        });
-
-        // 3. DB updates
-        const itemsToUpdate = updatedScheduleItems.filter(
-          (item, index) => item.status !== scheduleItemsData[index]?.status,
-        );
-
-        if (itemsToUpdate.length > 0) {
-          console.log(`💾 ${itemsToUpdate.length}개의 ScheduleItem을 confirmed로 업데이트합니다.`);
-          try {
-            const updatePromises = itemsToUpdate.map((item) =>
-              supabase
-                .from('schedule_items')
-                .update({
-                  status: 'confirmed',
-                  confirmed_date: item.confirmed_date || new Date().toISOString().split('T')[0],
-                })
-                .eq('id', item.id),
-            );
-            const updateResults = await Promise.all(updatePromises);
-            const errors = updateResults.filter((result) => result.error);
-            if (errors.length > 0) {
-              console.warn('⚠️ 일부 ScheduleItem 업데이트 실패:', errors);
-            } else {
-              console.log(`✅ ${itemsToUpdate.length}개의 ScheduleItem이 성공적으로 업데이트되었습니다.`);
-            }
-          } catch (error) {
-            console.error('❌ ScheduleItem 업데이트 중 오류:', error);
-          }
-        }
-
-        // 4. DB inserts
-        if (itemsToCreate.length > 0) {
-          console.log(`➕ ${itemsToCreate.length}개의 ScheduleItem을 자동 생성합니다.`, itemsToCreate);
-          try {
-            const { data: createdItems, error: createError } = await supabase
-              .from('schedule_items')
-              .insert(itemsToCreate)
-              .select();
-
-            if (createError) {
-              console.error('❌ ScheduleItem 생성 실패:', createError);
-              if (createError.code !== '23505') {
-                console.warn('⚠️ ScheduleItem 생성 중 오류:', createError);
-              }
-            } else {
-              console.log(`✅ ${createdItems?.length || 0}개의 ScheduleItem이 성공적으로 생성되었습니다.`, {
-                createdItems: createdItems?.map((item) => ({
-                  id: item.id,
-                  quarter_id: item.quarter_id,
-                  subsidiary_id: item.subsidiary_id,
-                  category: item.category,
-                  status: item.status,
-                })),
-              });
-              if (createdItems) {
-                updatedScheduleItems.push(...(createdItems as ScheduleItem[]));
-              }
-            }
-          } catch (error) {
-            console.error('❌ ScheduleItem 생성 중 오류:', error);
-          }
-        }
-
-        console.log(`📋 최종 ScheduleItems 상태:`, {
-          totalCount: updatedScheduleItems.length,
-          confirmedCount: updatedScheduleItems.filter((item) => item.status === 'confirmed').length,
-          plannedCount: updatedScheduleItems.filter((item) => item.status === 'planned').length,
-          employeeJdItems: updatedScheduleItems
-            .filter((item) => item.category === 'employee-jd')
-            .map((item) => ({
-              id: item.id,
-              quarter_id: item.quarter_id,
-              subsidiary_id: item.subsidiary_id,
-              category: item.category,
-              status: item.status,
-            })),
-        });
-
-        setScheduleItems(updatedScheduleItems);
+        // schedule_items는 DB에서 읽은 그대로 사용 (자동 상태 변환 없음)
+        // - planned: 계획 설정됨
+        // - confirmed: 관리자가 "이번 달 확정" 버튼으로 확정
+        // 제출 여부는 submissions 테이블에서 별도 관리
+        setScheduleItems(scheduleItemsData);
         setSubmissions(mergedSubmissions);
       }
     } catch (error) {
@@ -1066,6 +918,14 @@ export function useScheduleData() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear, selectedMonth]);
 
+  // Submission 페이지에서 자료 제출 후 Overview/Calendar로 이동 시 최신 데이터 반영
+  useEffect(() => {
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear, selectedMonth]);
+
   // -------------------------------------------------------------------------
   // Computed values
   // -------------------------------------------------------------------------
@@ -1087,12 +947,16 @@ export function useScheduleData() {
   const submissionsScopedToMonth = useMemo(() => {
     const fy = parseInt(selectedYear, 10);
     const monthNum = parseInt(selectedMonth, 10) || 1;
-    const ymPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;
+    // 귀속월 prefix (예: 2025-03)
+    const attributionYmPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;
+    // 실제 제출월 = 귀속월 + 1 (예: 2025-04)
+    const calendarDate = new Date(fy, monthNum, 1); // monthNum is 1-based, so +1 = next month
+    const calendarYmPrefix = format(calendarDate, 'yyyy-MM');
     const activeIds = new Set(activeClosingCategories.map((c) => c.id));
     return submissions.filter((sub) => {
       if (!activeIds.has(sub.category)) return false;
       const dateStr = (sub.submitted_at || '').split('T')[0];
-      return dateStr.startsWith(ymPrefix);
+      return dateStr.startsWith(attributionYmPrefix) || dateStr.startsWith(calendarYmPrefix);
     });
   }, [submissions, selectedYear, selectedMonth, activeClosingCategories]);
 
@@ -1105,6 +969,34 @@ export function useScheduleData() {
     : submissionsScopedToMonth;
 
   const achievementRate = calculateAchievementRate(filteredScheduleItems);
+
+  // -------------------------------------------------------------------------
+  // 이번 달 확정 (Calendar 전용)
+  // TODO: 관리자 권한 체크 후 호출되도록 변경
+  // -------------------------------------------------------------------------
+  const handleConfirmMonth = async (calendarYmPrefix: string) => {
+    if (!quarter || quarter.id.startsWith('temp-') || quarter.id.startsWith('custom-')) {
+      toast.error('분기 데이터가 없습니다. 먼저 Overview에서 분기를 준비해주세요.');
+      return;
+    }
+    // planned_date 범위로 필터 (LIKE 대신 gte/lte 사용)
+    const startDate = `${calendarYmPrefix}-01`;
+    const endDate = `${calendarYmPrefix}-31`;
+    const { error } = await supabase
+      .from('schedule_items')
+      .update({ status: 'confirmed' })
+      .eq('quarter_id', quarter.id)
+      .eq('status', 'planned')
+      .gte('planned_date', startDate)
+      .lte('planned_date', endDate);
+
+    if (error) {
+      toast.error(`확정 실패: ${error.message}`);
+      return;
+    }
+    toast.success('이번 달 스케줄이 확정되었습니다.');
+    loadData();
+  };
 
   return {
     // state
@@ -1130,6 +1022,7 @@ export function useScheduleData() {
     handleItemDelete,
     handleItemConfirm,
     handleCellClick,
+    handleConfirmMonth,
     refetch: loadData,
     // excel
     handleExportExcel,

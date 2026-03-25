@@ -17,7 +17,7 @@ import {
   parseISO,
   addMonths,
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Lock, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -53,6 +53,7 @@ export default function CalendarTPage() {
     setSelectedYear,
     setSelectedMonth,
     activeClosingCategories,
+    handleConfirmMonth,
     refetch,
   } = useScheduleData();
 
@@ -66,6 +67,7 @@ export default function CalendarTPage() {
   }, [attributionYearNum, attributionMonthNum]);
 
   const calendarYmPrefix = format(currentMonth, 'yyyy-MM');
+  const attributionYmPrefix = `${selectedYear}-${String(attributionMonthNum).padStart(2, '0')}`;
 
   const activeCategoryIds = useMemo(
     () => new Set(activeClosingCategories.map((c) => c.id)),
@@ -85,10 +87,10 @@ export default function CalendarTPage() {
   const [legendSubsidiary, setLegendSubsidiary] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
-  // Compute: category planned dates (one date per category — the consensus date)
+  // Compute: category dates map — { date, status } per category for this calendar month
   // -------------------------------------------------------------------------
-  const categoryPlannedDates = useMemo(() => {
-    const map = new Map<string, string>();
+  const categoryDateMap = useMemo(() => {
+    const map = new Map<string, { date: string; status: 'planned' | 'confirmed' }>();
     for (const item of scheduleItems) {
       if (
         item.planned_date &&
@@ -96,31 +98,44 @@ export default function CalendarTPage() {
         activeCategoryIds.has(item.category) &&
         !map.has(item.category)
       ) {
-        map.set(item.category, item.planned_date);
+        map.set(item.category, { date: item.planned_date, status: item.status });
       }
     }
     return map;
   }, [scheduleItems, calendarYmPrefix, activeCategoryIds]);
 
-  // dateStr → array of category entries planned on that date
+  // category → date only (하위 호환)
+  const categoryPlannedDates = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [catId, { date }] of categoryDateMap) {
+      map.set(catId, date);
+    }
+    return map;
+  }, [categoryDateMap]);
+
+  // 이번 달이 확정됐는지 여부
+  const isMonthConfirmed = useMemo(() => {
+    const monthItems = scheduleItems.filter(
+      (item) => item.planned_date?.startsWith(calendarYmPrefix) && activeCategoryIds.has(item.category),
+    );
+    return monthItems.length > 0 && monthItems.every((item) => item.status === 'confirmed');
+  }, [scheduleItems, calendarYmPrefix, activeCategoryIds]);
+
+  // dateStr → array of category entries on that date (planned + confirmed)
   const plannedByDate = useMemo(() => {
     const map = new Map<
       string,
-      { categoryId: string; categoryLabel: string; categoryColor: string }[]
+      { categoryId: string; categoryLabel: string; categoryColor: string; status: 'planned' | 'confirmed' }[]
     >();
-    for (const [catId, dateStr] of categoryPlannedDates) {
+    for (const [catId, { date: dateStr, status }] of categoryDateMap) {
       const cat = getCategoryById(catId);
       if (!cat) continue;
       const existing = map.get(dateStr) ?? [];
-      existing.push({
-        categoryId: catId,
-        categoryLabel: cat.label,
-        categoryColor: cat.color,
-      });
+      existing.push({ categoryId: catId, categoryLabel: cat.label, categoryColor: cat.color, status });
       map.set(dateStr, existing);
     }
     return map;
-  }, [categoryPlannedDates]);
+  }, [categoryDateMap]);
 
   // -------------------------------------------------------------------------
   // Compute: submissions per date
@@ -132,7 +147,7 @@ export default function CalendarTPage() {
     >();
     for (const sub of submissions) {
       const dateStr = sub.submitted_at.split('T')[0];
-      if (!dateStr.startsWith(calendarYmPrefix)) continue;
+      if (!dateStr.startsWith(calendarYmPrefix) && !dateStr.startsWith(attributionYmPrefix)) continue;
       if (!activeCategoryIds.has(sub.category)) continue;
       const subsidiary = subsidiaries.find((s) => s.id === sub.subsidiary_id);
       if (!subsidiary) continue;
@@ -188,7 +203,8 @@ export default function CalendarTPage() {
       submissions
         .filter((s) => {
           const d = (s.submitted_at || '').split('T')[0];
-          return s.category === legendCategory && d.startsWith(calendarYmPrefix);
+          // 귀속월 또는 캘린더월(귀속+1) 모두 체크
+          return s.category === legendCategory && (d.startsWith(calendarYmPrefix) || d.startsWith(attributionYmPrefix));
         })
         .map((s) => s.subsidiary_id),
     );
@@ -198,7 +214,7 @@ export default function CalendarTPage() {
       submitted: subsidiaries.filter((s) => submittedSubIds.has(s.id)),
       notSubmitted: subsidiaries.filter((s) => !submittedSubIds.has(s.id)),
     };
-  }, [legendCategory, categoryPlannedDates, submissions, subsidiaries, calendarYmPrefix]);
+  }, [legendCategory, categoryPlannedDates, submissions, subsidiaries, calendarYmPrefix, attributionYmPrefix]);
 
   // Legend panel: subsidiary summary
   const legendSubsidiaryInfo = useMemo(() => {
@@ -209,7 +225,8 @@ export default function CalendarTPage() {
       submissions
         .filter((s) => {
           const d = (s.submitted_at || '').split('T')[0];
-          return s.subsidiary_id === legendSubsidiary && d.startsWith(calendarYmPrefix);
+          // 귀속월 또는 캘린더월(귀속+1) 모두 체크
+          return s.subsidiary_id === legendSubsidiary && (d.startsWith(calendarYmPrefix) || d.startsWith(attributionYmPrefix));
         })
         .map((s) => s.category),
     );
@@ -218,7 +235,7 @@ export default function CalendarTPage() {
       submitted: activeClosingCategories.filter((c) => submittedCatIds.has(c.id)),
       notSubmitted: activeClosingCategories.filter((c) => !submittedCatIds.has(c.id)),
     };
-  }, [legendSubsidiary, submissions, subsidiaries, calendarYmPrefix, activeClosingCategories]);
+  }, [legendSubsidiary, submissions, subsidiaries, calendarYmPrefix, attributionYmPrefix, activeClosingCategories]);
 
   const isLegendActive = legendCategory !== null || legendSubsidiary !== null;
 
@@ -339,10 +356,15 @@ export default function CalendarTPage() {
   const submissionsOnSelected = selectedDateStr
     ? (submissionsByDate.get(selectedDateStr) ?? [])
     : [];
-  // 아직 어떤 날짜에도 설정되지 않은 카테고리 (추가 가능)
-  const unassignedCategories = activeClosingCategories.filter(
-    (cat) => !categoryIdsOnSelected.has(cat.id) && !categoryPlannedDates.has(cat.id),
-  );
+  // 이 날짜에 있는 항목 중 planned (삭제 가능) vs confirmed (잠금)
+  const plannedOnSelected = categoriesOnSelected.filter((c) => c.status === 'planned');
+  const confirmedOnSelected = categoriesOnSelected.filter((c) => c.status === 'confirmed');
+  // 아직 어떤 날짜에도 설정되지 않은 카테고리 (추가 가능, 달이 확정되지 않은 경우에만)
+  const unassignedCategories = isMonthConfirmed
+    ? []
+    : activeClosingCategories.filter(
+        (cat) => !categoryIdsOnSelected.has(cat.id) && !categoryPlannedDates.has(cat.id),
+      );
   // 다른 날짜에 이미 설정된 카테고리 (잠금 표시)
   const lockedCategories = activeClosingCategories.filter(
     (cat) => !categoryIdsOnSelected.has(cat.id) && categoryPlannedDates.has(cat.id),
@@ -426,14 +448,40 @@ export default function CalendarTPage() {
               </Button>
             </div>
 
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded bg-blue-400" />
-                <span>완료 기한 (카테고리)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded bg-green-400" />
-                <span>제출 내역</span>
+            <div className="flex items-center gap-4">
+              {/* 이번 달 확정 버튼 — TODO: 관리자 권한 체크로 감싸기 */}
+              {isMonthConfirmed ? (
+                <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  <span className="font-medium">스케줄 확정됨</span>
+                </div>
+              ) : (
+                categoryDateMap.size > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                    disabled={saving}
+                    onClick={() => handleConfirmMonth(calendarYmPrefix)}
+                  >
+                    <Lock className="h-3 w-3 mr-1" />
+                    이번 달 확정
+                  </Button>
+                )
+              )}
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded bg-blue-400" />
+                  <span>계획 (planned)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded bg-gray-400" />
+                  <span>확정 (confirmed)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded bg-green-400" />
+                  <span>제출</span>
+                </div>
               </div>
             </div>
           </div>
@@ -501,17 +549,29 @@ export default function CalendarTPage() {
                       {format(day, 'd')}
                     </div>
 
-                    {/* Planned category badges */}
+                    {/* Category badges (planned = filled, confirmed = outlined + lock) */}
                     <div className="space-y-0.5">
                       {dayPlanned.slice(0, 3).map((cat) => (
-                        <div
-                          key={cat.categoryId}
-                          className="text-[10px] leading-tight px-1 py-0.5 rounded truncate font-medium text-white"
-                          style={{ backgroundColor: cat.categoryColor }}
-                          title={cat.categoryLabel}
-                        >
-                          {cat.categoryLabel}
-                        </div>
+                        cat.status === 'confirmed' ? (
+                          <div
+                            key={cat.categoryId}
+                            className="text-[10px] leading-tight px-1 py-0.5 rounded truncate font-medium flex items-center gap-0.5"
+                            style={{ border: `1px solid ${cat.categoryColor}`, color: cat.categoryColor }}
+                            title={`[확정] ${cat.categoryLabel}`}
+                          >
+                            <Lock className="w-2 h-2 flex-shrink-0" />
+                            <span className="truncate">{cat.categoryLabel}</span>
+                          </div>
+                        ) : (
+                          <div
+                            key={cat.categoryId}
+                            className="text-[10px] leading-tight px-1 py-0.5 rounded truncate font-medium text-white"
+                            style={{ backgroundColor: cat.categoryColor }}
+                            title={cat.categoryLabel}
+                          >
+                            {cat.categoryLabel}
+                          </div>
+                        )
                       ))}
                       {dayPlanned.length > 3 && (
                         <div className="text-[10px] text-gray-400 px-1">
@@ -567,14 +627,37 @@ export default function CalendarTPage() {
                 </div>
 
                 <div className="p-4 space-y-5 max-h-[calc(100vh-22rem)] overflow-y-auto">
-                  {/* Categories already on this date */}
-                  {categoriesOnSelected.length > 0 && (
+                  {/* Confirmed categories (locked — no delete) */}
+                  {confirmedOnSelected.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+                        <Lock className="h-3 w-3" /> 확정된 기한
+                      </p>
+                      <div className="space-y-1.5">
+                        {confirmedOnSelected.map((cat) => (
+                          <div key={cat.categoryId} className="flex items-center gap-2">
+                            <div
+                              className="flex-1 text-xs px-2 py-1 rounded font-medium truncate flex items-center gap-1"
+                              style={{ border: `1px solid ${cat.categoryColor}`, color: cat.categoryColor }}
+                              title={cat.categoryLabel}
+                            >
+                              <Lock className="h-2.5 w-2.5 flex-shrink-0" />
+                              {cat.categoryLabel}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Planned categories (editable) */}
+                  {plannedOnSelected.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                         완료 기한 카테고리
                       </p>
                       <div className="space-y-1.5">
-                        {categoriesOnSelected.map((cat) => (
+                        {plannedOnSelected.map((cat) => (
                           <div key={cat.categoryId} className="flex items-center gap-2">
                             <div
                               className="flex-1 text-xs px-2 py-1 rounded font-medium text-white truncate"
@@ -657,7 +740,9 @@ export default function CalendarTPage() {
                   )}
 
                   {unassignedCategories.length === 0 && lockedCategories.length === 0 && categoriesOnSelected.length > 0 && (
-                    <p className="text-xs text-gray-400">모든 카테고리의 기한이 설정됨</p>
+                    <p className="text-xs text-gray-400">
+                      {isMonthConfirmed ? '이번 달 스케줄이 확정되었습니다.' : '모든 카테고리의 기한이 설정됨'}
+                    </p>
                   )}
 
                   {/* Submission log for this date */}

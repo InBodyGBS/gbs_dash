@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { format } from 'date-fns';
 import {
@@ -13,7 +14,6 @@ import {
 import { Label } from '@/components/ui/label';
 import { SubmissionCategorySidebar } from '@/components/quarterly-closing/SubmissionCategorySidebar';
 import { SubmissionUpload } from '@/components/quarterly-closing/SubmissionUpload';
-import { PreliminarySalesSGAForm } from '@/components/quarterly-closing/PreliminarySalesSGAForm';
 import { SubmissionList } from '@/components/quarterly-closing/SubmissionList';
 import { SubmissionCommentDialog } from '@/components/quarterly-closing/SubmissionCommentDialog';
 import { getClosingCategoriesForMonth } from '@/lib/constants/closing-categories';
@@ -51,7 +51,7 @@ export default function SubmissionPage() {
           selectedMonth = endMonthByQ[q] || String(new Date().getMonth() + 1);
         }
         return {
-          selectedYear: parsed.selectedYear || '2025',
+          selectedYear: parsed.selectedYear || String(new Date().getFullYear()),
           selectedMonth: selectedMonth || String(new Date().getMonth() + 1),
           selectedSubsidiaryId: parsed.selectedSubsidiaryId || 'all',
         };
@@ -76,6 +76,7 @@ export default function SubmissionPage() {
     }
   };
 
+  const router = useRouter();
   const savedState = loadSavedState();
   const initialMonth = savedState?.selectedMonth || String(new Date().getMonth() + 1);
 
@@ -83,7 +84,7 @@ export default function SubmissionPage() {
   const [selectedCategory, setSelectedCategory] = useState<ClosingCategoryId>(
     () => getClosingCategoriesForMonth(parseInt(initialMonth, 10) || 1)[0].id,
   );
-  const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || '2025');
+  const [selectedYear, setSelectedYear] = useState<string>(savedState?.selectedYear || String(new Date().getFullYear()));
   const [selectedMonth, setSelectedMonth] = useState<string>(initialMonth);
   const [selectedSubsidiaryId, setSelectedSubsidiaryId] = useState<string>(
     savedState?.selectedSubsidiaryId || 'all'
@@ -186,6 +187,7 @@ export default function SubmissionPage() {
 
   const handleUploadSuccess = () => {
     setRefreshKey((prev) => prev + 1);
+    router.refresh(); // Overview, Calendar 페이지 라우터 캐시 무효화
   };
 
   const handleDeleteSuccess = () => {
@@ -218,7 +220,7 @@ export default function SubmissionPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 10 }, (_, i) => 2020 + i).map((year) => (
+                  {Array.from({ length: new Date().getFullYear() + 2 - 2023 + 1 }, (_, i) => 2023 + i).map((year) => (
                     <SelectItem key={year} value={year.toString()}>
                       {year}
                     </SelectItem>
@@ -270,25 +272,17 @@ export default function SubmissionPage() {
 
         {/* 우측 메인 컨텐츠 */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Preliminary Sales/SG&A 입력 폼 또는 파일 업로드 */}
-          {selectedCategory === 'preliminary-sales' ? (
-            <PreliminarySalesSGAForm
-              quarterId={quarter?.id || null}
-              subsidiaryId={selectedSubsidiaryId !== 'all' ? selectedSubsidiaryId : null}
-              onSaveSuccess={handleUploadSuccess}
-            />
-          ) : (
-            <SubmissionUpload
-              onUploadSuccess={handleUploadSuccess}
-              category={selectedCategory}
-              quarterId={quarter?.id || null}
-              subsidiaryId={selectedSubsidiaryId !== 'all' ? selectedSubsidiaryId : null}
-              fiscalYear={selectedYear}
-              entityName={selectedSubsidiaryId !== 'all' 
-                ? subsidiaries.find(s => s.id === selectedSubsidiaryId)?.name || null
-                : null}
-            />
-          )}
+          {/* 파일 업로드 */}
+          <SubmissionUpload
+            onUploadSuccess={handleUploadSuccess}
+            category={selectedCategory}
+            quarterId={quarter?.id || null}
+            subsidiaryId={selectedSubsidiaryId !== 'all' ? selectedSubsidiaryId : null}
+            fiscalYear={selectedYear}
+            entityName={selectedSubsidiaryId !== 'all'
+              ? subsidiaries.find(s => s.id === selectedSubsidiaryId)?.name || null
+              : null}
+          />
 
           {/* 제출 목록 */}
           <SubmissionList

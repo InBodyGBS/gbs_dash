@@ -207,7 +207,7 @@ export interface Database {
           category: string;
           planned_date: string;
           confirmed_date?: string | null;
-          status?: 'planned' | 'confirmed';
+          status?: 'planned' | 'confirmed' | 'submitted';
           created_at?: string;
           updated_at?: string;
         };
@@ -218,7 +218,7 @@ export interface Database {
           category?: string;
           planned_date?: string;
           confirmed_date?: string | null;
-          status?: 'planned' | 'confirmed';
+          status?: 'planned' | 'confirmed' | 'submitted';
           created_at?: string;
           updated_at?: string;
         };

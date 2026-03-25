@@ -11,7 +11,8 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // 서버사이드에서는 service_role 키 우선 사용 (Storage RLS 우회)
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error('Supabase 환경변수가 설정되지 않았습니다.');
   return createClient(url, key);
 }
@@ -123,45 +124,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `데이터베이스 저장 실패: ${dbError.message}` }, { status: 500 });
     }
 
-    // 4. schedule_items 자동 확정
-    //    submissions는 fiscal quarter_id, schedule_items는 work period quarter_id (fiscal + 1분기)
-    if (subsidiaryId && finalQuarterId) {
-      try {
-        const { data: fiscalQData } = await supabase
-          .from('quarters')
-          .select('year, quarter')
-          .eq('id', finalQuarterId)
-          .single();
-
-        const fiscalQ = fiscalQData as { year: number; quarter: number } | null;
-
-        if (fiscalQ) {
-          const workYear = fiscalQ.quarter === 4 ? fiscalQ.year + 1 : fiscalQ.year;
-          const workQuarter = fiscalQ.quarter === 4 ? 1 : fiscalQ.quarter + 1;
-
-          const { data: workQData } = await supabase
-            .from('quarters')
-            .select('id')
-            .eq('year', workYear)
-            .eq('quarter', workQuarter)
-            .maybeSingle();
-
-          const workQ = workQData as { id: string } | null;
-
-          if (workQ) {
-            await supabase
-              .from('schedule_items')
-              .update({ status: 'confirmed', confirmed_date: submittedAt.split('T')[0] })
-              .eq('quarter_id', workQ.id)
-              .eq('subsidiary_id', subsidiaryId)
-              .eq('category', category)
-              .eq('status', 'planned');
-          }
-        }
-      } catch {
-        // 비치명적 오류: 제출은 성공으로 처리
-      }
-    }
+    // schedule_items 상태는 관리자의 "이번 달 확정" 액션으로만 변경됨 (파일 제출과 무관)
 
     return NextResponse.json({ submission: submissionData }, { status: 201 });
 
