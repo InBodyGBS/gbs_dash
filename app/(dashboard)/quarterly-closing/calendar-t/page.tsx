@@ -161,7 +161,7 @@ export default function CalendarTPage() {
       map.set(dateStr, existing);
     }
     return map;
-  }, [submissions, subsidiaries, calendarYmPrefix, activeCategoryIds]);
+  }, [submissions, subsidiaries, calendarYmPrefix, attributionYmPrefix, activeCategoryIds]);
 
   // -------------------------------------------------------------------------
   // Legend selection: filtered views for calendar cells

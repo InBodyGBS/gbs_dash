@@ -93,17 +93,16 @@ export function ScheduleCalendar() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth(); // 0-indexed
 
-  /* ── 수기 이벤트 로드 ── */
+  /* ── 수기 이벤트 로드 (localStorage; defer setState to avoid cascading renders in effect) ── */
   useEffect(() => {
-    setCustomEvents(loadCustomEvents());
+    queueMicrotask(() => setCustomEvents(loadCustomEvents()));
   }, []);
 
   /* ── dialog 열릴 때 인풋 포커스 ── */
   useEffect(() => {
     if (addDialog) {
-      setNewTitle('');
-      setNewColor(EVENT_COLORS[0].value);
-      setTimeout(() => titleInputRef.current?.focus(), 50);
+      const t = setTimeout(() => titleInputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
     }
   }, [addDialog]);
 
@@ -347,7 +346,11 @@ export function ScheduleCalendar() {
                     'bg-white p-1 min-h-[72px] flex flex-col group cursor-pointer',
                     isToday && 'bg-red-50'
                   )}
-                  onClick={() => setAddDialog({ date: dateStr })}
+                  onClick={() => {
+                    setNewTitle('');
+                    setNewColor(EVENT_COLORS[0].value);
+                    setAddDialog({ date: dateStr });
+                  }}
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <span
