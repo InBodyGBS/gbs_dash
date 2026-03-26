@@ -47,6 +47,13 @@ type ScheduleItemLite = {
 
 type ViewMode = 'monthly' | 'yearly';
 
+type CategoryAgg = {
+  category: string;
+  categoryLabel: string;
+  categoryColor: string;
+  subsidiaryNames: string[]; // grouped by category within the same date
+};
+
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const EXCLUDED = ['Germany', 'UK', 'Singapore'];
@@ -175,15 +182,53 @@ export function ScheduleCalendar() {
     saveCustomEvents(updated);
   };
 
-  /* ── 날짜 → 아이템 맵 ── */
-  const itemsByDate = useMemo(() => {
-    const map = new Map<string, CalendarItem[]>();
-    items.forEach((item) => {
-      const list = map.get(item.planned_date) || [];
-      list.push(item);
-      map.set(item.planned_date, list);
-    });
-    return map;
+  /* ── 날짜 → 카테고리 집계 맵 ──
+   * 같은 날짜에 같은 카테고리가 여러 법인으로 생성될 수 있으나,
+   * 메인 캘린더에서는 “카테고리 1개만” 보이도록 그룹핑한다.
+   */
+  const categoryByDate = useMemo(() => {
+    const dateMap = new Map<
+      string,
+      Map<
+        string,
+        {
+          categoryLabel: string;
+          categoryColor: string;
+          subsidiaryNamesSet: Set<string>;
+        }
+      >
+    >();
+
+    for (const item of items) {
+      if (!dateMap.has(item.planned_date)) {
+        dateMap.set(item.planned_date, new Map());
+      }
+      const catMap = dateMap.get(item.planned_date)!;
+
+      if (!catMap.has(item.category)) {
+        catMap.set(item.category, {
+          categoryLabel: item.categoryLabel,
+          categoryColor: item.categoryColor,
+          subsidiaryNamesSet: new Set<string>(),
+        });
+      }
+
+      const agg = catMap.get(item.category)!;
+      if (item.subsidiaryName) agg.subsidiaryNamesSet.add(item.subsidiaryName);
+    }
+
+    const result = new Map<string, CategoryAgg[]>();
+    for (const [date, catMap] of dateMap.entries()) {
+      const arr: CategoryAgg[] = Array.from(catMap.entries()).map(([category, v]) => ({
+        category,
+        categoryLabel: v.categoryLabel,
+        categoryColor: v.categoryColor,
+        subsidiaryNames: Array.from(v.subsidiaryNamesSet).filter(Boolean),
+      }));
+      result.set(date, arr);
+    }
+
+    return result;
   }, [items]);
 
   /* ── 날짜 → 커스텀 이벤트 맵 ── */
@@ -233,7 +278,7 @@ export function ScheduleCalendar() {
           {cells.map((day, i) => {
             if (!day) return <div key={i} />;
             const dateStr = formatDate(year, m, day);
-            const dayItems = itemsByDate.get(dateStr) || [];
+            const dayItems = categoryByDate.get(dateStr) || [];
             const customDayItems = customByDate.get(dateStr) || [];
             const hasAny = dayItems.length > 0 || customDayItems.length > 0;
             const isToday = dateStr === today;
@@ -336,7 +381,7 @@ export function ScheduleCalendar() {
             {monthlyGrid.map((day, i) => {
               if (!day) return <div key={i} className="bg-gray-50" />;
               const dateStr = formatDate(year, month, day);
-              const dayItems = itemsByDate.get(dateStr) || [];
+              const dayItems = categoryByDate.get(dateStr) || [];
               const customDayItems = customByDate.get(dateStr) || [];
               const isToday = dateStr === today;
               return (
@@ -368,13 +413,13 @@ export function ScheduleCalendar() {
                     {/* 스케줄 아이템 (계획) */}
                     {dayItems.slice(0, 3).map((item) => (
                       <div
-                        key={item.id}
+                        key={item.category}
                         className="text-[9px] leading-tight px-1 py-0.5 rounded truncate text-white"
                         style={{ backgroundColor: item.categoryColor }}
-                        title={`${item.subsidiaryName} - ${item.categoryLabel}`}
+                        title={`${item.categoryLabel} — ${item.subsidiaryNames.join(', ')}`}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {item.subsidiaryName}
+                        {item.categoryLabel}
                       </div>
                     ))}
                     {dayItems.length > 3 && (
@@ -416,19 +461,28 @@ export function ScheduleCalendar() {
       )}
 
       {/* 툴팁 */}
-      {tooltip && (itemsByDate.get(tooltip.date) || customByDate.get(tooltip.date)) && (
+      {tooltip &&
+        ((categoryByDate.get(tooltip.date) || []).length > 0 || (customByDate.get(tooltip.date) || []).length > 0) && (
         <div
           className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg p-2 shadow-xl pointer-events-none max-w-[200px]"
           style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
         >
           <p className="font-semibold mb-1 text-gray-300">{tooltip.date}</p>
-          {(itemsByDate.get(tooltip.date) || []).map((item) => (
-            <div key={item.id} className="flex items-center gap-1.5 py-0.5">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.categoryColor }} />
-              <span className="truncate">{item.subsidiaryName}</span>
-              <span className="text-gray-400 truncate">· {item.categoryLabel}</span>
-            </div>
-          ))}
+          {(categoryByDate.get(tooltip.date) || []).map((item) => {
+            const subsidiaryText = item.subsidiaryNames.join(', ');
+            return (
+              <div key={item.category} className="flex items-center gap-1.5 py-0.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.categoryColor }} />
+                <span className="truncate">{item.categoryLabel}</span>
+                <span
+                  className="text-gray-400 truncate"
+                  title={subsidiaryText}
+                >
+                  · {subsidiaryText}
+                </span>
+              </div>
+            );
+          })}
           {(customByDate.get(tooltip.date) || []).map((ev) => (
             <div key={ev.id} className="flex items-center gap-1.5 py-0.5">
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color }} />
