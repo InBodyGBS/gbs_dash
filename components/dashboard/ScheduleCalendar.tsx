@@ -124,14 +124,34 @@ export function ScheduleCalendar() {
         ? `${year}-12-31`
         : new Date(year, month + 1, 0).toISOString().split('T')[0];
 
+      /* Overview/Calendar는 quarter_id로 스코프하는데, 메인만 날짜만 보고 가져오면
+       * 서로 다른 quarter 행이 섞여 카테고리가 과다로 보일 수 있음. */
+      const { data: overlappingQuarters } = await supabase
+        .from('quarters')
+        .select('id')
+        .lte('start_date', endDate)
+        .gte('end_date', startDate);
+
+      const quarterIds = [
+        ...new Set((overlappingQuarters ?? []).map((q: { id: string }) => q.id)),
+      ];
+
+      let scheduleQuery = supabase
+        .from('schedule_items')
+        .select('*')
+        .gte('planned_date', startDate)
+        .lte('planned_date', endDate)
+        .eq('status', 'planned')
+        .order('planned_date', { ascending: true });
+
+      if (quarterIds.length === 1) {
+        scheduleQuery = scheduleQuery.eq('quarter_id', quarterIds[0]);
+      } else if (quarterIds.length > 1) {
+        scheduleQuery = scheduleQuery.in('quarter_id', quarterIds);
+      }
+
       const [scheduleResult, subsResult] = await Promise.all([
-        supabase
-          .from('schedule_items')
-          .select('*')
-          .gte('planned_date', startDate)
-          .lte('planned_date', endDate)
-          .eq('status', 'planned')             // 계획(planned)만 표시, confirmed/submitted 제외
-          .order('planned_date', { ascending: true }),
+        scheduleQuery,
         supabase.from('subsidiaries').select('id, name'),
       ]);
 
