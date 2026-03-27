@@ -6,7 +6,7 @@
  * 제출 여부에 따라 회색(미제출)/파란색(검토중)/초록색(확정) 원형 표시
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { GripVertical, MessageSquare, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -15,7 +15,10 @@ import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quar
 import type { ClosingCategory } from '@/lib/constants/closing-categories';
 import type { ReviewStatus } from '@/lib/types/category-review';
 import { getCategoryReviewStatuses, upsertCategoryReviewStatus } from '@/lib/services/categoryReviewService';
+import { getOverviewReviewInquiries } from '@/lib/services/voeService';
+import type { VoeInquiry } from '@/lib/types/voe';
 import { ReviewCommentDialog } from './ReviewCommentDialog';
+import { OverviewReviewVoeDialog } from './OverviewReviewVoeDialog';
 
 const CATEGORY_ORDER_KEY = 'quarterly-closing-overview-category-order';
 
@@ -34,6 +37,9 @@ interface OverviewGridProps {
 
 /** review status 맵의 키: `${subsidiaryId}__${categoryId}` */
 const reviewKey = (subsidiaryId: string, categoryId: string) => `${subsidiaryId}__${categoryId}`;
+
+/** VOE Overview 문의는 entity_name + source_category 로 매칭 */
+const voeCellKey = (entityName: string, categoryId: string) => `${entityName}__${categoryId}`;
 
 export const OverviewGrid = ({
   quarter,
@@ -62,6 +68,37 @@ export const OverviewGrid = ({
     categoryId: string;
     categoryLabel: string;
   } | null>(null);
+
+  /** Review에서 보낸 VOE 스레드 (분기 단위) */
+  const [overviewVoeList, setOverviewVoeList] = useState<VoeInquiry[]>([]);
+  const [voeThreadDialog, setVoeThreadDialog] = useState<{
+    subsidiaryName: string;
+    categoryId: string;
+    categoryLabel: string;
+  } | null>(null);
+
+  const refreshOverviewVoe = useCallback(async () => {
+    if (!quarter?.id) return;
+    try {
+      const list = await getOverviewReviewInquiries(quarter.id);
+      setOverviewVoeList(list);
+    } catch {
+      setOverviewVoeList([]);
+    }
+  }, [quarter?.id]);
+
+  const voeByCell = useMemo(() => {
+    const m = new Map<string, VoeInquiry[]>();
+    for (const inv of overviewVoeList) {
+      const cat = inv.source_category;
+      if (!cat) continue;
+      const key = voeCellKey(inv.entity_name, cat);
+      const arr = m.get(key);
+      if (arr) arr.push(inv);
+      else m.set(key, [inv]);
+    }
+    return m;
+  }, [overviewVoeList]);
 
   const categoryIdsKey = categories.map((c) => c.id).join(',');
 
@@ -102,6 +139,10 @@ export const OverviewGrid = ({
       })
       .catch(() => { /* 테이블 없으면 무시 */ });
   }, [quarter?.id]);
+
+  useEffect(() => {
+    void refreshOverviewVoe();
+  }, [refreshOverviewVoe]);
 
   const saveCategoryOrder = (order: ClosingCategory[]) => {
     if (typeof window === 'undefined') return;
@@ -314,6 +355,7 @@ export const OverviewGrid = ({
                     const key = reviewKey(subsidiary.id, category.id);
                     const reviewStatus = reviewMap.get(key) ?? 'none';
                     const isSaving = reviewSaving.has(key);
+                    const cellVoeThreads = voeByCell.get(voeCellKey(subsidiary.name, category.id)) ?? [];
 
                     let dotColor: string;
                     if (itemStatus === 'confirmed') dotColor = '#16a34a';
@@ -397,6 +439,22 @@ export const OverviewGrid = ({
                               <MessageSquare className="w-3 h-3" />
                             </button>
                           )}
+                          {cellVoeThreads.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setVoeThreadDialog({
+                                  subsidiaryName: subsidiary.name,
+                                  categoryId: category.id,
+                                  categoryLabel: category.label,
+                                })
+                              }
+                              title="VOE 문의·법인 답변 보기"
+                              className="text-[10px] text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                            >
+                              VOE ({cellVoeThreads.length})
+                            </button>
+                          )}
                         </div>
                       </td>
                     );
@@ -413,12 +471,28 @@ export const OverviewGrid = ({
         <ReviewCommentDialog
           open={!!commentDialog}
           onClose={() => setCommentDialog(null)}
-          onSubmitted={() => toast.success('문의가 법인 VOE에 전송되었습니다.')}
+          onSubmitted={() => {
+            toast.success('문의가 법인 VOE에 전송되었습니다.');
+            void refreshOverviewVoe();
+          }}
           entityName={commentDialog.subsidiaryName}
           categoryLabel={commentDialog.categoryLabel}
           categoryId={commentDialog.categoryId}
           quarterId={quarter.id}
           quarterLabel={periodLabel}
+        />
+      )}
+
+      {voeThreadDialog && (
+        <OverviewReviewVoeDialog
+          open={!!voeThreadDialog}
+          onClose={() => setVoeThreadDialog(null)}
+          entityName={voeThreadDialog.subsidiaryName}
+          categoryLabel={voeThreadDialog.categoryLabel}
+          quarterLabel={periodLabel}
+          threads={
+            voeByCell.get(voeCellKey(voeThreadDialog.subsidiaryName, voeThreadDialog.categoryId)) ?? []
+          }
         />
       )}
     </>

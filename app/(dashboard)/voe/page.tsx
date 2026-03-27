@@ -1,8 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MessageSquare, Plus, RefreshCw, ChevronDown, ChevronUp, Clock, Send, Pencil, X, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
-import { getVoeInquiries, updateVoeStatus } from '@/lib/services/voeService';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MessageSquare, Plus, RefreshCw, ChevronDown, ChevronUp, Clock, Send, Pencil, X, ArrowUpRight, ArrowDownLeft, Shield } from 'lucide-react';
+import {
+  getVoeInquiries,
+  updateVoeStatus,
+  updateVoeEntityResponse,
+  updateVoeStatusOnly,
+  updateVoeContent,
+} from '@/lib/services/voeService';
 import { VoeSubmitDialog } from '@/components/voe/VoeSubmitDialog';
 import type { VoeInquiry, VoeStatus, VoeDirection } from '@/lib/types/voe';
 
@@ -32,28 +38,165 @@ const DIRECTION_LABELS: Record<VoeDirection, { label: string; icon: React.ReactN
   },
 };
 
+type ResponseThreadItem = {
+  header: string | null;
+  content: string;
+  timestampMs: number;
+};
+
+function parseKoreanTimestampFromHeader(header: string): number | null {
+  const m = header.match(
+    /^\[(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(오전|오후)\s*(\d{1,2}):(\d{2}):(\d{2})\]/,
+  );
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const day = Number(m[3]);
+  const meridiem = m[4];
+  let hour = Number(m[5]);
+  const minute = Number(m[6]);
+  const second = Number(m[7]);
+
+  if (meridiem === '오전') {
+    if (hour === 12) hour = 0;
+  } else if (hour < 12) {
+    hour += 12;
+  }
+  return new Date(year, month, day, hour, minute, second).getTime();
+}
+
+function parseThreadBlocks(
+  rawInput: string,
+  appendTag: string,
+  baseTimestampISO?: string | null,
+): ResponseThreadItem[] {
+  const raw = rawInput.trim();
+  if (!raw) return [];
+
+  const baseTs = baseTimestampISO ? new Date(baseTimestampISO).getTime() : 0;
+  const chunks = raw.split('\n\n---\n').map((c) => c.trim()).filter(Boolean);
+  return chunks.map((chunk, idx) => {
+    const lines = chunk.split('\n');
+    const first = lines[0]?.trim() ?? '';
+    const hasHeader = /^\[.*\].*\(.+\)$/.test(first) && first.includes(appendTag);
+    if (hasHeader) {
+      return {
+        header: first,
+        content: lines.slice(1).join('\n').trim(),
+        timestampMs: parseKoreanTimestampFromHeader(first) ?? baseTs + idx + 1,
+      };
+    }
+    return {
+      header: idx === 0 ? '최초 답변' : null,
+      content: chunk,
+      timestampMs: baseTs + idx,
+    };
+  });
+}
+
 function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => void }) {
+  const direction = item.direction ?? 'entity_to_gbs';
+  const isGbsToEntity = direction === 'gbs_to_entity';
+
   const [expanded, setExpanded] = useState(false);
+  const [showInquiryForm, setShowInquiryForm] = useState(false);
   const [showResponseForm, setShowResponseForm] = useState(false);
+  const [showStatusManager, setShowStatusManager] = useState(false);
+  const [appendMode, setAppendMode] = useState(false);
+  const [inquiryText, setInquiryText] = useState('');
+  const [inquiryAuthor, setInquiryAuthor] = useState(item.author ?? '');
   const [responseText, setResponseText] = useState(item.response ?? '');
   const [respondedBy, setRespondedBy] = useState(item.responded_by ?? '');
   const [newStatus, setNewStatus] = useState<VoeStatus>(
     item.status === 'Pending' ? 'Resolved' : item.status
   );
+  const [gbsStatusDraft, setGbsStatusDraft] = useState<VoeStatus>(item.status);
+  const [gbsStatusSaving, setGbsStatusSaving] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [inquirySaving, setInquirySaving] = useState(false);
+  const statusSectionRef = useRef<HTMLDivElement>(null);
 
   const s = STATUS_STYLES[item.status];
   const hasResponse = !!item.response;
+  const contentThreads = parseThreadBlocks(item.content ?? '', '(추가 문의)', item.created_at);
+  const responseThreads = parseThreadBlocks(item.response ?? '', '(추가 답변)', item.responded_at ?? item.updated_at);
+  const timelineThreads = useMemo(() => {
+    if (!isGbsToEntity) return [];
+    const inquiryEntries = contentThreads.map((t, idx) => ({
+      id: `q-${item.id}-${idx}`,
+      kind: '문의' as const,
+      timestampMs: t.timestampMs,
+      header: t.header ?? '최초 문의',
+      content: t.content,
+    }));
+    const responseEntries = responseThreads.map((t, idx) => ({
+      id: `a-${item.id}-${idx}`,
+      kind: '답변' as const,
+      timestampMs: t.timestampMs,
+      header: t.header ?? '최초 답변',
+      content: t.content,
+    }));
+    return [...inquiryEntries, ...responseEntries].sort((a, b) => a.timestampMs - b.timestampMs);
+  }, [contentThreads, isGbsToEntity, item.id, responseThreads]);
+
+  useEffect(() => {
+    setGbsStatusDraft(item.status);
+  }, [item.id, item.status]);
+
+  useEffect(() => {
+    setInquiryAuthor(item.author ?? '');
+  }, [item.id, item.author]);
+
+  useEffect(() => {
+    if (!expanded) {
+      setShowStatusManager(false);
+    }
+  }, [expanded]);
+
+  const handleSaveInquiry = async () => {
+    if (!inquiryText.trim() || !inquiryAuthor.trim()) return;
+    setInquirySaving(true);
+    try {
+      const nowLabel = new Date().toLocaleString('ko-KR');
+      const mergedContent = `${item.content}\n\n---\n[${nowLabel}] ${inquiryAuthor.trim()} (추가 문의)\n${inquiryText.trim()}`;
+      await updateVoeContent(item.id, mergedContent);
+      setInquiryText('');
+      setShowInquiryForm(false);
+      onUpdate();
+    } finally {
+      setInquirySaving(false);
+    }
+  };
 
   const handleSaveResponse = async () => {
     if (!responseText.trim() || !respondedBy.trim()) return;
     setSaving(true);
     try {
-      await updateVoeStatus(item.id, newStatus, responseText.trim(), respondedBy.trim());
+      if (isGbsToEntity) {
+        const nowLabel = new Date().toLocaleString('ko-KR');
+        const mergedResponse =
+          appendMode && hasResponse
+            ? `${item.response}\n\n---\n[${nowLabel}] ${respondedBy.trim()} (추가 답변)\n${responseText.trim()}`
+            : responseText.trim();
+        await updateVoeEntityResponse(item.id, mergedResponse, respondedBy.trim());
+      } else {
+        await updateVoeStatus(item.id, newStatus, responseText.trim(), respondedBy.trim());
+      }
       setShowResponseForm(false);
+      setAppendMode(false);
       onUpdate();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleGbsStatusOnlySave = async () => {
+    setGbsStatusSaving(true);
+    try {
+      await updateVoeStatusOnly(item.id, gbsStatusDraft);
+      onUpdate();
+    } finally {
+      setGbsStatusSaving(false);
     }
   };
 
@@ -62,6 +205,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
     setRespondedBy(item.responded_by ?? '');
     setNewStatus(item.status === 'Pending' ? 'Resolved' : item.status);
     setShowResponseForm(false);
+    setAppendMode(false);
   };
 
   return (
@@ -72,7 +216,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
       >
         <td className="px-4 py-3">
           {(() => {
-            const d = DIRECTION_LABELS[item.direction ?? 'entity_to_gbs'];
+            const d = DIRECTION_LABELS[direction];
             return (
               <span className={`inline-flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full font-medium ${d.bg} ${d.text}`}>
                 {d.icon}{d.label}
@@ -105,8 +249,95 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
 
               {/* 문의 내용 */}
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-1">문의 내용</p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{item.content}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-medium text-gray-500">문의 내용</p>
+                  {isGbsToEntity && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowInquiryForm((v) => !v);
+                      }}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      <Send className="w-3 h-3" />
+                      추가 문의
+                    </button>
+                  )}
+                </div>
+                {isGbsToEntity ? (
+                  <div className="space-y-2">
+                    {timelineThreads.map((thread) => (
+                      <div
+                        key={thread.id}
+                        className={thread.kind === '문의'
+                          ? 'rounded-lg border border-gray-200 bg-white p-2.5'
+                          : 'rounded-lg border border-blue-100 bg-white p-2.5'}
+                      >
+                        <p className={thread.kind === '문의'
+                          ? 'text-[10px] font-medium text-gray-600 mb-1'
+                          : 'text-[10px] font-medium text-blue-600 mb-1'}>
+                          {thread.kind} · {thread.header}
+                        </p>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{thread.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{item.content}</p>
+                )}
+                {isGbsToEntity && showInquiryForm && (
+                  <div
+                    className="mt-3 border-t border-gray-200 pt-3 space-y-3"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-xs font-medium text-blue-700">GBS 추가 문의 작성</p>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">작성자 *</label>
+                        <input
+                          type="text"
+                          value={inquiryAuthor}
+                          onChange={(e) => setInquiryAuthor(e.target.value)}
+                          placeholder="이름"
+                          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">추가 문의 내용 *</label>
+                        <textarea
+                          value={inquiryText}
+                          onChange={(e) => setInquiryText(e.target.value)}
+                          rows={3}
+                          placeholder="기존 문의 아래에 추가할 내용을 입력하세요."
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowInquiryForm(false);
+                          setInquiryText('');
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveInquiry}
+                        disabled={inquirySaving || !inquiryAuthor.trim() || !inquiryText.trim()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        {inquirySaving ? '저장 중...' : '추가 문의 저장'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 기존 답변 표시 */}
@@ -116,7 +347,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                     <div className="flex items-center gap-2">
                       <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
                       <p className="text-xs font-medium text-blue-600">
-                        {item.direction === 'gbs_to_entity' ? '법인 답변' : 'GBS 답변'}
+                        {isGbsToEntity ? '법인 답변' : 'GBS 답변'}
                         {item.responded_by && (
                           <span className="text-gray-400 font-normal ml-1">— {item.responded_by}</span>
                         )}
@@ -127,16 +358,51 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                         )}
                       </p>
                     </div>
-                    {/* 답변 수정 버튼 — 나중에 관리자 권한 체크로 교체 */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowResponseForm(true); }}
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
-                    >
-                      <Pencil className="w-3 h-3" />
-                      수정
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {isGbsToEntity && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAppendMode(true);
+                            setResponseText('');
+                            setShowResponseForm(true);
+                          }}
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <Send className="w-3 h-3" />
+                          추가 답변
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAppendMode(false);
+                          setResponseText(item.response ?? '');
+                          setShowResponseForm(true);
+                        }}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        수정
+                      </button>
+                      {isGbsToEntity && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowStatusManager(true);
+                            statusSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                          className="text-xs text-amber-700 hover:text-amber-900 transition-colors"
+                        >
+                          상태 변경
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{item.response}</p>
+                  {isGbsToEntity ? null : (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{item.response}</p>
+                  )}
                 </div>
               )}
 
@@ -146,18 +412,18 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                   <div className="flex items-center gap-1.5 text-xs text-yellow-600">
                     <Clock className="w-3.5 h-3.5" />
                     <span>
-                      {item.direction === 'gbs_to_entity'
+                      {isGbsToEntity
                         ? '법인 답변을 기다리고 있습니다.'
                         : '아직 답변이 등록되지 않았습니다.'}
                     </span>
                   </div>
                   {/* 나중에 권한 체크로 교체 */}
                   <button
-                    onClick={(e) => { e.stopPropagation(); setShowResponseForm(true); }}
+                    onClick={(e) => { e.stopPropagation(); setAppendMode(false); setShowResponseForm(true); }}
                     className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
                   >
                     <Send className="w-3 h-3" />
-                    {item.direction === 'gbs_to_entity' ? '답변하기' : '답변 달기'}
+                    {isGbsToEntity ? '답변하기' : '답변 달기'}
                   </button>
                 </div>
               )}
@@ -171,11 +437,26 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                   <div className="flex items-center gap-2 mb-1">
                     <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
                     <p className="text-xs font-medium text-blue-600">
-                      {hasResponse ? '답변 수정' : 'GBS 답변 작성'}
+                      {isGbsToEntity
+                        ? appendMode
+                          ? '법인 추가 답변 작성'
+                          : hasResponse
+                          ? '법인 답변 수정'
+                          : '법인 답변 작성'
+                        : hasResponse
+                          ? '답변 수정'
+                          : 'GBS 답변 작성'}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {isGbsToEntity && (
+                    <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+                      GBS 문의는 <strong>상태 변경 없이</strong> 답변만 저장됩니다. 문의 종료·진행 상태는 아래{' '}
+                      <strong>상태 관리 (GBS)</strong>에서만 변경할 수 있습니다.
+                    </p>
+                  )}
+
+                  <div className={isGbsToEntity ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
                         답변자 *
@@ -189,6 +470,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                         className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                    {!isGbsToEntity && (
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">상태 변경</label>
                       <select
@@ -200,6 +482,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                         <option value="Resolved">Resolved</option>
                       </select>
                     </div>
+                    )}
                   </div>
 
                   <div>
@@ -207,7 +490,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                     <textarea
                       value={responseText}
                       onChange={(e) => setResponseText(e.target.value)}
-                      placeholder="문의에 대한 답변을 작성해주세요."
+                      placeholder={appendMode ? '기존 답변 아래에 추가할 내용을 입력하세요.' : '문의에 대한 답변을 작성해주세요.'}
                       rows={4}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
@@ -227,7 +510,46 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      {saving ? '저장 중...' : '답변 저장'}
+                      {saving ? '저장 중...' : appendMode ? '추가 답변 저장' : isGbsToEntity ? '답변만 저장' : '답변 저장'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* GBS 문의: 상태는 GBS 담당자만 별도 저장 (법인 답변 폼과 분리) */}
+              {isGbsToEntity && showStatusManager && (
+                <div
+                  ref={statusSectionRef}
+                  className="border-t border-amber-100 pt-4 space-y-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-3.5 h-3.5 text-amber-700" />
+                    <p className="text-xs font-semibold text-amber-900">상태 관리 (GBS)</p>
+                  </div>
+                  <p className="text-[11px] text-gray-600">
+                    Pending / In Progress / Resolved 는 GBS 담당자가 확정합니다. 법인 답변 저장과 별개입니다.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="min-w-[180px]">
+                      <label className="block text-xs text-gray-500 mb-1">문의 상태</label>
+                      <select
+                        value={gbsStatusDraft}
+                        onChange={(e) => setGbsStatusDraft(e.target.value as VoeStatus)}
+                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGbsStatusOnlySave}
+                      disabled={gbsStatusSaving || gbsStatusDraft === item.status}
+                      className="px-3 py-1.5 text-sm font-medium text-amber-900 bg-amber-100 border border-amber-200 rounded-lg hover:bg-amber-200 disabled:opacity-50 disabled:hover:bg-amber-100"
+                    >
+                      {gbsStatusSaving ? '저장 중...' : '상태만 저장'}
                     </button>
                   </div>
                 </div>
