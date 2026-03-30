@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : []),
+        { xlsx: 'xlsx' },
+      ];
+    }
+    return config;
+  },
   async headers() {
     return [
       {

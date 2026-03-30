@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 import { createIssue } from '@/lib/services/issueService';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { IssueCategory, IssueFormData } from '@/lib/types/issue';
-import { ISSUE_CATEGORIES } from '@/lib/constants/issue-categories';
+import { ISSUE_CATEGORIES_ACTIVE } from '@/lib/constants/issue-categories';
 
 interface IssueCreateDialogProps {
   open: boolean;
@@ -215,7 +215,7 @@ export function IssueCreateDialog({
                     <SelectValue placeholder="카테고리 선택" />
                   </SelectTrigger>
                   <SelectContent position="popper">
-                    {ISSUE_CATEGORIES.map((category) => (
+                    {ISSUE_CATEGORIES_ACTIVE.map((category) => (
                       <SelectItem key={category} value={category}>
                         {category}
                       </SelectItem>

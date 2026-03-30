@@ -1,6 +1,20 @@
 import { supabase } from '@/lib/supabase/client';
 import type { Issue, IssueCategory, IssueStatus } from '@/lib/types/issue';
 
+function normalizeIssueCategory(category: unknown): IssueCategory {
+  if (category === 'Accural') return 'Accrual';
+  if (category === 'Tax' || category === 'Audit') return 'Audit/Tax';
+  if (category === 'Lease') return 'Fixed Asset /Lease';
+  if (category === 'PKG' || category === 'FS') return 'PKG/FS';
+  if (category === 'Inventory' || category === 'Demo') return 'Inventory/Demo';
+  return category as IssueCategory;
+}
+
+function normalizeIssueRow(row: unknown): Issue {
+  const issue = row as Issue;
+  return { ...issue, category: normalizeIssueCategory((issue as { category?: unknown }).category) };
+}
+
 export interface IssueFormData {
   title: string;
   category: IssueCategory;
@@ -19,7 +33,7 @@ export async function createIssue(issueData: IssueFormData): Promise<Issue> {
     .from('issues')
     .insert({
       title: issueData.title,
-      category: issueData.category,
+      category: normalizeIssueCategory(issueData.category),
       entity_id: issueData.entity_id,
       description: issueData.description,
       response: issueData.response,
@@ -33,7 +47,7 @@ export async function createIssue(issueData: IssueFormData): Promise<Issue> {
     .single();
 
   if (error) throw error;
-  return data as unknown as Issue;
+  return normalizeIssueRow(data);
 }
 
 export async function getIssues(): Promise<Issue[]> {
@@ -43,7 +57,7 @@ export async function getIssues(): Promise<Issue[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return (data || []) as unknown as Issue[];
+  return (data || []).map(normalizeIssueRow);
 }
 
 export async function getAllIssues(): Promise<Issue[]> {
@@ -58,7 +72,7 @@ export async function updateIssue(
     .from('issues')
     .update({
       title: updates.title,
-      category: updates.category,
+      category: normalizeIssueCategory(updates.category),
       entity_id: updates.entity_id,
       description: updates.description,
       response: updates.response,
@@ -73,7 +87,7 @@ export async function updateIssue(
     .single();
 
   if (error) throw error;
-  return data as unknown as Issue;
+  return normalizeIssueRow(data);
 }
 
 export async function deleteIssue(id: string): Promise<void> {

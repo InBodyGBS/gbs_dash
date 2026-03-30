@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next dev --turbo",
     "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (_) {}\"",
-    "dev:clean": "npm run clean && next dev",
+    "dev:clean": "npm run clean && cross-env NODE_OPTIONS=--max-old-space-size=8192 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

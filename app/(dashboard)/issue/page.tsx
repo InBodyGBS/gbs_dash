@@ -203,14 +203,14 @@ export default function IssuePage() {
   };
 
   // Excel 다운로드
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (issues.length === 0) {
       toast.error('다운로드할 이슈가 없습니다');
       return;
     }
     
     try {
-      exportIssuesToExcel(issues, subsidiaries);
+      await exportIssuesToExcel(issues, subsidiaries);
       toast.success('Excel 파일이 다운로드되었습니다');
     } catch (error) {
       console.error('Excel export error:', error);

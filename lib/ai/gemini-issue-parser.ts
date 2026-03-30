@@ -5,7 +5,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { IssueCategory } from '@/lib/types/issue';
-import { ISSUE_CATEGORIES } from '@/lib/constants/issue-categories';
+import { ISSUE_CATEGORIES_ACTIVE } from '@/lib/constants/issue-categories';
 
 interface ParsedIssue {
   title: string;
@@ -38,7 +38,7 @@ ${userInput}
 }
 
 # 카테고리 목록
-${ISSUE_CATEGORIES.map((cat) => `- ${cat}`).join('\n')}
+${ISSUE_CATEGORIES_ACTIVE.map((cat) => `- ${cat}`).join('\n')}
 
 # 법인 목록
 ${subsidiaryList}

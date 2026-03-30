@@ -27,7 +27,7 @@ import { toast } from 'sonner';
 import { updateIssue, deleteIssue } from '@/lib/services/issueService';
 import type { Issue, IssueCategory, IssueStatus } from '@/lib/types/issue';
 import type { Subsidiary } from '@/lib/supabase/types';
-import { CATEGORY_COLORS, ISSUE_CATEGORIES, ISSUE_STATUS_LIST } from '@/lib/constants/issue-categories';
+import { CATEGORY_COLORS, ISSUE_CATEGORIES_ACTIVE, ISSUE_STATUS_LIST } from '@/lib/constants/issue-categories';
 
 interface IssueDetailDialogProps {
   issue: Issue;
@@ -173,7 +173,7 @@ export function IssueDetailDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ISSUE_CATEGORIES.map((category) => (
+                    {ISSUE_CATEGORIES_ACTIVE.map((category) => (
                       <SelectItem key={category} value={category}>
                         {category}
                       </SelectItem>

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ISSUE_CATEGORIES, CATEGORY_COLORS } from '@/lib/constants/issue-categories';
+import { ISSUE_CATEGORIES_ACTIVE, CATEGORY_COLORS } from '@/lib/constants/issue-categories';
 import type { IssueCategory } from '@/lib/types/issue';
 
 interface CategoryFilterDialogProps {
@@ -21,7 +21,9 @@ export function CategoryFilterDialog({
   selectedCategories,
   onApply,
 }: CategoryFilterDialogProps) {
-  const [tempSelected, setTempSelected] = useState<IssueCategory[]>(selectedCategories);
+  const [tempSelected, setTempSelected] = useState<IssueCategory[]>(
+    selectedCategories.filter((c) => (ISSUE_CATEGORIES_ACTIVE as readonly IssueCategory[]).includes(c)),
+  );
 
   const handleToggle = (category: IssueCategory) => {
     if (tempSelected.includes(category)) {
@@ -49,7 +51,7 @@ export function CategoryFilterDialog({
 
         <div className="py-4">
           <div className="grid grid-cols-2 gap-4">
-            {ISSUE_CATEGORIES.map((category) => {
+            {ISSUE_CATEGORIES_ACTIVE.map((category) => {
               const isChecked = tempSelected.includes(category);
               const categoryColor = CATEGORY_COLORS[category];
 
