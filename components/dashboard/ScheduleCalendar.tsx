@@ -3,7 +3,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
+import {
+  CLOSING_CATEGORIES,
+  getClosingQuarterContextForCalendarMonth,
+} from '@/lib/constants/closing-categories';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,7 +116,7 @@ export function ScheduleCalendar() {
     }
   }, [addDialog]);
 
-  /* ── 스케줄 데이터 로드 (planned 만) ── */
+  /* ── 스케줄 데이터 로드 (planned + confirmed; 분기는 FC와 동일 규칙) ── */
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -124,24 +127,41 @@ export function ScheduleCalendar() {
         ? `${year}-12-31`
         : new Date(year, month + 1, 0).toISOString().split('T')[0];
 
-      /* Overview/Calendar는 quarter_id로 스코프하는데, 메인만 날짜만 보고 가져오면
-       * 서로 다른 quarter 행이 섞여 카테고리가 과다로 보일 수 있음. */
-      const { data: overlappingQuarters } = await supabase
-        .from('quarters')
-        .select('id')
-        .lte('start_date', endDate)
-        .gte('end_date', startDate);
+      let quarterIds: string[] = [];
 
-      const quarterIds = [
-        ...new Set((overlappingQuarters ?? []).map((q: { id: string }) => q.id)),
-      ];
+      if (viewMode === 'monthly') {
+        const calMonth = month + 1;
+        const { attributionYear, calendarQuarter } = getClosingQuarterContextForCalendarMonth(
+          year,
+          calMonth,
+        );
+        const { data: closingQuarter } = await supabase
+          .from('quarters')
+          .select('id')
+          .eq('year', attributionYear)
+          .eq('quarter', calendarQuarter)
+          .maybeSingle();
+        if (closingQuarter?.id) quarterIds = [closingQuarter.id];
+      } else {
+        const { data: yearQuarters } = await supabase
+          .from('quarters')
+          .select('id')
+          .eq('year', year);
+        quarterIds = [...new Set((yearQuarters ?? []).map((q: { id: string }) => q.id))];
+      }
+
+      if (quarterIds.length === 0) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
 
       let scheduleQuery = supabase
         .from('schedule_items')
         .select('*')
         .gte('planned_date', startDate)
         .lte('planned_date', endDate)
-        .eq('status', 'planned')
+        .in('status', ['planned', 'confirmed'])
         .order('planned_date', { ascending: true });
 
       if (quarterIds.length === 1) {

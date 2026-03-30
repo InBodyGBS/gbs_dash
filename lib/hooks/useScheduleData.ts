@@ -981,7 +981,15 @@ export function useScheduleData() {
     }
     // planned_date 범위로 필터 (LIKE 대신 gte/lte 사용)
     const startDate = `${calendarYmPrefix}-01`;
-    const endDate = `${calendarYmPrefix}-31`;
+    const [yStr, mStr] = calendarYmPrefix.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    if (Number.isNaN(y) || Number.isNaN(m)) {
+      toast.error('달력 월 형식이 올바르지 않습니다.');
+      return;
+    }
+    // m은 1-based; Date(y, m, 0) = 해당 월의 마지막 날 (예: 4월 → 30일, 고정 -31은 400 유발)
+    const endDate = format(new Date(y, m, 0), 'yyyy-MM-dd');
     const { error } = await supabase
       .from('schedule_items')
       .update({ status: 'confirmed' })

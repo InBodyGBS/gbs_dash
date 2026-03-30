@@ -54,6 +54,26 @@ export function getClosingCategoriesForMonth(month: number): ClosingCategory[] {
   return [...CLOSING_CATEGORIES_REGULAR];
 }
 
+/**
+ * 화면에 보이는 캘린더 월만 알 때, Financial Closing Calendar와 동일한 DB 분기(귀속 분기)를 구합니다.
+ * FC는 「귀속월 + 1」을 캘린더에 그리므로: 귀속월 = 캘린더월 − 1 (1월이면 전년 12월).
+ * `quarters` 행은 귀속 분기 기준이므로, 메인 대시보드 월간 뷰도 이 분기로 `schedule_items`를 조회해야
+ * 날짜 겹침만으로 Q2를 고르는 것과 달라지지 않습니다 (예: 4월 일정이 Q1 결산에 묶인 경우).
+ */
+export function getClosingQuarterContextForCalendarMonth(
+  calendarYear: number,
+  calendarMonth1Based: number,
+): { attributionYear: number; attributionMonth: number; calendarQuarter: number } {
+  let attributionMonth = calendarMonth1Based - 1;
+  let attributionYear = calendarYear;
+  if (attributionMonth === 0) {
+    attributionMonth = 12;
+    attributionYear = calendarYear - 1;
+  }
+  const calendarQuarter = Math.min(4, Math.max(1, Math.ceil(attributionMonth / 3)));
+  return { attributionYear, attributionMonth, calendarQuarter };
+}
+
 function uniqCategoriesById(categories: readonly ClosingCategory[]): ClosingCategory[] {
   const seen = new Set<string>();
   const out: ClosingCategory[] = [];
