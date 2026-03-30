@@ -29,6 +29,7 @@ export interface Category {
   icon: LucideIcon;
   description?: string;
   children?: SubCategory[];
+  hidden?: boolean;
 }
 
 /** 경로가 정확히 일치하거나 하위 경로일 때만 매칭 (부모 path가 조기 매칭되지 않도록) */
@@ -96,6 +97,7 @@ export const CATEGORIES: Category[] = [
     path: '/inter-co-transaction',
     icon: ArrowLeftRight,
     description: '법인 간 거래 내역',
+    hidden: true,
   },
   {
     id: 'system',

@@ -294,6 +294,32 @@ export const BS_CODE_CATEGORIES = {
   EQUITY: { prefix: '31', range: [31101, 31505] },
 } as const;
 
+// ============================================
+// BS Dashboard 기간별 지표 (B/S 대시보드용)
+// ============================================
+export interface BSPeriodMetrics {
+  year: number;
+  month: number;
+  period: string; // "YYYY-MM" — 차트 레이블용
+  // 재무상태표 항목
+  totalAssets: number;
+  cash: number;              // 11101 + 11102 + 11103
+  accountsReceivable: number; // 11201 - 11202 (net)
+  inventories: number;       // 11501~11511 순액 (valuation allowance 차감)
+  accountsPayable: number;   // 21100 + 21101
+  workingCapital: number;    // AR + Inv - AP
+  // P&L 파생 (해당 월 단기값)
+  monthlySales: number;
+  monthlyCOGS: number;
+  // Turnover 지표
+  arTurnover: number | null;   // 연환산 회 = monthlySales * 12 / AR
+  dso: number | null;          // 일 = AR / (monthlySales / 30)
+  invTurnover: number | null;  // 연환산 회 = monthlyCOGS * 12 / Inv
+  dio: number | null;          // 일 = Inv / (monthlyCOGS / 30)
+  apTurnover: number | null;   // 연환산 회 = monthlyCOGS * 12 / AP
+  dpo: number | null;          // 일 = AP / (monthlyCOGS / 30)
+}
+
 // 계산된 항목 (P&L Code 없음)
 export const CALCULATED_ITEMS = {
   GROSS_PROFIT: 'GROSS_PROFIT',

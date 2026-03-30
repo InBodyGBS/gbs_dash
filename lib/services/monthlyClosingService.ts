@@ -16,6 +16,7 @@ import type {
   BSResult,
   PLSummary,
   BSSummary,
+  BSPeriodMetrics,
   UnmappedAccount,
   TBParsedRow,
   StdPLMaster,
@@ -1038,5 +1039,150 @@ export function calculateBSSummary(
     totalLiabilitiesAndEquity,
     isBalanced,
     currency: results[0]?.currency || 'KRW',
+  };
+}
+
+// ============================================
+// B/S Dashboard — 벌크 쿼리 & 지표 계산
+// ============================================
+
+/**
+ * 여러 기간 × 여러 Entity의 BS 결과를 한 번에 조회
+ */
+export async function getBSResultsForPeriods(
+  entityCodes: string[],
+  periods: { year: number; month: number }[]
+): Promise<BSResult[]> {
+  if (entityCodes.length === 0 || periods.length === 0) return [];
+  const years = [...new Set(periods.map((p) => p.year))];
+  const { data, error } = await supabase
+    .from('bs_results')
+    .select('*')
+    .in('entity_code', entityCodes)
+    .in('period_year', years);
+  if (error) throw new Error(`BS 벌크 조회 실패: ${error.message}`);
+  const periodSet = new Set(periods.map((p) => `${p.year}-${p.month}`));
+  return ((data || []) as unknown as BSResult[]).filter(
+    (r) => periodSet.has(`${r.period_year}-${r.period_month}`)
+  );
+}
+
+/**
+ * 여러 기간 × 여러 Entity의 PL 결과를 한 번에 조회 (누적값)
+ */
+export async function getPLResultsForPeriods(
+  entityCodes: string[],
+  periods: { year: number; month: number }[]
+): Promise<PLResult[]> {
+  if (entityCodes.length === 0 || periods.length === 0) return [];
+  const years = [...new Set(periods.map((p) => p.year))];
+  const { data, error } = await supabase
+    .from('pl_results')
+    .select('*')
+    .in('entity_code', entityCodes)
+    .in('period_year', years);
+  if (error) throw new Error(`PL 벌크 조회 실패: ${error.message}`);
+  const periodSet = new Set(periods.map((p) => `${p.year}-${p.month}`));
+  return ((data || []) as unknown as PLResult[]).filter(
+    (r) => periodSet.has(`${r.period_year}-${r.period_month}`)
+  );
+}
+
+// BS Dashboard에서 사용하는 계정 코드 상수
+const BS_DASH_CODES = {
+  CASH: ['11101', '11102', '11103'],
+  AR_ASSET: ['11201'],
+  AR_CONTRA: ['11202'],
+  INV_ASSET: ['11501', '11503', '11505', '11509', '11511'],
+  INV_CONTRA: ['11502', '11504', '11506', '11510'],
+  AP: ['21100', '21101'],
+  // P&L
+  SALES: ['41000', '42000', '43000', '44000', '45000', '46000'],
+  COGS: ['51000', '52000', '53000', '54000'],
+} as const;
+
+/**
+ * BS 결과 배열에서 대시보드 지표 추출
+ * (is_contra 처리는 generateStatements 부호 규칙에 의해 이미 처리됨)
+ */
+function extractBSValues(results: BSResult[]) {
+  const m = new Map<string, number>();
+  results.forEach((r) => m.set(r.std_bs_code, (m.get(r.std_bs_code) || 0) + r.amount));
+
+  const sum = (codes: readonly string[]) => codes.reduce((s, c) => s + (m.get(c) || 0), 0);
+
+  const cash = sum(BS_DASH_CODES.CASH);
+  const ar = sum(BS_DASH_CODES.AR_ASSET) + sum(BS_DASH_CODES.AR_CONTRA); // contra already negative
+  const inv = sum(BS_DASH_CODES.INV_ASSET) + sum(BS_DASH_CODES.INV_CONTRA); // contra already negative
+
+  // AP: liabilities are stored as positive (sign-flipped in generateStatements)
+  const ap = sum(BS_DASH_CODES.AP);
+
+  let totalAssets = 0;
+  m.forEach((amount, code) => {
+    if (code.startsWith('11') || code.startsWith('12')) totalAssets += amount;
+  });
+
+  return { cash, ar, inv, ap, totalAssets };
+}
+
+/**
+ * PL 누적 결과 배열에서 Sales·COGS 합계 추출
+ */
+function extractPLValues(results: PLResult[]) {
+  const m = new Map<string, number>();
+  results.forEach((r) => m.set(r.std_pl_code, (m.get(r.std_pl_code) || 0) + r.amount));
+  const sum = (codes: readonly string[]) => codes.reduce((s, c) => s + (m.get(c) || 0), 0);
+  return { sales: sum(BS_DASH_CODES.SALES), cogs: sum(BS_DASH_CODES.COGS) };
+}
+
+/**
+ * 단일 기간의 BSPeriodMetrics를 계산
+ * @param bsResults      해당 기간의 BS 결과
+ * @param plCurrResults  해당 기간의 PL 누적 결과
+ * @param plPrevResults  직전 기간의 PL 누적 결과 (월별값 = curr - prev)
+ * @param isJanuary      1월이면 true (누적 = 월별)
+ */
+export function computeBSPeriodMetrics(
+  bsResults: BSResult[],
+  plCurrResults: PLResult[],
+  plPrevResults: PLResult[],
+  year: number,
+  month: number,
+  isJanuary: boolean
+): BSPeriodMetrics {
+  const { cash, ar, inv, ap, totalAssets } = extractBSValues(bsResults);
+  const curr = extractPLValues(plCurrResults);
+  const prev = isJanuary ? { sales: 0, cogs: 0 } : extractPLValues(plPrevResults);
+
+  const monthlySales = curr.sales - prev.sales;
+  const monthlyCOGS = curr.cogs - prev.cogs;
+  const workingCapital = ar + inv - ap;
+
+  const arTurnover = ar > 0 && monthlySales !== 0 ? (monthlySales * 12) / ar : null;
+  const dso = ar > 0 && monthlySales !== 0 ? ar / (monthlySales / 30) : null;
+  const invTurnover = inv > 0 && monthlyCOGS !== 0 ? (monthlyCOGS * 12) / inv : null;
+  const dio = inv > 0 && monthlyCOGS !== 0 ? inv / (monthlyCOGS / 30) : null;
+  const apTurnover = ap > 0 && monthlyCOGS !== 0 ? (monthlyCOGS * 12) / ap : null;
+  const dpo = ap > 0 && monthlyCOGS !== 0 ? ap / (monthlyCOGS / 30) : null;
+
+  return {
+    year,
+    month,
+    period: `${year}-${String(month).padStart(2, '0')}`,
+    totalAssets,
+    cash,
+    accountsReceivable: ar,
+    inventories: inv,
+    accountsPayable: ap,
+    workingCapital,
+    monthlySales,
+    monthlyCOGS,
+    arTurnover,
+    dso,
+    invTurnover,
+    dio,
+    apTurnover,
+    dpo,
   };
 }

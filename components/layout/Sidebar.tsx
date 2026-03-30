@@ -74,7 +74,7 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
 
       {/* 네비게이션 */}
       <nav className="flex-1 overflow-y-auto py-2">
-        {CATEGORIES.map((category) => {
+        {CATEGORIES.filter((cat) => !cat.hidden).map((category) => {
           const Icon = category.icon;
           const hasChildren = !!category.children?.length;
           const isOpen = openGroups.has(category.id);
