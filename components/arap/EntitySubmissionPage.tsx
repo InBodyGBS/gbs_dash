@@ -15,7 +15,6 @@ import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 import { createArapSubmission, getArapEntities, getArapSubmissions } from '@/lib/services/arapService';
 import type { ArapSubmissionDetailInput, ArapEntity, AccountType } from '@/lib/types/arap';
-import * as XLSX from 'xlsx';
 
 interface EntitySubmissionPageProps {
   entityId: string;
@@ -152,7 +151,8 @@ export function EntitySubmissionPage({
   }, [loadData]);
 
   // 템플릿 다운로드
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
+    const XLSX = await import('xlsx');
     const template = [
       {
         'Invoice Date': '2024-01-15',
@@ -189,6 +189,7 @@ export function EntitySubmissionPage({
     setUploadedFile(file);
 
     try {
+      const XLSX = await import('xlsx');
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { cellDates: true, cellNF: false, cellText: false });
       const sheetName = workbook.SheetNames[0];
@@ -381,13 +382,14 @@ export function EntitySubmissionPage({
   };
 
   // Excel로 내보내기
-  const handleExport = () => {
+  const handleExport = async () => {
     if (items.length === 0) {
       toast.error('No data to export');
       return;
     }
 
     try {
+      const XLSX = await import('xlsx');
       // Excel 데이터 준비
       const exportData = items.map((item) => {
         const counterparty = entities.find((e) => e.id === item.counterparty_entity_id);

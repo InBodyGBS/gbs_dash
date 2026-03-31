@@ -3,7 +3,6 @@
  * Excel 및 Word 파일에서 법인별/개인별 업무 분장 정보 추출
  */
 
-import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
 export interface WorkAssignment {
@@ -225,6 +224,7 @@ async function parseWordFile(arrayBuffer: ArrayBuffer): Promise<WorkAssignment[]
  */
 async function parseExcelFile(arrayBuffer: ArrayBuffer): Promise<WorkAssignment[]> {
   try {
+    const XLSX = await import('xlsx');
     // Excel 파일 읽기
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     const assignments: WorkAssignment[] = [];

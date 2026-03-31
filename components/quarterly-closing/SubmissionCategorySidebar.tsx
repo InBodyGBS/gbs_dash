@@ -24,10 +24,10 @@ export function SubmissionCategorySidebar({
   selectedCategory,
   onCategorySelect,
 }: SubmissionCategorySidebarProps) {
-  const handleTemplateDownload = (categoryId: ClosingCategoryId, e: React.MouseEvent) => {
+  const handleTemplateDownload = async (categoryId: ClosingCategoryId, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      downloadSubmissionTemplate(categoryId);
+      await downloadSubmissionTemplate(categoryId);
       const category = categories.find((cat) => cat.id === categoryId);
       toast.success('템플릿 다운로드 완료', {
         description: `${category?.label || categoryId} 템플릿이 다운로드되었습니다.`,

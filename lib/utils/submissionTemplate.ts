@@ -2,7 +2,6 @@
  * Submission 템플릿 생성 유틸리티
  */
 
-import * as XLSX from 'xlsx';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
 
@@ -37,7 +36,8 @@ function getTemplateData(categoryId: ClosingCategoryId): TemplateData {
 /**
  * 카테고리별 Excel 템플릿 다운로드
  */
-export function downloadSubmissionTemplate(categoryId: ClosingCategoryId) {
+export async function downloadSubmissionTemplate(categoryId: ClosingCategoryId) {
+  const XLSX = await import('xlsx');
   const category = CLOSING_CATEGORIES.find((cat) => cat.id === categoryId);
   const categoryLabel = category?.label || categoryId;
 

@@ -8,7 +8,6 @@ import type { QuarterComparison } from '@/lib/types/financial-result';
 import { REV_ACCOUNT_ORDER } from '@/lib/types/financial-result';
 import { formatKRW } from '@/lib/utils/format';
 import { cn } from '@/lib/utils';
-import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
 interface QuarterComparisonTableProps {
@@ -185,8 +184,9 @@ export function QuarterComparisonTable({
   }
 
   // Excel 다운로드 함수
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
     try {
+      const XLSX = await import('xlsx');
       const wb = XLSX.utils.book_new();
 
       // QoQ 분석 시트

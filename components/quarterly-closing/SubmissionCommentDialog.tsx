@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
 import {
   getSubmissionComments,
   createSubmissionComment,
@@ -140,12 +139,13 @@ export function SubmissionCommentDialog({
     }
   };
 
-  const handleExportComments = () => {
+  const handleExportComments = async () => {
     if (comments.length === 0) {
       toast.error('다운로드할 댓글이 없습니다.');
       return;
     }
 
+    const XLSX = await import('xlsx');
     // 엑셀 데이터 생성
     const excelData = comments.map((comment, index) => ({
       '순번': index + 1,

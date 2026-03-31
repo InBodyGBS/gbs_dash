@@ -37,9 +37,9 @@ export function SubmissionUpload({
   const categoryLabel =
     MONTHLY_CLOSING_CATEGORIES.find((cat) => cat.id === category)?.label || category;
 
-  const handleTemplateDownload = () => {
+  const handleTemplateDownload = async () => {
     try {
-      downloadMonthlySubmissionTemplate(category);
+      await downloadMonthlySubmissionTemplate(category);
       toast.success('템플릿 다운로드 완료', {
         description: `${categoryLabel} 템플릿이 다운로드되었습니다.`,
       });

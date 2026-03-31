@@ -2,7 +2,6 @@
  * Monthly Closing 제출 템플릿 생성 유틸리티
  */
 
-import * as XLSX from 'xlsx';
 import type { MonthlyClosingCategoryId } from '@/lib/constants/monthly-closing-categories';
 import { MONTHLY_CLOSING_CATEGORIES } from '@/lib/constants/monthly-closing-categories';
 
@@ -27,7 +26,8 @@ function getTemplateData(categoryId: MonthlyClosingCategoryId): TemplateData {
   return template;
 }
 
-export function downloadMonthlySubmissionTemplate(categoryId: MonthlyClosingCategoryId) {
+export async function downloadMonthlySubmissionTemplate(categoryId: MonthlyClosingCategoryId) {
+  const XLSX = await import('xlsx');
   const category = MONTHLY_CLOSING_CATEGORIES.find((cat) => cat.id === categoryId);
   const categoryLabel = category?.label || categoryId;
 

@@ -6,7 +6,6 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabase/client';
-import * as XLSX from 'xlsx';
 import type {
   TBUpload,
   TBRawData,
@@ -375,8 +374,9 @@ export async function deleteCOAMapping(id: string): Promise<void> {
 export async function parseCOAMappingExcel(file: File): Promise<COAMappingInput[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
+        const XLSX = await import('xlsx');
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];

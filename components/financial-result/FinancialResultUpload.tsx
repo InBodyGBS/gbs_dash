@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { uploadFinancialResultFile, saveFinancialResultData } from '@/lib/services/financialResultService';
 import type { ExcelRowData } from '@/lib/services/financialResultService';
-import * as XLSX from 'xlsx';
 
 interface FinancialResultUploadProps {
   onUploadSuccess: () => void;
@@ -39,8 +38,9 @@ export function FinancialResultUpload({ onUploadSuccess }: FinancialResultUpload
   const parseExcelFile = async (file: File): Promise<ExcelRowData[]> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
+          const XLSX = await import('xlsx');
           const data = e.target?.result;
           const workbook = XLSX.read(data, { type: 'binary' });
           

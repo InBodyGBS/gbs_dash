@@ -3,7 +3,7 @@
 /**
  * Overview 그리드 컴포넌트
  * Entity가 행, 카테고리가 열로 표시
- * 제출 여부에 따라 회색(미제출)/파란색(검토중)/초록색(확정) 원형 표시
+ * 원형: 확정=파랑(schedule confirmed 또는 Review C), 제출=초록(파일만), 미제출=회색
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -153,27 +153,6 @@ export const OverviewGrid = ({
     } catch { /* ignore */ }
   };
 
-  const getScheduleItemStatus = (subsidiaryId: string, categoryId: string): 'confirmed' | 'planned' | null => {
-    const items = scheduleItems.filter((i) => i.subsidiary_id === subsidiaryId && i.category === categoryId);
-    if (items.length) {
-      // submitted(파일 제출) 또는 confirmed(수동 확정) 모두 완료로 표시
-      return items.find((i) => i.status === 'confirmed') ? 'confirmed' : 'planned';
-    }
-    // schedule_item이 없어도 submission이 있으면 confirmed로 표시
-    const hasSubmission = submissions.some((s) => s.subsidiary_id === subsidiaryId && s.category === categoryId);
-    return hasSubmission ? 'confirmed' : null;
-  };
-
-  const getSubsidiarySummary = (subsidiaryId: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    const items = scheduleItems.filter((i) => i.subsidiary_id === subsidiaryId);
-    return {
-      submitted: items.filter((i) => i.status === 'confirmed').length,
-      overdue: items.filter((i) => i.status === 'planned' && i.planned_date < today).length,
-      pending: items.filter((i) => i.status === 'planned' && i.planned_date >= today).length,
-    };
-  };
-
   /** Review status 토글 */
   const handleReviewToggle = async (
     subsidiaryId: string,
@@ -271,6 +250,55 @@ export const OverviewGrid = ({
     ? orderedCategories.filter((c) => c.id === selectedCategory)
     : orderedCategories;
 
+  /**
+   * 셀·현황 공통: 파랑=확정(schedule confirmed 또는 Overview Review C), 초록=파일 제출만, 회색=미제출
+   */
+  const getOverviewCellState = (
+    subsidiaryId: string,
+    categoryId: string,
+  ): 'confirmed' | 'submitted' | 'none' => {
+    const rk = reviewKey(subsidiaryId, categoryId);
+    if (reviewMap.get(rk) === 'confirmed') return 'confirmed';
+
+    const items = scheduleItems.filter(
+      (i) => i.subsidiary_id === subsidiaryId && i.category === categoryId,
+    );
+    if (items.some((i) => i.status === 'confirmed')) return 'confirmed';
+
+    const hasSubmission = submissions.some(
+      (s) => s.subsidiary_id === subsidiaryId && s.category === categoryId,
+    );
+    if (hasSubmission) return 'submitted';
+
+    return 'none';
+  };
+
+  const getSubsidiarySummary = (subsidiaryId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    let confirmed = 0;
+    let submitted = 0;
+    let none = 0;
+    let overdue = 0;
+
+    for (const cat of filteredCategories) {
+      const state = getOverviewCellState(subsidiaryId, cat.id);
+      if (state === 'confirmed') confirmed++;
+      else if (state === 'submitted') submitted++;
+      else {
+        none++;
+        const planned = scheduleItems.find(
+          (i) =>
+            i.subsidiary_id === subsidiaryId &&
+            i.category === cat.id &&
+            i.status === 'planned',
+        );
+        if (planned && planned.planned_date < today) overdue++;
+      }
+    }
+
+    return { confirmed, submitted, none, overdue };
+  };
+
   return (
     <>
       <div className="overflow-auto">
@@ -335,15 +363,26 @@ export const OverviewGrid = ({
                     </div>
                   </td>
 
-                  {/* 현황 요약 */}
+                  {/* 현황 요약 (표시 열·제출·Review C와 동일 기 counting) */}
                   {(() => {
                     const s = getSubsidiarySummary(subsidiary.id);
                     return (
                       <td className="border border-gray-300 px-3 py-3 text-xs bg-gray-50">
-                        <div className="flex flex-col gap-0.5 items-center">
-                          <span className="text-green-700 font-semibold">✓ {s.submitted}</span>
-                          {s.overdue > 0 && <span className="text-red-600 font-semibold">! {s.overdue}</span>}
-                          <span className="text-gray-400">○ {s.pending}</span>
+                        <div className="flex flex-col gap-0.5 items-center leading-tight">
+                          <span className="text-blue-700 font-semibold" title="확정">
+                            ● {s.confirmed}
+                          </span>
+                          <span className="text-green-700 font-semibold" title="제출">
+                            ● {s.submitted}
+                          </span>
+                          <span className="text-gray-500" title="미제출">
+                            ○ {s.none}
+                          </span>
+                          {s.overdue > 0 && (
+                            <span className="text-red-600 font-semibold" title="예정일 지남(미제출/미확정)">
+                              ! {s.overdue}
+                            </span>
+                          )}
                         </div>
                       </td>
                     );
@@ -351,15 +390,15 @@ export const OverviewGrid = ({
 
                   {/* 카테고리별 셀 */}
                   {filteredCategories.map((category) => {
-                    const itemStatus = getScheduleItemStatus(subsidiary.id, category.id);
+                    const cellState = getOverviewCellState(subsidiary.id, category.id);
                     const key = reviewKey(subsidiary.id, category.id);
                     const reviewStatus = reviewMap.get(key) ?? 'none';
                     const isSaving = reviewSaving.has(key);
                     const cellVoeThreads = voeByCell.get(voeCellKey(subsidiary.name, category.id)) ?? [];
 
                     let dotColor: string;
-                    if (itemStatus === 'confirmed') dotColor = '#16a34a';
-                    else if (itemStatus === 'planned') dotColor = '#2563eb';
+                    if (cellState === 'confirmed') dotColor = '#2563eb';
+                    else if (cellState === 'submitted') dotColor = '#16a34a';
                     else dotColor = '#9ca3af';
 
                     return (

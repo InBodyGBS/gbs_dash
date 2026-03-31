@@ -35,7 +35,6 @@ import {
 import { getPLResults, getStdPLMaster } from '@/lib/services/monthlyClosingService';
 import type { PLResult, StdPLMaster } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
-import * as XLSX from 'xlsx';
 
 const STORAGE_KEY = 'monthly-closing-result-state';
 
@@ -1194,8 +1193,10 @@ export default function ResultPage() {
   };
 
   // Excel 내보내기
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!selectedEntityCode || !selectedYear) return;
+
+    const XLSX = await import('xlsx');
     
     if (activeTab === 'yearly') {
       if (yearlyDisplayLines.length === 0) return;

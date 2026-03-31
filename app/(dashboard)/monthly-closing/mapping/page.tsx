@@ -63,7 +63,6 @@ import type {
   StatementType,
 } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
-import * as XLSX from 'xlsx';
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -338,7 +337,8 @@ export default function MappingPage() {
   };
 
   // 템플릿 다운로드 (P&L + BS 통합, Statement Type 컬럼은 선택사항임을 표시)
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
+    const XLSX = await import('xlsx');
     const templateData = [
       {
         'Account Code': '400-001',

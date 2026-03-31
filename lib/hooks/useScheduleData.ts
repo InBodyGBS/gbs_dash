@@ -7,7 +7,6 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import { calculateAchievementRate } from '@/lib/utils/achievement-rate';
@@ -804,12 +803,13 @@ export function useScheduleData() {
   // -------------------------------------------------------------------------
   // Excel exports
   // -------------------------------------------------------------------------
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!quarter || subsidiaries.length === 0) {
       toast.error('다운로드할 데이터가 없습니다.');
       return;
     }
 
+    const XLSX = await import('xlsx');
     const fy = parseInt(selectedYear, 10);
     const monthNum = parseInt(selectedMonth, 10) || 1;
     const monthStart = new Date(fy, monthNum - 1, 1);
@@ -866,12 +866,13 @@ export function useScheduleData() {
     toast.success('엑셀 파일이 다운로드되었습니다.');
   };
 
-  const handleExportOverviewExcel = () => {
+  const handleExportOverviewExcel = async () => {
     if (!quarter || subsidiaries.length === 0) {
       toast.error('다운로드할 데이터가 없습니다.');
       return;
     }
 
+    const XLSX = await import('xlsx');
     const fy = parseInt(selectedYear, 10);
     const monthNum = parseInt(selectedMonth, 10) || 1;
     const ymPrefix = `${fy}-${String(monthNum).padStart(2, '0')}`;

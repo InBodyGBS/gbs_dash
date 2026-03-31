@@ -36,9 +36,9 @@ export function SubmissionUpload({
 }: SubmissionUploadProps) {
   const [uploading, setUploading] = useState(false);
 
-  const handleTemplateDownload = () => {
+  const handleTemplateDownload = async () => {
     try {
-      downloadSubmissionTemplate(category);
+      await downloadSubmissionTemplate(category);
       const categoryLabel = CLOSING_CATEGORIES.find((cat) => cat.id === category)?.label || category;
       toast.success('템플릿 다운로드 완료', {
         description: `${categoryLabel} 템플릿이 다운로드되었습니다.`,

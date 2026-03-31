@@ -18,7 +18,6 @@ import { Badge } from '@/components/ui/badge';
 import { getMatchStatusSummary } from '@/lib/services/arapService';
 import type { ArapEntity, MatchStatusSummary } from '@/lib/types/arap';
 import { useState, useEffect, useCallback } from 'react';
-import * as XLSX from 'xlsx';
 
 interface TransactionDetailPopupProps {
   entity1: ArapEntity;
@@ -67,6 +66,7 @@ export function TransactionDetailPopup({
     if (!summary) return;
 
     try {
+      const XLSX = await import('xlsx');
       // 통화별 상세 정보를 Excel로 내보내기
       const currencyBreakdown = summary.currency_breakdown || [];
       
