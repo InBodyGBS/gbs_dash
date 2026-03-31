@@ -11,7 +11,7 @@ const NODE_W = 140;
 const NODE_H = 52;
 const LEVEL_GAP = 110;
 const SIBLING_GAP = 14;
-const TOP_Y = 56;
+export const TOP_Y = 56;
 const LANE_GAP_FROM_TREE = 72;
 const LANE_ITEM_GAP = 16;
 

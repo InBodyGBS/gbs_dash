@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { computeGraphLayout, EQUITY_NODE_DIM } from '@/lib/pfile/layoutEquityGraph';
+import { computeGraphLayout, EQUITY_NODE_DIM, TOP_Y } from '@/lib/pfile/layoutEquityGraph';
 import type { LayoutNode, PFileEntityRow, PFileOwnershipRow } from '@/lib/pfile/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
