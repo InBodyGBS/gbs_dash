@@ -338,6 +338,8 @@ export interface Database {
       tb_uploads: AnyTable;
       user_profiles: AnyTable;
       work_manuals: AnyTable;
+      pfile_entities: AnyTable;
+      pfile_ownership: AnyTable;
     };
   };
 }
