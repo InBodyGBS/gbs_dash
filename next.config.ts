@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self'",
-              "connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com https://api.resend.com",
+              "connect-src 'self' https://*.supabase.co https://api.supabase.com wss://*.supabase.co https://generativelanguage.googleapis.com https://api.resend.com",
               "frame-ancestors 'none'",
             ].join('; '),
           },

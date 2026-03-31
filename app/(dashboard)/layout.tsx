@@ -26,18 +26,27 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
 
   return (
     <div className="relative w-screen h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar 토글 버튼 */}
-      <Button
-        variant="outline"
-        size="icon"
+      {/* Sidebar 토글: 기본 숨김 — hover/focus 시만 표시 (헤더 제목 옆 X가 항상 보이는 것처럼 느껴지지 않도록) */}
+      <div
         className={cn(
-          'absolute top-4 left-4 z-30 bg-white/90 backdrop-blur-sm shadow-lg',
-          sidebarOpen && 'left-[260px]'
+          'group absolute top-4 z-30 rounded-md p-2 -m-2',
+          sidebarOpen ? 'left-[260px]' : 'left-4'
         )}
-        onClick={toggleSidebar}
       >
-        {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className={cn(
+            'bg-white/90 backdrop-blur-sm shadow-lg transition-opacity duration-200',
+            'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto',
+            'focus-visible:opacity-100 focus-visible:pointer-events-auto'
+          )}
+          onClick={toggleSidebar}
+          aria-label={sidebarOpen ? '사이드바 닫기' : '사이드바 열기'}
+        >
+          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+      </div>
 
       {/* 좌측 Sidebar - 조건부 렌더링 */}
       {sidebarOpen && (

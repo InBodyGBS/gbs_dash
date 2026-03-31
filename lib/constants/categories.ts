@@ -79,9 +79,6 @@ export const CATEGORIES: Category[] = [
         label: 'Financial dash',
         path: '/monthly-closing/dashboard',
       },
-      { id: 'monthly-upload', label: 'Upload', path: '/monthly-closing/upload' },
-      { id: 'monthly-mapping', label: 'Mapping', path: '/monthly-closing/mapping' },
-      { id: 'monthly-result', label: 'Result', path: '/monthly-closing/result' },
     ],
   },
   {

@@ -3,11 +3,17 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
-import { Download } from 'lucide-react';
+import { Download, FileUp, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { Subsidiary } from '@/lib/supabase/types';
+import {
+  uploadAuditReportFile,
+  removeAuditReportFile,
+  downloadAuditReportBlob,
+  auditReportPathToLabel,
+} from '@/lib/services/auditReportStorage';
 
 const AUDIT_CATEGORIES = ['statutory_audit', 'auditor', 'audit_date', 'audit_report'] as const;
 type AuditCategory = typeof AUDIT_CATEGORIES[number];
@@ -101,6 +107,149 @@ function EditableCell({ value, onSave, isSaving }: EditableCellProps) {
   );
 }
 
+interface AuditReportCellProps {
+  storagePath: string | null;
+  subsidiaryId: string;
+  fiscalYear: number;
+  onSavePath: (path: string | null) => Promise<void>;
+  isSaving: boolean;
+}
+
+function AuditReportCell({
+  storagePath,
+  subsidiaryId,
+  fiscalYear,
+  onSavePath,
+  isSaving,
+}: AuditReportCellProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pickFile = () => fileInputRef.current?.click();
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      const path = await uploadAuditReportFile(
+        file,
+        fiscalYear,
+        subsidiaryId,
+        storagePath,
+      );
+      await onSavePath(path);
+      toast.success('Audit report가 업로드되었습니다.');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const openDownload = async () => {
+    if (!storagePath) return;
+    const blob = await downloadAuditReportBlob(storagePath);
+    if (!blob) {
+      toast.error('파일을 불러올 수 없습니다. 로그인·Storage 권한을 확인해 주세요.');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+  };
+
+  const handleRemove = async () => {
+    if (!storagePath) return;
+    if (!confirm('저장된 Audit report를 삭제할까요?')) return;
+    setUploading(true);
+    try {
+      await removeAuditReportFile(storagePath);
+      await onSavePath(null);
+      toast.success('파일이 삭제되었습니다.');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const busy = uploading || isSaving;
+
+  return (
+    <div
+      className={cn(
+        'min-h-[32px] px-2 py-1.5 rounded border border-dashed border-gray-200 text-sm',
+        'space-y-1.5',
+      )}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.hwp,.zip,.txt,.csv"
+        onChange={handleFile}
+        disabled={busy}
+      />
+      {storagePath ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-gray-700 truncate" title={storagePath}>
+            {auditReportPathToLabel(storagePath)}
+          </span>
+          <div className="flex flex-wrap gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={busy}
+              onClick={() => void openDownload()}
+            >
+              <ExternalLink className="w-3 h-3 mr-1" />
+              열기
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={busy}
+              onClick={pickFile}
+            >
+              <FileUp className="w-3 h-3 mr-1" />
+              교체
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+              disabled={busy}
+              onClick={() => void handleRemove()}
+            >
+              <Trash2 className="w-3 h-3 mr-1" />
+              삭제
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 w-full text-xs"
+          disabled={busy}
+          onClick={pickFile}
+        >
+          <FileUp className="w-3.5 h-3.5 mr-1" />
+          {uploading ? '업로드 중…' : '파일 제출'}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 interface AuditGridProps {
   subsidiaries: Subsidiary[];
   fiscalYear: number;
@@ -185,7 +334,7 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
           rec?.statutory_audit || '',
           rec?.auditor || '',
           rec?.audit_date || '',
-          rec?.audit_report || '',
+          rec?.audit_report ? auditReportPathToLabel(rec.audit_report) : '',
         ];
       }),
     ];
@@ -247,11 +396,21 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
                         const key = `${sub.id}_${cat}`;
                         return (
                           <td key={cat} className="px-3 py-2">
-                            <EditableCell
-                              value={rec?.[cat] || null}
-                              onSave={(val) => handleCellSave(sub.id, cat, val)}
-                              isSaving={savingCells.has(key)}
-                            />
+                            {cat === 'audit_report' ? (
+                              <AuditReportCell
+                                storagePath={rec?.audit_report ?? null}
+                                subsidiaryId={sub.id}
+                                fiscalYear={fiscalYear}
+                                onSavePath={(path) => handleCellSave(sub.id, cat, path)}
+                                isSaving={savingCells.has(key)}
+                              />
+                            ) : (
+                              <EditableCell
+                                value={rec?.[cat] || null}
+                                onSave={(val) => handleCellSave(sub.id, cat, val)}
+                                isSaving={savingCells.has(key)}
+                              />
+                            )}
                           </td>
                         );
                       })}
@@ -264,7 +423,10 @@ export function AuditGrid({ subsidiaries, fiscalYear }: AuditGridProps) {
         </div>
       </div>
 
-      <p className="text-xs text-gray-400">셀을 클릭하여 직접 입력 · Enter로 저장 · Esc로 취소</p>
+      <p className="text-xs text-gray-400">
+        Statutory Audit / Auditor / Audit Date: 셀 클릭 후 입력 · Enter 저장 · Esc 취소 ·{' '}
+        <span className="font-medium text-gray-500">Audit Report</span>는 파일 제출(Storage: Audit report)
+      </p>
     </div>
   );
 }
