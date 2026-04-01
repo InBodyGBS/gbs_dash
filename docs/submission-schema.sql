@@ -10,9 +10,10 @@ CREATE TABLE IF NOT EXISTS submissions (
   fiscal_year TEXT,
   entity_name TEXT,
   category TEXT NOT NULL CHECK (category IN (
-    'employee-jd', 'preliminary-sales', 'sales-detail', 'lease-detail',
+    'employee-jd', 'preliminary-sales', 'sales-sbp', 'lease-detail',
     'ar-detail', 'inventory-detail', 'sga-detail', 'demo-detail',
-    'pkg', 'interco-transaction'
+    'pkg', 'pkg-fs', 'interco-transaction', 'general-ledger',
+    'trial-balance', 'sales-detail'
   )),
   file_name TEXT NOT NULL,
   file_path TEXT NOT NULL,

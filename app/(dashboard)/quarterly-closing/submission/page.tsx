@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import { format } from 'date-fns';
 import {
   Select,
   SelectContent,
@@ -117,54 +116,14 @@ export default function SubmissionPage() {
       const monthNum = parseInt(selectedMonth, 10) || 1;
       const calendarQuarter = Math.min(4, Math.max(1, Math.ceil(monthNum / 3)));
 
-      const { data: quarterData } = await supabase
-        .from('quarters')
-        .select('*')
-        .eq('year', fy)
-        .eq('quarter', calendarQuarter)
-        .maybeSingle();
-
-      if (quarterData) {
-        console.log(`✅ Submission 페이지 - Quarter 조회 성공:`, {
-          id: quarterData.id,
-          year: quarterData.year,
-          quarter: quarterData.quarter,
-        });
+      // API를 통해 quarter 조회/생성 (service_role로 RLS 우회 → 모든 사용자 가능)
+      const response = await fetch(`/api/quarters?year=${fy}&quarter=${calendarQuarter}`);
+      if (response.ok) {
+        const { quarter: quarterData } = await response.json() as { quarter: Quarter };
         setQuarter(quarterData);
       } else {
-        console.log(`⚠️ Submission 페이지 - Quarter 없음, 생성 시도...`);
-        const quarterStartDate = new Date(fy, (calendarQuarter - 1) * 3, 1);
-        const quarterEndDate = new Date(fy, calendarQuarter * 3, 0);
-
-        const { data: newQuarter, error: insertError } = await supabase
-          .from('quarters')
-          .insert({
-            year: fy,
-            quarter: calendarQuarter,
-            start_date: format(quarterStartDate, 'yyyy-MM-dd'),
-            end_date: format(quarterEndDate, 'yyyy-MM-dd'),
-          })
-          .select()
-          .single();
-
-        if (insertError) {
-          console.warn('Quarter 생성 실패, 임시 데이터 사용:', insertError);
-          setQuarter({
-            id: `temp-${selectedYear}-${calendarQuarter}`,
-            year: fy,
-            quarter: calendarQuarter,
-            start_date: format(quarterStartDate, 'yyyy-MM-dd'),
-            end_date: format(quarterEndDate, 'yyyy-MM-dd'),
-            created_at: new Date().toISOString(),
-          });
-        } else {
-          console.log(`✅ Submission 페이지 - Quarter 생성 성공:`, {
-            id: newQuarter.id,
-            year: newQuarter.year,
-            quarter: newQuarter.quarter,
-          });
-          setQuarter(newQuarter);
-        }
+        console.warn('Quarter API 실패, quarter_id 없이 진행');
+        setQuarter(null);
       }
 
       // 법인 데이터
