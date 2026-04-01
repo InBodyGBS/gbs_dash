@@ -9,17 +9,32 @@ import { createClient } from '@supabase/supabase-js';
 const BUCKET_NAME = 'submission';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-function getSupabaseClient() {
+function getSupabaseClient(userToken?: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  // 서버사이드에서는 service_role 키 우선 사용 (Storage RLS 우회)
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase 환경변수가 설정되지 않았습니다.');
-  return createClient(url, key);
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || (!serviceKey && !anonKey)) throw new Error('Supabase 환경변수가 설정되지 않았습니다.');
+
+  // service_role 키가 있으면 RLS 완전 우회
+  if (serviceKey) return createClient(url, serviceKey);
+
+  // 없으면 사용자 토큰으로 authenticated 클라이언트 생성 (Storage RLS 통과)
+  if (userToken && anonKey) {
+    return createClient(url, anonKey, {
+      global: { headers: { Authorization: `Bearer ${userToken}` } },
+    });
+  }
+
+  return createClient(url, anonKey!);
 }
 
 export async function POST(request: NextRequest) {
   let filePath: string | null = null;
-  const supabase = getSupabaseClient();
+
+  // 사용자 토큰 추출 (service_role 없을 때 authenticated 클라이언트용)
+  const authHeader = request.headers.get('authorization');
+  const userToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+  const supabase = getSupabaseClient(userToken);
 
   try {
     const formData = await request.formData();
@@ -47,10 +62,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 인증 사용자 확인
-    const authHeader = request.headers.get('authorization');
     let userId: string | null = null;
-    if (authHeader?.startsWith('Bearer ')) {
-      const { data: { user } } = await supabase.auth.getUser(authHeader.slice(7));
+    if (userToken) {
+      const { data: { user } } = await supabase.auth.getUser(userToken);
       userId = user?.id ?? null;
     }
 
@@ -130,8 +144,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error: unknown) {
     if (filePath) {
-      const supabase = getSupabaseClient();
-      await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+      const cleanupClient = getSupabaseClient(userToken);
+      await cleanupClient.storage.from(BUCKET_NAME).remove([filePath]);
     }
     const message = error instanceof Error ? error.message : '알 수 없는 오류';
     return NextResponse.json({ error: message }, { status: 500 });
