@@ -328,6 +328,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      announcements: {
+        Row: {
+          id: string;
+          type: string;
+          title: string;
+          author: string;
+          content: string | null;
+          visibility: 'confidential' | 'all';
+          view_count: number;
+          created_at: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          title: string;
+          author: string;
+          content?: string | null;
+          visibility?: 'confidential' | 'all';
+          view_count?: number;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          type?: string;
+          title?: string;
+          author?: string;
+          content?: string | null;
+          visibility?: 'confidential' | 'all';
+          view_count?: number;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
       // Additional tables used in the application
       accounting_standards: AnyTable;
       card_categories: AnyTable;
