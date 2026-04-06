@@ -23,6 +23,20 @@ CREATE POLICY "Anon read custom_calendar_events"
   TO anon
   USING (true);
 
+-- 모든 사용자(익명 포함) 등록 허용
+DROP POLICY IF EXISTS "Anon insert custom_calendar_events" ON custom_calendar_events;
+CREATE POLICY "Anon insert custom_calendar_events"
+  ON custom_calendar_events FOR INSERT
+  TO anon
+  WITH CHECK (true);
+
+-- 모든 사용자(익명 포함) 삭제 허용
+DROP POLICY IF EXISTS "Anon delete custom_calendar_events" ON custom_calendar_events;
+CREATE POLICY "Anon delete custom_calendar_events"
+  ON custom_calendar_events FOR DELETE
+  TO anon
+  USING (true);
+
 DROP POLICY IF EXISTS "Authenticated read custom_calendar_events" ON custom_calendar_events;
 CREATE POLICY "Authenticated read custom_calendar_events"
   ON custom_calendar_events FOR SELECT
