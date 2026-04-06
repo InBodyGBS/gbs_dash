@@ -62,8 +62,8 @@ export default function AnnouncementsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  /** 기본: Confidential */
-  const [scopeTab, setScopeTab] = useState<AnnouncementVisibility>('confidential');
+  /** 기본: All — 현재는 모두 열람 가능 정책이므로 기본 탭을 공개로 */
+  const [scopeTab, setScopeTab] = useState<AnnouncementVisibility>('all');
 
   const [form, setForm] = useState({ type: 'Notice', title: '', author: '' });
 
@@ -76,11 +76,7 @@ export default function AnnouncementsPage() {
     let q = supabase.from('announcements').select('*').order('created_at', { ascending: false });
 
     if (scopeTab === 'confidential') {
-      if (!admin) {
-        setAnnouncements([]);
-        setLoading(false);
-        return;
-      }
+      // 현재는 열람 개방 상태: 관리자 여부와 무관하게 confidential도 조회 허용
       q = q.eq('visibility', 'confidential');
     } else {
       q = q.eq('visibility', 'all');

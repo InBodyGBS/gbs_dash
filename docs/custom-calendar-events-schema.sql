@@ -16,6 +16,13 @@ COMMENT ON TABLE custom_calendar_events IS 'Closing Schedule 캘린더 수기 �
 
 ALTER TABLE custom_calendar_events ENABLE ROW LEVEL SECURITY;
 
+-- 모든 사용자(익명 포함) 조회 허용
+DROP POLICY IF EXISTS "Anon read custom_calendar_events" ON custom_calendar_events;
+CREATE POLICY "Anon read custom_calendar_events"
+  ON custom_calendar_events FOR SELECT
+  TO anon
+  USING (true);
+
 DROP POLICY IF EXISTS "Authenticated read custom_calendar_events" ON custom_calendar_events;
 CREATE POLICY "Authenticated read custom_calendar_events"
   ON custom_calendar_events FOR SELECT

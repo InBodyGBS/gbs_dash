@@ -116,11 +116,7 @@ export default function AnnouncementDetailPage() {
 
       const item = normalizeAnnouncement(announcementResult.data as Record<string, unknown>);
 
-      if (item.visibility === 'confidential' && !admin) {
-        toast.error('Confidential 공지는 관리자만 볼 수 있습니다.');
-        router.replace('/announcements');
-        return;
-      }
+      // 현재는 열람 개방: confidential도 열람 허용 (차후 권한 강화 예정)
 
       setData(item);
       setForm({

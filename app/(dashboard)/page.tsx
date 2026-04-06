@@ -50,9 +50,7 @@ export default function DashboardPage() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(12);
-      if (!admin) {
-        announcementsQuery = announcementsQuery.eq('visibility', 'all');
-      }
+      // 현재는 열람 개방: 대시보드 카드도 전체 공지 + 기밀 공지 혼합 노출
       const [announcementsResult, upcomingResult, voeResult] = await Promise.all([
         announcementsQuery,
         supabase
