@@ -39,4 +39,6 @@ export interface SubmissionFormData {
   subsidiary_id?: string | null;
   fiscal_year?: string | null;
   entity_name?: string | null;
+  /** Overview·Submission 상단과 동일한 귀속 월 (1–12), 확정 여부 판단에 사용 */
+  closing_month?: string | null;
 }

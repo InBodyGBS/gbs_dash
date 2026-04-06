@@ -289,7 +289,7 @@ function SubmissionItem({
             className="flex items-center gap-1"
           >
             <MessageSquare className="h-4 w-4" />
-            댓글
+            메모
           </Button>
         )}
         <AlertDialog>

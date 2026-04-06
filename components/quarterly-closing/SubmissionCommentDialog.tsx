@@ -28,6 +28,15 @@ const getErrorMessage = (error: unknown): string => {
   return '알 수 없는 오류';
 };
 
+/** 목록·엑셀에 표시할 작성자 라벨 (프로필·Auth·스냅샷 반영 후 서비스에서 채움) */
+function memoAuthorLabel(comment: SubmissionComment): string {
+  const name = comment.user_name?.trim();
+  if (name) return name;
+  const email = comment.user_email?.trim();
+  if (email) return email;
+  return '익명';
+}
+
 export function SubmissionCommentDialog({
   open,
   onClose,
@@ -56,7 +65,7 @@ export function SubmissionCommentDialog({
       }, 100);
     } catch (error: unknown) {
       console.error('Failed to load comments:', error);
-      toast.error('댓글 로드 실패', {
+      toast.error('메모 로드 실패', {
         description: getErrorMessage(error),
       });
     } finally {
@@ -83,7 +92,7 @@ export function SubmissionCommentDialog({
       const newComment = await createSubmissionComment(submission.id, message);
       setComments([...comments, newComment]);
       setMessage('');
-      toast.success('댓글이 등록되었습니다.');
+      toast.success('메모가 등록되었습니다.');
       // 스크롤을 맨 아래로
       setTimeout(() => {
         if (scrollAreaRef.current) {
@@ -91,7 +100,7 @@ export function SubmissionCommentDialog({
         }
       }, 100);
     } catch (error: unknown) {
-      toast.error('댓글 작성 실패', {
+      toast.error('메모 작성 실패', {
         description: getErrorMessage(error),
       });
     } finally {
@@ -117,23 +126,23 @@ export function SubmissionCommentDialog({
       setComments(comments.map((c) => (c.id === commentId ? updated : c)));
       setEditingId(null);
       setEditMessage('');
-      toast.success('댓글이 수정되었습니다.');
+      toast.success('메모가 수정되었습니다.');
     } catch (error: unknown) {
-      toast.error('댓글 수정 실패', {
+      toast.error('메모 수정 실패', {
         description: getErrorMessage(error),
       });
     }
   };
 
   const handleDelete = async (commentId: string) => {
-    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+    if (!confirm('메모를 삭제하시겠습니까?')) return;
 
     try {
       await deleteSubmissionComment(commentId);
       setComments(comments.filter((c) => c.id !== commentId));
-      toast.success('댓글이 삭제되었습니다.');
+      toast.success('메모가 삭제되었습니다.');
     } catch (error: unknown) {
-      toast.error('댓글 삭제 실패', {
+      toast.error('메모 삭제 실패', {
         description: getErrorMessage(error),
       });
     }
@@ -141,7 +150,7 @@ export function SubmissionCommentDialog({
 
   const handleExportComments = async () => {
     if (comments.length === 0) {
-      toast.error('다운로드할 댓글이 없습니다.');
+      toast.error('다운로드할 메모가 없습니다.');
       return;
     }
 
@@ -149,17 +158,17 @@ export function SubmissionCommentDialog({
     // 엑셀 데이터 생성
     const excelData = comments.map((comment, index) => ({
       '순번': index + 1,
-      '작성자': comment.user_name || comment.user_email || comment.created_by || '익명',
+      '작성자': memoAuthorLabel(comment),
       '이메일': comment.user_email || '',
       '작성일시': format(new Date(comment.created_at), 'yyyy-MM-dd HH:mm:ss'),
       '수정일시': format(new Date(comment.updated_at), 'yyyy-MM-dd HH:mm:ss'),
       '수정여부': comment.edited ? 'Y' : 'N',
-      '댓글내용': comment.message,
+      '메모 내용': comment.message,
     }));
 
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '댓글 로그');
+    XLSX.utils.book_append_sheet(wb, ws, '메모 로그');
 
     // 컬럼 너비 설정
     const colWidths = [
@@ -169,14 +178,14 @@ export function SubmissionCommentDialog({
       { wch: 20 }, // 작성일시
       { wch: 20 }, // 수정일시
       { wch: 10 }, // 수정여부
-      { wch: 50 }, // 댓글내용
+      { wch: 50 }, // 메모 내용
     ];
     ws['!cols'] = colWidths;
 
-    const fileName = `댓글로그_${submission?.file_name.replace(/\.(xlsx?|xls)$/i, '')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
+    const fileName = `메모로그_${submission?.file_name.replace(/\.(xlsx?|xls)$/i, '')}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`;
     XLSX.writeFile(wb, fileName);
     
-    toast.success('댓글 로그가 다운로드되었습니다.', {
+    toast.success('메모 로그가 다운로드되었습니다.', {
       description: fileName,
     });
   };
@@ -197,7 +206,7 @@ export function SubmissionCommentDialog({
                 className="flex items-center gap-2"
               >
                 <Download className="h-4 w-4" />
-                댓글 로그 다운로드
+                메모 로그 다운로드
               </Button>
             )}
           </div>
@@ -215,8 +224,8 @@ export function SubmissionCommentDialog({
               </div>
             ) : comments.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <p>아직 댓글이 없습니다.</p>
-                <p className="text-sm mt-2">첫 번째 댓글을 작성해보세요.</p>
+                <p>아직 메모가 없습니다.</p>
+                <p className="text-sm mt-2">첫 메모를 작성해 보세요.</p>
               </div>
             ) : (
               comments.map((comment) => (
@@ -227,7 +236,7 @@ export function SubmissionCommentDialog({
                         value={editMessage}
                         onChange={(e) => setEditMessage(e.target.value)}
                         className="min-h-[100px]"
-                        placeholder="댓글을 수정하세요..."
+                        placeholder="메모를 수정하세요..."
                       />
                       <div className="flex items-center gap-2">
                         <Button
@@ -247,7 +256,7 @@ export function SubmissionCommentDialog({
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            {comment.user_name || comment.user_email || comment.created_by || '익명'}
+                            {memoAuthorLabel(comment)}
                           </p>
                           <p className="text-xs text-gray-500">
                             {format(new Date(comment.created_at), 'yyyy-MM-dd HH:mm')}
@@ -290,7 +299,7 @@ export function SubmissionCommentDialog({
             <Textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="댓글을 입력하세요..."
+              placeholder="메모를 입력하세요..."
               className="min-h-[80px] flex-1"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {

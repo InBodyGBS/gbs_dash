@@ -5,6 +5,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
+import {
+  assertSubmissionUploadAllowedByOverview,
+  SubmissionBlockedByOverviewError,
+} from '@/lib/server/submissionUploadGuard';
 
 const BUCKET_NAME = 'submission';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
     const subsidiaryId = formData.get('subsidiary_id') as string | null;
     const fiscalYear = formData.get('fiscal_year') as string | null;
     const entityName = formData.get('entity_name') as string | null;
+    const closingMonth = formData.get('closing_month') as string | null;
 
     if (!file || !category) {
       return NextResponse.json({ error: '파일과 카테고리는 필수입니다.' }, { status: 400 });
@@ -66,6 +71,32 @@ export async function POST(request: NextRequest) {
     if (userToken) {
       const { data: { user } } = await supabase.auth.getUser(userToken);
       userId = user?.id ?? null;
+    }
+
+    const finalQuarterIdForGuard =
+      quarterId && !quarterId.startsWith('temp-') && !quarterId.startsWith('custom-')
+        ? quarterId
+        : null;
+
+    try {
+      await assertSubmissionUploadAllowedByOverview(supabase, {
+        quarterId: finalQuarterIdForGuard,
+        subsidiaryId: subsidiaryId || null,
+        category,
+        fiscalYear,
+        closingMonth,
+      });
+    } catch (e) {
+      if (e instanceof SubmissionBlockedByOverviewError) {
+        return NextResponse.json(
+          {
+            error:
+              'Overview에서 확정된 자료는 추가 업로드할 수 없습니다. 확정을 해제한 뒤 다시 시도해 주세요.',
+          },
+          { status: 403 },
+        );
+      }
+      throw e;
     }
 
     // 1. Storage 업로드

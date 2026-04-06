@@ -126,6 +126,7 @@ export const CATEGORIES: Category[] = [
     children: [
       { id: 'p-file', label: 'P-File', path: '/p-file' },
       { id: 'gbs', label: 'GBS', path: '/gbs' },
+      { id: 'gbs-calendar', label: 'Calendar', path: '/gbs/calendar' },
     ],
   },
 ] as const;

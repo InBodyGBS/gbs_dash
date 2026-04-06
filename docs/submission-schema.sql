@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS submission_comments (
   created_by TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  edited BOOLEAN DEFAULT false
+  edited BOOLEAN DEFAULT false,
+  author_name TEXT
 );
 
 -- 인덱스
@@ -92,6 +93,7 @@ CREATE TRIGGER update_submission_comments_timestamp
 -- 코멘트
 COMMENT ON TABLE submission_comments IS '제출 파일에 대한 댓글/메모 (채팅 인터페이스)';
 COMMENT ON COLUMN submission_comments.edited IS '댓글이 수정되었는지 여부';
+COMMENT ON COLUMN submission_comments.author_name IS '메모 작성 시점 표시 이름 (선택, 기존 DB는 docs/submission-comments-author-name.sql)';
 
 -- ============================================
 -- RLS (Row Level Security) 정책

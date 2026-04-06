@@ -4,7 +4,10 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
+import { getCategoryById } from '@/lib/constants/closing-categories';
+import { displayNameFromAuthUser } from '@/lib/utils/authDisplayName';
 import type { Submission, SubmissionComment, SubmissionFormData } from '@/lib/types/submission';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 
@@ -17,8 +20,32 @@ type SubmissionCommentRow = {
   created_at: string;
   updated_at: string;
   edited?: boolean | null;
+  /** 작성 시 스냅샷 표시명 (마이그레이션 docs/submission-comments-author-name.sql) */
+  author_name?: string | null;
 };
 type UserProfileLite = { id: string; name?: string | null; email?: string | null };
+
+function resolveSubmissionCommentUserFields(
+  item: SubmissionCommentRow,
+  userMap: Map<string, { name: string | null; email: string | null }>,
+  sessionUserId: string | null,
+  sessionUser: User | null,
+): { user_name: string | null; user_email: string | null } {
+  const uid = item.created_by;
+  const prof = uid ? userMap.get(uid) : null;
+  const snapshot = item.author_name?.trim() || null;
+  const isSelf = Boolean(uid && sessionUserId && uid === sessionUserId);
+
+  const user_name =
+    snapshot ||
+    (prof?.name && String(prof.name).trim()) ||
+    (isSelf ? displayNameFromAuthUser(sessionUser) : null) ||
+    null;
+
+  const user_email = prof?.email || (isSelf ? sessionUser?.email ?? null : null) || null;
+
+  return { user_name, user_email };
+}
 
 /**
  * 서버사이드 API를 통한 파일 제출
@@ -34,6 +61,9 @@ export async function createSubmissionViaApi(
   if (formData.subsidiary_id) body.append('subsidiary_id', formData.subsidiary_id);
   if (formData.fiscal_year) body.append('fiscal_year', formData.fiscal_year);
   if (formData.entity_name) body.append('entity_name', formData.entity_name);
+  if (formData.closing_month != null && formData.closing_month !== '') {
+    body.append('closing_month', formData.closing_month);
+  }
 
   // 인증 토큰 전달
   const { data: { session } } = await supabase.auth.getSession();
@@ -302,33 +332,79 @@ export async function deleteSubmission(id: string, filePath: string): Promise<vo
 }
 
 /**
- * 제출에 댓글 추가
+ * 제출에 메모 추가
  */
 export async function createSubmissionComment(
   submissionId: string,
   message: string
 ): Promise<SubmissionComment> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? (await supabase.auth.getUser()).data.user ?? null;
+    const authorSnapshot = displayNameFromAuthUser(user);
 
-    const { data, error } = await supabase
-      .from('submission_comments')
-      .insert({
-        submission_id: submissionId,
-        message: message.trim(),
-        created_by: user?.id || null,
-      })
-      .select()
-      .single();
+    const baseInsert = {
+      submission_id: submissionId,
+      message: message.trim(),
+      created_by: user?.id || null,
+    };
+
+    let data: unknown;
+    let error: { message?: string; code?: string } | null = null;
+
+    if (authorSnapshot) {
+      const attempt = await supabase
+        .from('submission_comments')
+        .insert({ ...baseInsert, author_name: authorSnapshot })
+        .select()
+        .single();
+      const msg = attempt.error?.message ?? '';
+      const missingAuthorColumn =
+        attempt.error &&
+        (msg.includes('author_name') || msg.includes('schema cache') || attempt.error.code === '42703');
+      if (missingAuthorColumn) {
+        const retry = await supabase.from('submission_comments').insert(baseInsert).select().single();
+        data = retry.data;
+        error = retry.error;
+      } else {
+        data = attempt.data;
+        error = attempt.error;
+      }
+    } else {
+      const attempt = await supabase.from('submission_comments').insert(baseInsert).select().single();
+      data = attempt.data;
+      error = attempt.error;
+    }
 
     if (error) {
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
         throw new Error('submission_comments 테이블이 존재하지 않습니다. docs/submission-schema.sql을 실행하여 테이블을 생성하세요.');
       }
-      throw new Error(`댓글 작성 실패: ${error.message}`);
+      throw new Error(`메모 작성 실패: ${error.message}`);
     }
 
     const created = data as unknown as SubmissionCommentRow;
+
+    const userMap = new Map<string, { name: string | null; email: string | null }>();
+    if (user?.id) {
+      const { data: prof } = await supabase
+        .from('user_profiles')
+        .select('id, name, email')
+        .eq('id', user.id)
+        .maybeSingle();
+      const p = prof as UserProfileLite | null;
+      if (p) {
+        userMap.set(p.id, { name: p.name ?? null, email: p.email ?? null });
+      }
+    }
+
+    const { user_name, user_email } = resolveSubmissionCommentUserFields(
+      created,
+      userMap,
+      user?.id ?? null,
+      user,
+    );
+
     return {
       id: created.id,
       submission_id: created.submission_id,
@@ -337,6 +413,8 @@ export async function createSubmissionComment(
       created_at: created.created_at,
       updated_at: created.updated_at,
       edited: created.edited || false,
+      user_name,
+      user_email,
     };
   } catch (error) {
     console.error('Error creating submission comment:', error);
@@ -345,7 +423,7 @@ export async function createSubmissionComment(
 }
 
 /**
- * 제출의 댓글 목록 조회 (사용자 정보 포함)
+ * 제출의 메모 목록 조회 (사용자 정보 포함)
  */
 export async function getSubmissionComments(
   submissionId: string
@@ -362,8 +440,12 @@ export async function getSubmissionComments(
         console.warn('submission_comments 테이블이 존재하지 않습니다.');
         return [];
       }
-      throw new Error(`댓글 조회 실패: ${error.message}`);
+      throw new Error(`메모 조회 실패: ${error.message}`);
     }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const sessionUser = session?.user ?? null;
+    const sessionUserId = sessionUser?.id ?? null;
 
     // 사용자 정보 가져오기
     const userIds = (data || [])
@@ -391,15 +473,20 @@ export async function getSubmissionComments(
           // 테이블이 없거나 RLS 정책 문제인 경우 무시 (ID만 표시)
           console.warn('사용자 프로필 조회 실패 (무시):', profileError.message);
         }
-      } catch (error) {
+      } catch (err) {
         // user_profiles 테이블이 없는 경우 무시
-        console.warn('사용자 프로필 조회 중 오류 (무시):', error);
+        console.warn('사용자 프로필 조회 중 오류 (무시):', err);
       }
     }
 
     return ((data || []) as unknown as SubmissionCommentRow[]).map((item) => {
-      const userInfo = item.created_by ? userMap.get(item.created_by) : null;
-      
+      const { user_name, user_email } = resolveSubmissionCommentUserFields(
+        item,
+        userMap,
+        sessionUserId,
+        sessionUser,
+      );
+
       return {
         id: item.id,
         submission_id: item.submission_id,
@@ -408,8 +495,8 @@ export async function getSubmissionComments(
         created_at: item.created_at,
         updated_at: item.updated_at,
         edited: Boolean(item.edited),
-        user_name: userInfo?.name || null,
-        user_email: userInfo?.email || null,
+        user_name,
+        user_email,
       };
     });
   } catch (error) {
@@ -419,7 +506,7 @@ export async function getSubmissionComments(
 }
 
 /**
- * 댓글 수정
+ * 메모 수정
  */
 export async function updateSubmissionComment(
   commentId: string,
@@ -437,10 +524,35 @@ export async function updateSubmissionComment(
       .single();
 
     if (error) {
-      throw new Error(`댓글 수정 실패: ${error.message}`);
+      throw new Error(`메모 수정 실패: ${error.message}`);
     }
 
     const updated = data as unknown as SubmissionCommentRow;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const sessionUser = session?.user ?? null;
+    const sessionUserId = sessionUser?.id ?? null;
+
+    const userMap = new Map<string, { name: string | null; email: string | null }>();
+    if (updated.created_by) {
+      const { data: prof } = await supabase
+        .from('user_profiles')
+        .select('id, name, email')
+        .eq('id', updated.created_by)
+        .maybeSingle();
+      const p = prof as UserProfileLite | null;
+      if (p) {
+        userMap.set(p.id, { name: p.name ?? null, email: p.email ?? null });
+      }
+    }
+
+    const { user_name, user_email } = resolveSubmissionCommentUserFields(
+      updated,
+      userMap,
+      sessionUserId,
+      sessionUser,
+    );
+
     return {
       id: updated.id,
       submission_id: updated.submission_id,
@@ -449,6 +561,8 @@ export async function updateSubmissionComment(
       created_at: updated.created_at,
       updated_at: updated.updated_at,
       edited: updated.edited || false,
+      user_name,
+      user_email,
     };
   } catch (error) {
     console.error('Error updating submission comment:', error);
@@ -457,7 +571,7 @@ export async function updateSubmissionComment(
 }
 
 /**
- * 댓글 삭제
+ * 메모 삭제
  */
 export async function deleteSubmissionComment(commentId: string): Promise<void> {
   try {
@@ -467,10 +581,137 @@ export async function deleteSubmissionComment(commentId: string): Promise<void> 
       .eq('id', commentId);
 
     if (error) {
-      throw new Error(`댓글 삭제 실패: ${error.message}`);
+      throw new Error(`메모 삭제 실패: ${error.message}`);
     }
   } catch (error) {
     console.error('Error deleting submission comment:', error);
     throw error;
   }
+}
+
+/** 엑셀 내보내기용 행 (상단 필터: 귀속연도·캘린더 월·분기·법인 범위 내 모든 카테고리 메모) */
+export interface SubmissionCommentExportRow {
+  entity: string;
+  year: string;
+  month: number;
+  category_id: string;
+  category_label: string;
+  comment: string;
+  created_at: string;
+  author: string;
+  file_name: string;
+}
+
+const COMMENT_IN_CHUNK = 120;
+
+/**
+ * 화면 상단 Year/Month/Entity/Quarter 필터와 동일한 범위의 제출에 달린 메모를 모읍니다.
+ * `month` 열에는 선택한 캘린더 월(1–12)을 넣습니다.
+ */
+export async function fetchSubmissionCommentsForExcelExport(params: {
+  fiscalYear: string;
+  calendarMonth: number;
+  quarterId: string | null;
+  subsidiaryId: string | null;
+  entityNameBySubsidiaryId: Map<string, string>;
+}): Promise<SubmissionCommentExportRow[]> {
+  let query = supabase
+    .from('submissions')
+    .select('id, fiscal_year, quarter_id, subsidiary_id, entity_name, category, file_name')
+    .eq('fiscal_year', params.fiscalYear);
+
+  const qid = params.quarterId;
+  if (qid && !qid.startsWith('temp-') && !qid.startsWith('custom-')) {
+    query = query.eq('quarter_id', qid);
+  }
+  if (params.subsidiaryId) {
+    query = query.eq('subsidiary_id', params.subsidiaryId);
+  }
+
+  const { data: subs, error: subErr } = await query;
+  if (subErr) {
+    throw new Error(`제출 조회 실패: ${subErr.message}`);
+  }
+  const subRows = subs || [];
+  if (subRows.length === 0) return [];
+
+  type SubRow = {
+    id: string;
+    fiscal_year: string | null;
+    quarter_id: string | null;
+    subsidiary_id: string | null;
+    entity_name: string | null;
+    category: string;
+    file_name: string;
+  };
+
+  const submissionIds = subRows.map((r) => String((r as SubRow).id));
+  const subById = new Map(subRows.map((r) => [String((r as SubRow).id), r as SubRow]));
+
+  const commentRows: SubmissionCommentRow[] = [];
+  for (let i = 0; i < submissionIds.length; i += COMMENT_IN_CHUNK) {
+    const chunk = submissionIds.slice(i, i + COMMENT_IN_CHUNK);
+    const { data: comments, error: cErr } = await supabase
+      .from('submission_comments')
+      .select('*')
+      .in('submission_id', chunk)
+      .order('created_at', { ascending: true });
+    if (cErr) {
+      throw new Error(`메모 조회 실패: ${cErr.message}`);
+    }
+    commentRows.push(...((comments || []) as unknown as SubmissionCommentRow[]));
+  }
+
+  commentRows.sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+
+  if (commentRows.length === 0) return [];
+
+  const userIds = [...new Set(commentRows.map((c) => c.created_by).filter(Boolean))] as string[];
+  const userMap = new Map<string, { name: string | null; email: string | null }>();
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, name, email')
+      .in('id', userIds);
+    (profiles as UserProfileLite[] | null | undefined)?.forEach((p) => {
+      userMap.set(p.id, { name: p.name ?? null, email: p.email ?? null });
+    });
+  }
+
+  const out: SubmissionCommentExportRow[] = [];
+  for (const c of commentRows) {
+    const sub = subById.get(c.submission_id);
+    if (!sub) continue;
+    const cat = String(sub.category);
+    const label = getCategoryById(cat)?.label ?? cat;
+    const sid = sub.subsidiary_id;
+    const entity =
+      (sub.entity_name && String(sub.entity_name).trim()) ||
+      (sid ? params.entityNameBySubsidiaryId.get(String(sid)) : undefined) ||
+      '—';
+    const uid = c.created_by;
+    const prof = uid ? userMap.get(uid) : null;
+    const snapshot = (c as SubmissionCommentRow).author_name?.trim();
+    const author =
+      snapshot ||
+      prof?.name ||
+      prof?.email ||
+      (uid ? uid.slice(0, 8) : '—');
+
+    out.push({
+      entity,
+      year: params.fiscalYear,
+      month: params.calendarMonth,
+      category_id: cat,
+      category_label: label,
+      comment: c.message,
+      created_at: c.created_at,
+      author,
+      file_name: sub.file_name,
+    });
+  }
+
+  return out;
 }

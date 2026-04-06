@@ -2,9 +2,7 @@
 -- Monthly Closing - Submission / Overview 스키마
 -- ============================================
 
--- 이 문서는 프론트에서 사용하는 테이블을 생성하기 위한 용도입니다.
--- docs/monthly-closing-submission-schema.sql 실행 후
--- app/(dashboard)/monthly-closing/submission, overview 페이지가 동작합니다.
+-- 이 문서는 DB 테이블 생성용입니다. (구 월별 Overview/Submission UI는 제거됨)
 
 -- ============================================
 -- 1. monthly_submissions (Stamp=submitted_at)

@@ -22,16 +22,7 @@ interface CalendarItem {
   categoryColor: string;
 }
 
-/** 수기 추가 이벤트 타입
- * TODO: 관리자 권한 구현 시 Supabase custom_calendar_events 테이블로 이전
- * CREATE TABLE custom_calendar_events (
- *   id TEXT PRIMARY KEY,
- *   title TEXT NOT NULL,
- *   date TEXT NOT NULL,
- *   color TEXT DEFAULT '#3B82F6',
- *   created_at TIMESTAMPTZ DEFAULT now()
- * );
- */
+/** 수기 추가 이벤트 (Supabase `custom_calendar_events`; 날짜는 `date` 필드로 'yyyy-MM-dd') */
 interface CustomCalendarEvent {
   id: string;
   title: string;
@@ -60,7 +51,8 @@ type CategoryAgg = {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const EXCLUDED = ['Germany', 'UK', 'Singapore'];
-const CUSTOM_EVENTS_KEY = 'dashboard-custom-calendar-events';
+/** 예전 localStorage 키 — 최초 로드 시 DB로 일회 마이그레이션 후 제거 */
+const LEGACY_CUSTOM_EVENTS_KEY = 'dashboard-custom-calendar-events';
 
 const EVENT_COLORS = [
   { label: 'Blue',   value: '#3B82F6' },
@@ -70,20 +62,27 @@ const EVENT_COLORS = [
   { label: 'Pink',   value: '#EC4899' },
 ];
 
-/* ── localStorage helpers ─────────────────────────────────────────── */
-function loadCustomEvents(): CustomCalendarEvent[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_EVENTS_KEY);
-    return raw ? (JSON.parse(raw) as CustomCalendarEvent[]) : [];
-  } catch {
-    return [];
-  }
+function mapCustomCalendarRow(row: {
+  id: string;
+  title: string;
+  event_date: string;
+  color: string;
+}): CustomCalendarEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    date: row.event_date,
+    color: row.color,
+  };
 }
 
-function saveCustomEvents(events: CustomCalendarEvent[]) {
-  try {
-    localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(events));
-  } catch { /* ignore */ }
+function isMissingTableError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === '42P01' ||
+    Boolean(error.message?.includes('does not exist')) ||
+    Boolean(error.message?.includes('Could not find the table'))
+  );
 }
 
 export function ScheduleCalendar() {
@@ -99,14 +98,74 @@ export function ScheduleCalendar() {
   const [newTitle, setNewTitle] = useState('');
   const [newColor, setNewColor] = useState(EVENT_COLORS[0].value);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const legacyCustomEventsMigrated = useRef(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth(); // 0-indexed
 
-  /* ── 수기 이벤트 로드 (localStorage; defer setState to avoid cascading renders in effect) ── */
+  /* ── 수기 이벤트: Supabase 조회 (뷰 범위), 예전 localStorage 1회 마이그레이션 ── */
   useEffect(() => {
-    queueMicrotask(() => setCustomEvents(loadCustomEvents()));
-  }, []);
+    let cancelled = false;
+
+    const loadCustomEvents = async () => {
+      if (!legacyCustomEventsMigrated.current) {
+        legacyCustomEventsMigrated.current = true;
+        try {
+          const raw = typeof window !== 'undefined' ? localStorage.getItem(LEGACY_CUSTOM_EVENTS_KEY) : null;
+          if (raw) {
+            const legacy = JSON.parse(raw) as CustomCalendarEvent[];
+            for (const ev of legacy) {
+              await supabase.from('custom_calendar_events').insert({
+                title: ev.title,
+                event_date: ev.date,
+                color: ev.color || EVENT_COLORS[0].value,
+              });
+            }
+            localStorage.removeItem(LEGACY_CUSTOM_EVENTS_KEY);
+          }
+        } catch {
+          /* ignore migration errors */
+        }
+      }
+
+      const startDate =
+        viewMode === 'yearly'
+          ? `${year}-01-01`
+          : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const endDate =
+        viewMode === 'yearly'
+          ? `${year}-12-31`
+          : new Date(year, month + 1, 0).toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('custom_calendar_events')
+        .select('id, title, event_date, color')
+        .gte('event_date', startDate)
+        .lte('event_date', endDate)
+        .order('event_date', { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        if (isMissingTableError(error)) {
+          console.warn(
+            'custom_calendar_events 테이블이 없습니다. Supabase에서 docs/custom-calendar-events-schema.sql을 실행하세요.',
+          );
+        } else {
+          console.error(error);
+        }
+        setCustomEvents([]);
+        return;
+      }
+
+      setCustomEvents(((data ?? []) as { id: string; title: string; event_date: string; color: string }[]).map(mapCustomCalendarRow));
+    };
+
+    loadCustomEvents();
+    return () => {
+      cancelled = true;
+    };
+  }, [year, month, viewMode]);
 
   /* ── dialog 열릴 때 인풋 포커스 ── */
   useEffect(() => {
@@ -200,26 +259,51 @@ export function ScheduleCalendar() {
   }, [year, month, viewMode]);
 
   /* ── 수기 이벤트 저장 ── */
-  const handleAddEvent = () => {
+  const handleAddEvent = async () => {
     const title = newTitle.trim();
     if (!title || !addDialog) return;
-    const event: CustomCalendarEvent = {
-      id: `custom-${Date.now()}`,
-      title,
-      date: addDialog.date,
-      color: newColor,
-    };
-    const updated = [...customEvents, event];
-    setCustomEvents(updated);
-    saveCustomEvents(updated);
+
+    const { data, error } = await supabase
+      .from('custom_calendar_events')
+      .insert({ title, event_date: addDialog.date, color: newColor })
+      .select('id, title, event_date, color')
+      .single();
+
+    if (error) {
+      if (isMissingTableError(error)) {
+        console.warn(
+          'custom_calendar_events 테이블이 없습니다. Supabase에서 docs/custom-calendar-events-schema.sql을 실행하세요.',
+        );
+      } else {
+        console.error(error);
+      }
+      return;
+    }
+
+    const event = mapCustomCalendarRow(data);
+    setCustomEvents((prev) =>
+      [...prev, event].sort((a, b) => a.date.localeCompare(b.date)),
+    );
+    setNewTitle('');
     setAddDialog(null);
   };
 
   /* ── 수기 이벤트 삭제 ── */
-  const handleDeleteEvent = (id: string) => {
-    const updated = customEvents.filter((e) => e.id !== id);
-    setCustomEvents(updated);
-    saveCustomEvents(updated);
+  const handleDeleteEvent = async (id: string) => {
+    const { error } = await supabase.from('custom_calendar_events').delete().eq('id', id);
+
+    if (error) {
+      if (isMissingTableError(error)) {
+        console.warn(
+          'custom_calendar_events 테이블이 없습니다. Supabase에서 docs/custom-calendar-events-schema.sql을 실행하세요.',
+        );
+      } else {
+        console.error(error);
+      }
+      return;
+    }
+
+    setCustomEvents((prev) => prev.filter((e) => e.id !== id));
   };
 
   /* ── 날짜 → 카테고리 집계 맵 ──

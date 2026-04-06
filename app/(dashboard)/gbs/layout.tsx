@@ -2,12 +2,12 @@
 
 /**
  * GBS 레이아웃
- * 3개 탭 네비게이션: 업무기술서, 업무분장표, Calendar
+ * 상단 탭: 업무기술서, 업무분장표 (Calendar는 Admin 사이드바에서 진입)
  */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, Users, Calendar } from 'lucide-react';
+import { FileText, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface GBSLayoutProps {
@@ -17,18 +17,16 @@ interface GBSLayoutProps {
 const TABS = [
   { value: 'work-manual', label: '업무기술서', icon: FileText, href: '/gbs/work-manual' },
   { value: 'work-assignment', label: '업무분장표', icon: Users, href: '/gbs/work-assignment' },
-  { value: 'calendar', label: 'Calendar', icon: Calendar, href: '/gbs/calendar' },
 ] as const;
 
 export default function GBSLayout({ children }: GBSLayoutProps) {
   const pathname = usePathname();
 
   // 현재 활성 탭 결정
-  const getActiveTab = () => {
+  const getActiveTab = (): string | null => {
     if (pathname.includes('/work-manual')) return 'work-manual';
     if (pathname.includes('/work-assignment')) return 'work-assignment';
-    if (pathname.includes('/calendar')) return 'calendar';
-    return 'work-manual';
+    return null;
   };
 
   const activeTab = getActiveTab();
@@ -40,7 +38,7 @@ export default function GBSLayout({ children }: GBSLayoutProps) {
         <nav className="flex gap-2 px-6">
           {TABS.map((tab) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.value;
+            const isActive = activeTab !== null && activeTab === tab.value;
 
             return (
               <Link

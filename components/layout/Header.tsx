@@ -54,9 +54,6 @@ const getPageTitle = (pathname: string): string => {
   const exact = CATEGORIES.find((c) => c.path && c.path === pathname);
   if (exact) return exact.label;
 
-  if (pathname.startsWith('/monthly-closing/overview')) return 'Overview';
-  if (pathname.startsWith('/monthly-closing/submission')) return 'Submission';
-
   for (const c of CATEGORIES) {
     if (!c.children?.length) continue;
     const child = getDeepestMatchingChild([...c.children], pathname);

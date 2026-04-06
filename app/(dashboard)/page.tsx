@@ -7,6 +7,7 @@ import { RefreshCw, ChevronRight, Calendar, Megaphone, MessageSquare } from 'luc
 import { ScheduleCalendar } from '@/components/dashboard/ScheduleCalendar';
 import { getVoeInquiries } from '@/lib/services/voeService';
 import type { VoeInquiry, VoeStatus } from '@/lib/types/voe';
+import { getIsAdminUser } from '@/lib/auth/admin';
 
 interface Announcement {
   id: string;
@@ -43,12 +44,17 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
       const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+      const admin = await getIsAdminUser();
+      let announcementsQuery = supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(12);
+      if (!admin) {
+        announcementsQuery = announcementsQuery.eq('visibility', 'all');
+      }
       const [announcementsResult, upcomingResult, voeResult] = await Promise.all([
-        supabase
-          .from('announcements')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(12),
+        announcementsQuery,
         supabase
           .from('schedule_items')
           .select('id', { count: 'exact' })

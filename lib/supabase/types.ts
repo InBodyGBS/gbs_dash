@@ -305,6 +305,29 @@ export interface Database {
         };
         Relationships: [];
       };
+      custom_calendar_events: {
+        Row: {
+          id: string;
+          title: string;
+          event_date: string;
+          color: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          event_date: string;
+          color?: string;
+          created_at?: string;
+        };
+        Update: {
+          title?: string;
+          event_date?: string;
+          color?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       // Additional tables used in the application
       accounting_standards: AnyTable;
       card_categories: AnyTable;
