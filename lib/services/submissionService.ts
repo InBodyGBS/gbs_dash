@@ -223,7 +223,8 @@ export async function createSubmission(
 export async function getSubmissions(
   category?: ClosingCategoryId,
   quarterId?: string | null,
-  subsidiaryId?: string | null
+  subsidiaryId?: string | null,
+  fiscalYear?: string | null,
 ): Promise<Submission[]> {
   try {
     let query = supabase
@@ -237,6 +238,9 @@ export async function getSubmissions(
     // quarterId가 있고 임시 ID가 아닌 경우에만 필터링
     if (quarterId && !quarterId.startsWith('temp-') && !quarterId.startsWith('custom-')) {
       query = query.eq('quarter_id', quarterId);
+    } else if (fiscalYear) {
+      // quarter_id가 없을 수 있는 레거시 데이터는 fiscal_year로 보조 필터링
+      query = query.eq('fiscal_year', fiscalYear);
     }
     if (subsidiaryId) {
       query = query.eq('subsidiary_id', subsidiaryId);
@@ -252,7 +256,47 @@ export async function getSubmissions(
       throw new Error(`제출 목록 조회 실패: ${error.message}`);
     }
 
-    return (data || []).map((item) => ({
+    const rows = (data || []) as Array<Record<string, unknown>>;
+
+    // 레거시(quarter_id NULL) 데이터가 있는 경우를 위해 보조 조회:
+    // 1차 결과가 0이고 quarterId가 존재하며 fiscalYear가 있으면, 동일 조건에서 quarter_id IS NULL + fiscal_year로 재조회
+    if (
+      rows.length === 0 &&
+      quarterId &&
+      !quarterId.startsWith('temp-') &&
+      !quarterId.startsWith('custom-') &&
+      fiscalYear
+    ) {
+      let legacyQuery = supabase
+        .from('submissions')
+        .select('*')
+        .order('submitted_at', { ascending: false })
+        .eq('fiscal_year', fiscalYear)
+        .is('quarter_id', null);
+
+      if (category) legacyQuery = legacyQuery.eq('category', category);
+      if (subsidiaryId) legacyQuery = legacyQuery.eq('subsidiary_id', subsidiaryId);
+
+      const { data: legacyData, error: legacyErr } = await legacyQuery;
+      if (!legacyErr && legacyData) {
+        return (legacyData as any[]).map((item) => ({
+          id: item.id,
+          quarter_id: item.quarter_id,
+          subsidiary_id: item.subsidiary_id,
+          category: item.category,
+          file_name: item.file_name,
+          file_path: item.file_path,
+          file_size: item.file_size,
+          version: item.version,
+          submitted_by: item.submitted_by,
+          submitted_at: item.submitted_at,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+        })) as unknown as Submission[];
+      }
+    }
+
+    return rows.map((item) => ({
       id: item.id,
       quarter_id: item.quarter_id,
       subsidiary_id: item.subsidiary_id,

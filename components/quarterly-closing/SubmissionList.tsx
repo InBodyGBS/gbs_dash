@@ -27,6 +27,7 @@ interface SubmissionListProps {
   selectedCategory?: ClosingCategoryId;
   quarterId?: string | null;
   subsidiaryId?: string | null;
+  fiscalYear?: string | null;
   onSubmissionClick?: (submission: Submission) => void;
   refreshKey?: number;
   onDeleteSuccess?: () => void;
@@ -42,6 +43,7 @@ export function SubmissionList({
   selectedCategory,
   quarterId,
   subsidiaryId,
+  fiscalYear,
   onSubmissionClick,
   refreshKey = 0,
   onDeleteSuccess,
@@ -62,7 +64,7 @@ export function SubmissionList({
   const loadSubmissions = async () => {
     try {
       setLoading(true);
-      const data = await getSubmissions(selectedCategory, quarterId, subsidiaryId);
+      const data = await getSubmissions(selectedCategory, quarterId, subsidiaryId, fiscalYear ?? null);
       setSubmissions(data);
     } catch (error: unknown) {
       console.error('Failed to load submissions:', error);

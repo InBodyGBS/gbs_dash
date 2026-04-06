@@ -375,6 +375,7 @@ export default function SubmissionPage() {
             selectedCategory={selectedCategory}
             quarterId={quarter?.id || null}
             subsidiaryId={selectedSubsidiaryId !== 'all' ? selectedSubsidiaryId : null}
+            fiscalYear={selectedYear}
             onSubmissionClick={handleSubmissionClick}
             refreshKey={refreshKey}
             onDeleteSuccess={handleDeleteSuccess}
