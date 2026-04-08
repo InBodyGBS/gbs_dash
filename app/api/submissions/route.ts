@@ -235,18 +235,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Auth required (prevents exposing submissions publicly)
-  const authHeader = request.headers.get('authorization');
-  const userToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-  if (!userToken) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-
+  // 읽기(GET)는 인증 없이 허용 — service_role로 RLS 우회하여 조회
+  // 쓰기(POST/DELETE)만 인증 필수
   const supabase = getSupabaseClient();
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(userToken);
-  if (authErr || !user) {
-    return NextResponse.json({ error: '유효하지 않은 인증 토큰입니다.' }, { status: 401 });
-  }
 
   try {
     const { searchParams } = new URL(request.url);
