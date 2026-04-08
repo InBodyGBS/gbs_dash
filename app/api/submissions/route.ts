@@ -276,18 +276,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  // Auth required
-  const authHeader = request.headers.get('authorization');
-  const userToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-  if (!userToken) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-
+  // 인증 분리는 추후 — 현재는 누구나 삭제 가능
   const supabase = getSupabaseClient();
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(userToken);
-  if (authErr || !user) {
-    return NextResponse.json({ error: '유효하지 않은 인증 토큰입니다.' }, { status: 401 });
-  }
 
   try {
     const { searchParams } = new URL(request.url);

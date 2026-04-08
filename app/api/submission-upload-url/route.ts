@@ -18,14 +18,7 @@ function getServiceClient() {
 }
 
 export async function POST(request: NextRequest) {
-  // 인증 확인
-  const authHeader = request.headers.get('authorization');
-  const userToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-
-  if (!userToken) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-
+  // 인증 분리는 추후 — 현재는 누구나 업로드 URL 발급 가능
   try {
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) {
@@ -44,12 +37,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Excel 파일만 업로드 가능합니다 (.xls, .xlsx)' }, { status: 400 });
     }
 
-    // 사용자 인증 검증
     const supabase = getServiceClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser(userToken);
-    if (authError || !user) {
-      return NextResponse.json({ error: '유효하지 않은 인증 토큰입니다.' }, { status: 401 });
-    }
 
     // 서명된 업로드 URL 생성 (service_role로 RLS 우회)
     const filePath = `${category}/${uuidv4()}.${ext}`;
