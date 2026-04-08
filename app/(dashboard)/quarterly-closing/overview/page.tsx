@@ -65,8 +65,8 @@ export default function OverviewPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
-      <div className="flex-1 p-6 overflow-auto">
-        {/* Header */}
+      {/* ── 고정 헤더 영역 (스크롤 안 됨) ── */}
+      <div className="shrink-0 px-6 pt-6">
         <div className="mb-3">
           <div className="flex items-center justify-between mb-2">
             <div>
@@ -123,52 +123,52 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Submission summary + overview grid */}
-        <div className="space-y-6">
-          {submissionsScopedToMonth.length > 0 && (
-            <div className="space-y-4">
-              <SubmissionSummary
-                submissions={submissionsScopedToMonth}
-                subsidiaries={subsidiaries}
-                activeCategories={activeClosingCategories}
-                onEntityFilter={setSelectedEntityId}
-                onCategoryFilter={setSelectedCategory}
-                selectedEntityId={selectedEntityId}
-                selectedCategoryId={selectedCategory}
-              />
-              {(selectedEntityId || selectedCategory) && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedEntityId(null);
-                      setSelectedCategory(null);
-                    }}
-                  >
-                    필터 초기화
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="bg-white rounded-lg border p-4">
-            <OverviewGrid
-              quarter={quarter}
-              subsidiaries={
-                selectedEntityId
-                  ? subsidiaries.filter((s) => s.id === selectedEntityId)
-                  : subsidiaries
-              }
-              scheduleItems={filteredScheduleItems}
-              submissions={filteredSubmissions}
-              categories={activeClosingCategories}
-              periodLabel={`${selectedYear}년 ${selectedMonth}월`}
-              selectedCategory={selectedCategory}
-              onEntityOrderChange={handleEntityOrderChange}
+        {submissionsScopedToMonth.length > 0 && (
+          <div className="space-y-4 mb-4">
+            <SubmissionSummary
+              submissions={submissionsScopedToMonth}
+              subsidiaries={subsidiaries}
+              activeCategories={activeClosingCategories}
+              onEntityFilter={setSelectedEntityId}
+              onCategoryFilter={setSelectedCategory}
+              selectedEntityId={selectedEntityId}
+              selectedCategoryId={selectedCategory}
             />
+            {(selectedEntityId || selectedCategory) && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedEntityId(null);
+                    setSelectedCategory(null);
+                  }}
+                >
+                  필터 초기화
+                </Button>
+              </div>
+            )}
           </div>
+        )}
+      </div>
+
+      {/* ── 그리드 영역 (남은 높이를 채우고 자체 스크롤) ── */}
+      <div className="flex-1 min-h-0 px-6 pb-6">
+        <div className="bg-white rounded-lg border p-4 h-full flex flex-col">
+          <OverviewGrid
+            quarter={quarter}
+            subsidiaries={
+              selectedEntityId
+                ? subsidiaries.filter((s) => s.id === selectedEntityId)
+                : subsidiaries
+            }
+            scheduleItems={filteredScheduleItems}
+            submissions={filteredSubmissions}
+            categories={activeClosingCategories}
+            periodLabel={`${selectedYear}년 ${selectedMonth}월`}
+            selectedCategory={selectedCategory}
+            onEntityOrderChange={handleEntityOrderChange}
+          />
         </div>
       </div>
     </div>

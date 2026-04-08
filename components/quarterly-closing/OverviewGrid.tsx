@@ -301,12 +301,12 @@ export const OverviewGrid = ({
 
   return (
     <>
-      <div className="overflow-auto">
+      <div className="overflow-auto flex-1 min-h-0">
         <div className="min-w-full inline-block">
           <table className="w-full border-collapse">
-            <thead>
+            <thead className="sticky top-0 z-20">
               <tr>
-                <th className="sticky left-0 z-10 bg-white border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900 min-w-[200px]">
+                <th className="sticky left-0 z-30 bg-white border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900 min-w-[200px]">
                   Entity
                 </th>
                 <th className="border border-gray-300 px-3 py-3 text-center font-semibold text-gray-900 min-w-[90px] bg-gray-50 text-xs">
@@ -323,7 +323,7 @@ export const OverviewGrid = ({
                       onDragOver={(e) => handleCategoryDragOver(e, originalIndex)}
                       onDrop={(e) => handleCategoryDrop(e, originalIndex)}
                       className={cn(
-                        'border border-gray-300 px-4 py-3 text-center font-semibold text-gray-900 min-w-[140px] cursor-move',
+                        'border border-gray-300 px-4 py-3 text-center font-semibold text-gray-900 min-w-[140px] cursor-move bg-white',
                         draggedCategoryIndex === originalIndex && 'opacity-50',
                         selectedCategory === category.id && 'bg-blue-50 border-blue-300'
                       )}

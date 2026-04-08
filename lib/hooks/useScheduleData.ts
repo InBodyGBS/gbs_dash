@@ -300,9 +300,26 @@ export function useScheduleData() {
         }
       }
 
-      // Build submissions query — fiscalQuarterId 없으면 조회 생략 (null 행 오염 방지)
+      // Build submissions query
+      // - 기본: quarter_id = fiscalQuarterId
+      // - 보완: quarter_id가 NULL인 레거시/불완전 데이터도 fiscal_year가 일치하면 포함 (Overview 반영 누락 방지)
       const submissionsQuery = fiscalQuarterId
-        ? supabase.from('submissions').select('*').eq('quarter_id', fiscalQuarterId)
+        ? (async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            const headers: HeadersInit = {};
+            if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+            const res = await fetch(
+              `/api/submissions?quarter_id=${encodeURIComponent(fiscalQuarterId)}&fiscal_year=${encodeURIComponent(String(fiscalYear))}`,
+              { headers },
+            );
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({})) as { error?: string };
+              return { data: [], error: { message: err.error ?? `submissions API 실패 (${res.status})` } };
+            }
+            const json = await res.json() as { submissions: any[] };
+            return { data: json.submissions ?? [], error: null };
+          })()
         : null;
 
       const preliminarySalesSGAQuery = fiscalQuarterId
@@ -337,6 +354,7 @@ export function useScheduleData() {
           quarter_id: string | null;
           subsidiary_id: string;
           category: string;
+          fiscal_year?: string | null;
           file_name: string;
           file_path: string | null;
           file_size: number | null;
@@ -370,8 +388,10 @@ export function useScheduleData() {
         const submissionRows = (submissionsResult.data || []) as unknown as RawSubmissionRow[];
         const submissionDocuments = submissionRows
           .filter((item) => {
-            if (!item.quarter_id) return !fiscalQuarterId;
-            return item.quarter_id === fiscalQuarterId;
+            // quarter_id가 있으면 해당 분기만
+            if (item.quarter_id) return item.quarter_id === fiscalQuarterId;
+            // quarter_id가 없으면 같은 fiscal_year에 한해 포함 (month scoping은 downstream에서 수행)
+            return String(item.fiscal_year ?? '') === String(fiscalYear);
           })
           .map((item) => normalizeSubmission(item, fiscalQuarterId ?? ''));
 
@@ -493,11 +513,8 @@ export function useScheduleData() {
         );
 
         const submissionRows = (submissionsResult.data || []) as unknown as RawSubmissionRow[];
+        // API가 이미 quarter_id OR fiscal_year 로 범위를 잡아주므로 추가 필터 불필요
         const submissionDocuments = submissionRows
-          .filter((item) => {
-            if (!item.quarter_id) return !fiscalQuarterId;
-            return item.quarter_id === fiscalQuarterId;
-          })
           .map((item) => normalizeSubmission(item, fiscalQuarterId ?? ''));
 
         console.log(`📊 submissions 조회 결과:`, {

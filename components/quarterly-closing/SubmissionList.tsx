@@ -306,7 +306,10 @@ function SubmissionItem({
               삭제
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent>
+          <AlertDialogContent
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <AlertDialogHeader>
               <AlertDialogTitle>파일 삭제</AlertDialogTitle>
               <AlertDialogDescription>
@@ -318,7 +321,10 @@ function SubmissionItem({
             <AlertDialogFooter>
               <AlertDialogCancel>취소</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => onDelete(submission)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void onDelete(submission);
+                }}
                 className="bg-red-600 hover:bg-red-700"
               >
                 삭제

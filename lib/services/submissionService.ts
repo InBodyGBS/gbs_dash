@@ -49,37 +49,79 @@ function resolveSubmissionCommentUserFields(
 
 /**
  * 서버사이드 API를 통한 파일 제출
- * schedule_items 자동 확정 포함
+ * 1) /api/submission-upload-url 에서 서명된 업로드 URL 발급 (service_role로 RLS 우회)
+ * 2) 서명된 URL로 Supabase Storage에 직접 업로드 (Vercel 413 방지)
+ * 3) /api/submissions 에는 JSON 메타데이터만 전송
  */
 export async function createSubmissionViaApi(
   formData: SubmissionFormData
 ): Promise<Submission> {
-  const body = new FormData();
-  body.append('file', formData.file);
-  body.append('category', formData.category);
-  if (formData.quarter_id) body.append('quarter_id', formData.quarter_id);
-  if (formData.subsidiary_id) body.append('subsidiary_id', formData.subsidiary_id);
-  if (formData.fiscal_year) body.append('fiscal_year', formData.fiscal_year);
-  if (formData.entity_name) body.append('entity_name', formData.entity_name);
-  if (formData.closing_month != null && formData.closing_month !== '') {
-    body.append('closing_month', formData.closing_month);
+  const { file, category } = formData;
+
+  // 파일 확장자 검증
+  const fileExt = file.name.split('.').pop()?.toLowerCase();
+  if (fileExt !== 'xls' && fileExt !== 'xlsx') {
+    throw new Error('Excel 파일만 업로드 가능합니다 (.xls, .xlsx)');
   }
 
-  // 인증 토큰 전달
+  // 인증 토큰
   const { data: { session } } = await supabase.auth.getSession();
-  const headers: HeadersInit = {};
+  const authHeaders: HeadersInit = {};
   if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
+    authHeaders['Authorization'] = `Bearer ${session.access_token}`;
   }
 
+  // 1) 서명된 업로드 URL 발급
+  const urlRes = await fetch('/api/submission-upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ category, file_ext: fileExt }),
+  });
+
+  if (!urlRes.ok) {
+    const err = await urlRes.json().catch(() => ({})) as { error?: string };
+    throw new Error(err.error ?? '업로드 URL 발급 실패');
+  }
+
+  const { file_path: filePath, token: uploadToken } = await urlRes.json() as {
+    file_path: string;
+    signed_url: string;
+    token: string;
+  };
+
+  // 2) 서명된 URL로 Supabase Storage에 직접 업로드
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_NAME)
+    .uploadToSignedUrl(filePath, uploadToken, file, {
+      contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+
+  if (uploadError) {
+    throw new Error(`파일 업로드 실패: ${uploadError.message || '알 수 없는 오류'}`);
+  }
+
+  // 3) /api/submissions 에 JSON 메타데이터만 전송
   const response = await fetch('/api/submissions', {
     method: 'POST',
-    headers,
-    body,
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({
+      category,
+      quarter_id: formData.quarter_id || null,
+      subsidiary_id: formData.subsidiary_id || null,
+      fiscal_year: formData.fiscal_year || null,
+      entity_name: formData.entity_name || null,
+      closing_month: formData.closing_month ?? null,
+      file_name: file.name,
+      file_path: filePath,
+      file_size: file.size,
+      mime_type: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
   });
 
   if (!response.ok) {
-    const err = await response.json() as { error?: string };
+    // API 실패 시 이미 업로드된 파일 정리
+    await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+    const err = await response.json().catch(() => ({})) as { error?: string };
     throw new Error(err.error ?? '제출 실패');
   }
 
@@ -346,28 +388,19 @@ export async function getSubmissionUrl(filePath: string): Promise<string> {
  */
 export async function deleteSubmission(id: string, filePath: string): Promise<void> {
   try {
-    // Storage에서 파일 삭제
-    const { error: storageError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .remove([filePath]);
+    // service-role API로 삭제 (RLS/권한 문제로 UI에 남는 현상 방지)
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: HeadersInit = {};
+    if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-    if (storageError) {
-      console.error('Storage 삭제 오류:', storageError);
-      // 버킷이 없는 경우는 무시 (이미 삭제되었거나 존재하지 않음)
-      if (!storageError.message?.includes('Bucket not found') && !storageError.message?.includes('not found')) {
-        console.warn('Storage 파일 삭제 실패:', storageError);
-      }
-      // Storage 삭제 실패해도 DB 삭제는 진행
-    }
+    const res = await fetch(`/api/submissions?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers,
+    });
 
-    // DB에서 레코드 삭제
-    const { error: dbError } = await supabase
-      .from('submissions')
-      .delete()
-      .eq('id', id);
-
-    if (dbError) {
-      throw new Error(`제출 삭제 실패: ${dbError.message}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? `제출 삭제 실패 (${res.status})`);
     }
   } catch (error) {
     console.error('Error deleting submission:', error);
