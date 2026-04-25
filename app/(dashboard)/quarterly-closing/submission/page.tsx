@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import {
@@ -74,6 +74,15 @@ function loadSavedSubmissionFilters(): {
 }
 
 export default function SubmissionPage() {
+  // Next.js 15: useSearchParams 사용 컴포넌트는 Suspense 경계 안에 있어야 정적 생성 가능
+  return (
+    <Suspense fallback={null}>
+      <SubmissionPageInner />
+    </Suspense>
+  );
+}
+
+function SubmissionPageInner() {
   // 상태 저장
   const saveState = (state: {
     selectedYear: string;
