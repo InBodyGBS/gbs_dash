@@ -792,3 +792,270 @@ export async function fetchSubmissionCommentsForExcelExport(params: {
 
   return out;
 }
+
+// ============================================
+// 법인 통합 "내 제출 현황"
+// ============================================
+
+export type MySubmissionStatus = 'submitted' | 'upcoming' | 'overdue' | 'pending' | 'none';
+
+export interface MySubmissionCell {
+  /** 귀속 월 (1–12) */
+  month: number;
+  category: ClosingCategoryId;
+  /** 마감일 (confirmed_date 우선, 없으면 planned_date). YYYY-MM-DD. */
+  dueDate: string | null;
+  /** 마감 확정 여부 (schedule_items.status === 'confirmed') */
+  dueConfirmed: boolean;
+  status: MySubmissionStatus;
+  /** D-day 기준 남은 일수. 음수면 지연 일수. dueDate 없으면 null. */
+  daysToDue: number | null;
+  /** 가장 최신 제출(있으면) */
+  latestSubmission: {
+    id: string;
+    file_name: string;
+    file_path: string;
+    file_size: number;
+    version: number;
+    submitted_at: string;
+  } | null;
+  /** 같은 카테고리·월 내 누적 제출 횟수 */
+  submissionCount: number;
+}
+
+export interface MySubmissionsOverview {
+  subsidiaryId: string;
+  fiscalYear: string;
+  cells: MySubmissionCell[];
+  /** 카테고리별 빠른 합계 (요약 카드용) */
+  totals: {
+    submitted: number;
+    upcoming: number;
+    overdue: number;
+    pending: number;
+  };
+}
+
+const UPCOMING_THRESHOLD_DAYS = 7;
+
+/** 'YYYY-MM-DD' → Date(00:00 local). 시각 부분이 있으면 무시한다. */
+function parseDateOnly(d: string): Date {
+  const ymd = d.length >= 10 ? d.slice(0, 10) : d;
+  const [y, m, day] = ymd.split('-').map((v) => parseInt(v, 10));
+  return new Date(y, (m || 1) - 1, day || 1);
+}
+
+function diffDays(a: Date, b: Date): number {
+  const MS = 24 * 60 * 60 * 1000;
+  const aa = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const bb = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((aa - bb) / MS);
+}
+
+/**
+ * 법인 단위 통합 제출 현황 조회.
+ * - submissions: 해당 법인+회계연도 전체
+ * - schedule_items: 같은 회계연도 quarters에 걸린 모든 항목
+ * 카테고리×귀속월 매트릭스로 셀을 만들어 반환한다.
+ *
+ * 귀속월 매핑 규칙:
+ * - submissions: closing_month/entity_name이 없는 레거시 데이터까지 커버하기 위해
+ *   submitted_at 의 캘린더 월에서 1을 빼서 귀속월로 본다 (FC 캘린더 규칙과 동일).
+ * - schedule_items: planned_date(또는 confirmed_date)의 캘린더 월에서 1을 빼서 귀속월로.
+ */
+export async function getMySubmissionsOverview(
+  subsidiaryId: string,
+  fiscalYear: string,
+): Promise<MySubmissionsOverview> {
+  if (!subsidiaryId || !fiscalYear) {
+    return {
+      subsidiaryId,
+      fiscalYear,
+      cells: [],
+      totals: { submitted: 0, upcoming: 0, overdue: 0, pending: 0 },
+    };
+  }
+
+  // 1) 해당 회계연도의 quarters 조회 (schedule_items 필터에 사용)
+  const fyNum = parseInt(fiscalYear, 10);
+  const { data: quartersData, error: qErr } = await supabase
+    .from('quarters')
+    .select('id, year, quarter')
+    .eq('year', fyNum);
+  if (qErr) {
+    throw new Error(`분기 조회 실패: ${qErr.message}`);
+  }
+  const quarterIds = (quartersData || [])
+    .map((q) => (q as { id?: string }).id)
+    .filter((v): v is string => Boolean(v));
+
+  // 2) submissions
+  const { data: subs, error: sErr } = await supabase
+    .from('submissions')
+    .select('id, category, file_name, file_path, file_size, version, submitted_at, fiscal_year, closing_month, subsidiary_id')
+    .eq('subsidiary_id', subsidiaryId)
+    .eq('fiscal_year', fiscalYear)
+    .order('submitted_at', { ascending: false });
+  if (sErr) {
+    if (sErr.code !== '42P01') {
+      throw new Error(`제출 조회 실패: ${sErr.message}`);
+    }
+  }
+
+  type SubRow = {
+    id: string;
+    category: string;
+    file_name: string;
+    file_path: string;
+    file_size: number;
+    version: number | null;
+    submitted_at: string;
+    closing_month: number | string | null;
+  };
+  const subsRows = ((subs || []) as unknown as SubRow[]).filter(Boolean);
+
+  // 3) schedule_items
+  type SchedRow = {
+    id: string;
+    subsidiary_id: string;
+    category: string;
+    planned_date: string;
+    confirmed_date: string | null;
+    status: 'planned' | 'confirmed';
+  };
+  let schedRows: SchedRow[] = [];
+  if (quarterIds.length > 0) {
+    const { data: sched, error: schedErr } = await supabase
+      .from('schedule_items')
+      .select('id, subsidiary_id, category, planned_date, confirmed_date, status')
+      .eq('subsidiary_id', subsidiaryId)
+      .in('quarter_id', quarterIds);
+    if (schedErr && schedErr.code !== '42P01') {
+      throw new Error(`일정 조회 실패: ${schedErr.message}`);
+    }
+    schedRows = (sched || []) as unknown as SchedRow[];
+  }
+
+  // ---- 셀 집계
+  // 캘린더월(submitted_at, planned_date) → 귀속월: 캘린더월 - 1 (1월이면 전년 12월; 전년이면 본 회계연도 매트릭스 밖이므로 제외)
+  const toAttributionMonth = (calendarYmd: string): number | null => {
+    const d = parseDateOnly(calendarYmd);
+    const cy = d.getFullYear();
+    const cm = d.getMonth() + 1;
+    let am = cm - 1;
+    let ay = cy;
+    if (am === 0) {
+      am = 12;
+      ay = cy - 1;
+    }
+    return ay === fyNum ? am : null;
+  };
+
+  type CellKey = string; // `${month}|${category}`
+  const keyOf = (month: number, category: string): CellKey => `${month}|${category}`;
+
+  const cellMap = new Map<CellKey, MySubmissionCell>();
+  const ensureCell = (month: number, category: string): MySubmissionCell => {
+    const k = keyOf(month, category);
+    let c = cellMap.get(k);
+    if (!c) {
+      c = {
+        month,
+        category,
+        dueDate: null,
+        dueConfirmed: false,
+        status: 'none',
+        daysToDue: null,
+        latestSubmission: null,
+        submissionCount: 0,
+      };
+      cellMap.set(k, c);
+    }
+    return c;
+  };
+
+  // 3-1) schedule_items → 마감일 채우기
+  for (const s of schedRows) {
+    const baseDate = s.confirmed_date || s.planned_date;
+    if (!baseDate) continue;
+    const month = toAttributionMonth(baseDate);
+    if (!month) continue;
+    const cell = ensureCell(month, s.category);
+    // 더 늦은(또는 confirmed 우선) 날짜로 갱신
+    const isConfirmed = s.status === 'confirmed';
+    const candidateDate = baseDate.slice(0, 10);
+    const shouldReplace =
+      cell.dueDate == null ||
+      (isConfirmed && !cell.dueConfirmed) ||
+      (isConfirmed === cell.dueConfirmed && candidateDate > (cell.dueDate ?? ''));
+    if (shouldReplace) {
+      cell.dueDate = candidateDate;
+      cell.dueConfirmed = isConfirmed;
+    }
+  }
+
+  // 3-2) submissions → 최신 파일/카운트 반영
+  for (const r of subsRows) {
+    let month: number | null = null;
+    if (r.closing_month != null && String(r.closing_month).trim() !== '') {
+      const m = parseInt(String(r.closing_month), 10);
+      if (m >= 1 && m <= 12) month = m;
+    }
+    if (month == null && r.submitted_at) {
+      month = toAttributionMonth(r.submitted_at);
+    }
+    if (month == null) continue;
+    const cell = ensureCell(month, r.category);
+    cell.submissionCount += 1;
+    const candidate = {
+      id: r.id,
+      file_name: r.file_name,
+      file_path: r.file_path,
+      file_size: r.file_size,
+      version: r.version ?? 1,
+      submitted_at: r.submitted_at,
+    };
+    if (
+      !cell.latestSubmission ||
+      new Date(candidate.submitted_at).getTime() > new Date(cell.latestSubmission.submitted_at).getTime()
+    ) {
+      cell.latestSubmission = candidate;
+    }
+  }
+
+  // 3-3) status / D-day 계산
+  const today = new Date();
+  for (const cell of cellMap.values()) {
+    if (cell.dueDate) {
+      cell.daysToDue = diffDays(parseDateOnly(cell.dueDate), today);
+    }
+    if (cell.latestSubmission) {
+      cell.status = 'submitted';
+    } else if (cell.dueDate == null) {
+      cell.status = 'none';
+    } else if (cell.daysToDue != null && cell.daysToDue < 0) {
+      cell.status = 'overdue';
+    } else if (cell.daysToDue != null && cell.daysToDue <= UPCOMING_THRESHOLD_DAYS) {
+      cell.status = 'upcoming';
+    } else {
+      cell.status = 'pending';
+    }
+  }
+
+  const cells = [...cellMap.values()].sort((a, b) =>
+    a.month !== b.month ? a.month - b.month : a.category.localeCompare(b.category),
+  );
+
+  const totals = cells.reduce(
+    (acc, c) => {
+      if (c.status === 'submitted') acc.submitted += 1;
+      else if (c.status === 'upcoming') acc.upcoming += 1;
+      else if (c.status === 'overdue') acc.overdue += 1;
+      else if (c.status === 'pending') acc.pending += 1;
+      return acc;
+    },
+    { submitted: 0, upcoming: 0, overdue: 0, pending: 0 },
+  );
+
+  return { subsidiaryId, fiscalYear, cells, totals };
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import {
   Select,
@@ -89,9 +89,11 @@ export default function SubmissionPage() {
   };
 
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [prefsHydrated, setPrefsHydrated] = useState(false);
+  const [pendingCategoryFromQuery, setPendingCategoryFromQuery] = useState<ClosingCategoryId | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ClosingCategoryId>(() =>
     getClosingCategoriesForMonth(parseInt(String(new Date().getMonth() + 1), 10) || 1)[0].id,
   );
@@ -107,14 +109,34 @@ export default function SubmissionPage() {
   const [categoryReviewList, setCategoryReviewList] = useState<CategoryReviewStatus[]>([]);
 
   // 마운트 후 localStorage 복원 (서버 HTML과 첫 클라이언트 트리 일치)
+  // 단, query params (year/month/subsidiary_id/category) 가 있으면 딥링크 우선.
   useEffect(() => {
-    const saved = loadSavedSubmissionFilters();
-    if (saved) {
-      setSelectedYear(saved.selectedYear);
-      setSelectedMonth(saved.selectedMonth);
-      setSelectedSubsidiaryId(saved.selectedSubsidiaryId);
+    const qpYear = searchParams.get('year');
+    const qpMonth = searchParams.get('month');
+    const qpSubsidiary = searchParams.get('subsidiary_id');
+    const qpCategory = searchParams.get('category');
+    const hasDeepLink = Boolean(qpYear || qpMonth || qpSubsidiary || qpCategory);
+
+    if (hasDeepLink) {
+      if (qpYear) setSelectedYear(qpYear);
+      if (qpMonth) {
+        const m = parseInt(qpMonth, 10);
+        if (m >= 1 && m <= 12) setSelectedMonth(String(m));
+      }
+      if (qpSubsidiary) setSelectedSubsidiaryId(qpSubsidiary);
+      // category 는 selectedMonth 변경 effect 가 덮어쓰므로 pending 으로 보관 후 별도 effect 에서 적용
+      if (qpCategory) setPendingCategoryFromQuery(qpCategory);
+    } else {
+      const saved = loadSavedSubmissionFilters();
+      if (saved) {
+        setSelectedYear(saved.selectedYear);
+        setSelectedMonth(saved.selectedMonth);
+        setSelectedSubsidiaryId(saved.selectedSubsidiaryId);
+      }
     }
     setPrefsHydrated(true);
+    // searchParams 는 마운트 시점 값만 사용 (이후 사용자 조작이 우선)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 복원 전에는 저장하지 않음 — 기본값으로 기존 저장을 덮어쓰지 않음
@@ -130,8 +152,18 @@ export default function SubmissionPage() {
   useEffect(() => {
     const m = parseInt(selectedMonth, 10) || 1;
     const cats = getClosingCategoriesForMonth(m);
+    // 딥링크로 들어온 카테고리가 현재 월에 유효하면 한 번 적용 후 소비
+    if (pendingCategoryFromQuery) {
+      if (cats.some((c) => c.id === pendingCategoryFromQuery)) {
+        setSelectedCategory(pendingCategoryFromQuery);
+      } else {
+        setSelectedCategory(cats[0].id);
+      }
+      setPendingCategoryFromQuery(null);
+      return;
+    }
     setSelectedCategory((prev) => (cats.some((c) => c.id === prev) ? prev : cats[0].id));
-  }, [selectedMonth]);
+  }, [selectedMonth, pendingCategoryFromQuery]);
 
   const submissionCategories = getClosingCategoriesForMonth(parseInt(selectedMonth, 10) || 1);
 

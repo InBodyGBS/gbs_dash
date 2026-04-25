@@ -64,6 +64,7 @@ export const CATEGORIES: Category[] = [
     children: [
       { id: 'finance-guide', label: 'Finance guide', path: '/quarterly-closing/reference' },
       { id: 'quarterly-closing', label: 'Financial Closing', path: '/quarterly-closing' },
+      { id: 'my-submissions', label: 'My Submissions', path: '/my-submissions' },
     ],
   },
   {
