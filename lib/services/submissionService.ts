@@ -890,9 +890,11 @@ export async function getMySubmissionsOverview(
     .filter((v): v is string => Boolean(v));
 
   // 2) submissions
+  // 주의: submissions 테이블에는 closing_month 컬럼이 없다. (API 요청 시 quarter_id 도출용으로만 사용)
+  // 따라서 귀속월은 항상 submitted_at 기반으로 추정한다.
   const { data: subs, error: sErr } = await supabase
     .from('submissions')
-    .select('id, category, file_name, file_path, file_size, version, submitted_at, fiscal_year, closing_month, subsidiary_id')
+    .select('id, category, file_name, file_path, file_size, version, submitted_at, fiscal_year, subsidiary_id')
     .eq('subsidiary_id', subsidiaryId)
     .eq('fiscal_year', fiscalYear)
     .order('submitted_at', { ascending: false });
@@ -910,7 +912,6 @@ export async function getMySubmissionsOverview(
     file_size: number;
     version: number | null;
     submitted_at: string;
-    closing_month: number | string | null;
   };
   const subsRows = ((subs || []) as unknown as SubRow[]).filter(Boolean);
 
@@ -996,14 +997,8 @@ export async function getMySubmissionsOverview(
 
   // 3-2) submissions → 최신 파일/카운트 반영
   for (const r of subsRows) {
-    let month: number | null = null;
-    if (r.closing_month != null && String(r.closing_month).trim() !== '') {
-      const m = parseInt(String(r.closing_month), 10);
-      if (m >= 1 && m <= 12) month = m;
-    }
-    if (month == null && r.submitted_at) {
-      month = toAttributionMonth(r.submitted_at);
-    }
+    if (!r.submitted_at) continue;
+    const month = toAttributionMonth(r.submitted_at);
     if (month == null) continue;
     const cell = ensureCell(month, r.category);
     cell.submissionCount += 1;
