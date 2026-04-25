@@ -9,6 +9,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Building2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -177,6 +178,14 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
         {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
         로그인
       </Button>
+      <div className="text-center">
+        <Link
+          href="/reset-password"
+          className="text-xs text-gray-600 hover:text-blue-700 hover:underline"
+        >
+          비밀번호를 잊으셨나요?
+        </Link>
+      </div>
     </form>
   );
 }

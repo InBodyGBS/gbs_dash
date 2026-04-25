@@ -54,3 +54,26 @@ export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
+
+/**
+ * 비밀번호 재설정 메일 발송.
+ * `redirectTo` 는 사용자가 메일 링크 클릭 시 이동할 페이지.
+ * Supabase 프로젝트 → Authentication → URL Configuration 의 Redirect URLs 에
+ * 같은 origin 의 `/reset-password/confirm` 이 등록돼 있어야 한다.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/reset-password/confirm`,
+  });
+  if (error) throw error;
+}
+
+/**
+ * 새 비밀번호 적용. 호출 시점에 recovery 세션이 활성화돼 있어야 한다
+ * (메일 링크를 통해 들어와서 PKCE code 교환이 끝난 상태).
+ */
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
