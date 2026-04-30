@@ -20,6 +20,19 @@ import { CategoryFilterDialog } from '@/components/issue/CategoryFilterDialog';
 import { EntityFilterDialog } from '@/components/issue/EntityFilterDialog';
 import { AuthorFilterDialog } from '@/components/issue/AuthorFilterDialog';
 import { exportIssuesToExcel } from '@/lib/utils/exportExcel';
+import { IssueInsightPanel } from '@/components/issue/IssueInsightPanel';
+
+// D-7 ~ 오늘 기본 날짜 범위 반환
+const getDefaultDateRange = () => {
+  const today = new Date();
+  const d7ago = new Date(today);
+  d7ago.setDate(today.getDate() - 7);
+
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+
+  return { startDate: fmt(d7ago), endDate: fmt(today) };
+};
 
 export default function IssuePage() {
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -40,10 +53,7 @@ export default function IssuePage() {
     entities: [],
     statuses: [],
     authors: [],
-    dateRange: {
-      startDate: null,
-      endDate: null,
-    },
+    dateRange: getDefaultDateRange(),
   });
   const [sortBy, setSortBy] = useState<IssueSortOption>('created_desc');
   const dateRangeRef = useRef<HTMLDivElement>(null);
@@ -388,26 +398,18 @@ export default function IssuePage() {
                 value={filters.dateRange.startDate || ''}
                 onChange={(e) => {
                   const value = e.target.value;
-                  // 백스페이스로 삭제하는 경우
                   if (value.length < (filters.dateRange.startDate || '').length) {
                     setFilters({
                       ...filters,
-                      dateRange: {
-                        ...filters.dateRange,
-                        startDate: value || null,
-                      },
+                      dateRange: { ...filters.dateRange, startDate: value || null },
                     });
                     return;
                   }
-                  // 자동 포맷팅 적용
                   const formatted = formatDateInput(value);
                   if (formatted.length <= 10) {
                     setFilters({
                       ...filters,
-                      dateRange: {
-                        ...filters.dateRange,
-                        startDate: formatted || null,
-                      },
+                      dateRange: { ...filters.dateRange, startDate: formatted || null },
                     });
                   }
                 }}
@@ -421,35 +423,53 @@ export default function IssuePage() {
                 value={filters.dateRange.endDate || ''}
                 onChange={(e) => {
                   const value = e.target.value;
-                  // 백스페이스로 삭제하는 경우
                   if (value.length < (filters.dateRange.endDate || '').length) {
                     setFilters({
                       ...filters,
-                      dateRange: {
-                        ...filters.dateRange,
-                        endDate: value || null,
-                      },
+                      dateRange: { ...filters.dateRange, endDate: value || null },
                     });
                     return;
                   }
-                  // 자동 포맷팅 적용
                   const formatted = formatDateInput(value);
                   if (formatted.length <= 10) {
                     setFilters({
                       ...filters,
-                      dateRange: {
-                        ...filters.dateRange,
-                        endDate: formatted || null,
-                      },
+                      dateRange: { ...filters.dateRange, endDate: formatted || null },
                     });
                   }
                 }}
                 className="flex-1"
                 maxLength={10}
               />
+              <Button
+                variant={
+                  !filters.dateRange.startDate && !filters.dateRange.endDate
+                    ? 'default'
+                    : 'outline'
+                }
+                size="sm"
+                onClick={() =>
+                  setFilters({
+                    ...filters,
+                    dateRange: { startDate: null, endDate: null },
+                  })
+                }
+                className="whitespace-nowrap"
+              >
+                전체
+              </Button>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* AI 인사이트 패널 */}
+      <div className="flex-shrink-0 pb-4">
+        <IssueInsightPanel
+          issues={displayedIssues}
+          subsidiaries={subsidiaries}
+          filters={filters}
+        />
       </div>
 
       {/* 이슈 목록 - 스크롤 가능 영역 */}
