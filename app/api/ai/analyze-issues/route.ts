@@ -136,40 +136,55 @@ ${issueList}
 - 감정적 표현 없이 사실 중심으로 작성
 - 수치(건수, 완료율 등)가 있으면 반드시 포함
 - 이슈에 기재된 원문 내용을 최대한 반영하여 구체적으로 서술
-- 글자 수 제한 없이 이슈 내용을 충분히 기술
+- 전체 1,500자 이내로 작성 (각 이슈당 핵심 내용 위주로 압축)
 `.trim();
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
+    // 재시도 로직 (503/429 시 최대 3회, 지수 백오프)
+    const MAX_RETRIES = 3;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    if (!response.ok) {
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('AI 응답이 비어 있습니다');
+        return NextResponse.json({ success: true, analysis: text });
+      }
+
       const errBody = await response.json();
-      console.error('Gemini API error:', response.status, errBody);
-      if (response.status === 503) {
-        throw new Error('AI 서버에 요청이 몰려 일시적으로 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.');
+      console.error(`Gemini API error (시도 ${attempt}/${MAX_RETRIES}):`, response.status, errBody);
+
+      if (response.status === 503 || response.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const delay = attempt * 2000; // 2초, 4초, 6초
+          console.log(`${delay / 1000}초 후 재시도...`);
+          await sleep(delay);
+          lastError = new Error(
+            response.status === 503
+              ? 'AI 서버에 요청이 몰려 일시적으로 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
+              : 'API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.'
+          );
+          continue;
+        }
+        throw lastError ?? new Error(`Gemini API 호출 실패: ${response.status}`);
       }
-      if (response.status === 429) {
-        throw new Error('API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
-      }
+
       throw new Error(`Gemini API 호출 실패: ${response.status}`);
     }
 
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      throw new Error('AI 응답이 비어 있습니다');
-    }
-
-    return NextResponse.json({ success: true, analysis: text });
+    throw lastError ?? new Error('알 수 없는 오류가 발생했습니다');
   } catch (error) {
     console.error('이슈 분석 실패:', error);
     return NextResponse.json(
