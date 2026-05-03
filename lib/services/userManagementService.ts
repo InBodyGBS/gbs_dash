@@ -7,7 +7,15 @@
 import { supabase } from '@/lib/supabase/client';
 
 export interface AdminUserRole {
-  role: 'entity_user' | 'gbs_user' | 'gbs_admin' | 'executive';
+  /**
+   * 역할 (2-tier)
+   * - 'entity_user' : 법인 사용자 (entity_code 필수)
+   * - 'gbs_admin'   : 본사 관리자 (전체 조회 + 권한 관리)
+   *
+   * 과거에 사용되던 'gbs_user' / 'executive' 는 더 이상 신규 부여하지 않으나,
+   * DB에 잔존할 수 있어 표시용으로만 허용한다.
+   */
+  role: 'entity_user' | 'gbs_admin' | 'gbs_user' | 'executive';
   entity_code: string | null;
 }
 
@@ -56,6 +64,19 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
   const res = await fetch('/api/admin/users', { headers });
   const json = await unwrap<{ users: AdminUserRow[] }>(res);
   return json.users;
+}
+
+/**
+ * 승인 대기(pending) 사용자 수.
+ * 호출자가 gbs_admin 이 아니면 0 으로 폴백한다 (사이드바/대시보드 표시용).
+ */
+export async function getPendingUserCount(): Promise<number> {
+  try {
+    const users = await listAdminUsers();
+    return users.filter((u) => u.status === 'pending').length;
+  } catch {
+    return 0;
+  }
 }
 
 export async function upsertUserRole(params: {

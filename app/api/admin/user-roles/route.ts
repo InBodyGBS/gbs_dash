@@ -16,7 +16,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const VALID_ROLES = ['entity_user', 'gbs_user', 'gbs_admin', 'executive'] as const;
+// 2-tier 권한: 신규 부여는 entity_user / gbs_admin 만 허용
+// (과거 gbs_user / executive 는 폐기 — DB 잔존 데이터는 읽기만 가능)
+const VALID_ROLES = ['entity_user', 'gbs_admin'] as const;
 type ValidRole = typeof VALID_ROLES[number];
 
 function getServiceClient(): SupabaseClient {

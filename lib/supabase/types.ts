@@ -310,6 +310,7 @@ export interface Database {
           id: string;
           title: string;
           event_date: string;
+          end_date: string | null;
           color: string;
           created_at: string;
         };
@@ -317,12 +318,14 @@ export interface Database {
           id?: string;
           title: string;
           event_date: string;
+          end_date?: string | null;
           color?: string;
           created_at?: string;
         };
         Update: {
           title?: string;
           event_date?: string;
+          end_date?: string | null;
           color?: string;
           created_at?: string;
         };

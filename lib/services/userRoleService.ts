@@ -2,16 +2,22 @@
  * 사용자 역할 조회 서비스
  * docs/user-roles-schema.sql 의 user_roles 테이블을 사용한다.
  *
- * 역할 종류:
+ * 역할 종류 (2-tier):
  * - 'entity_user'  법인 사용자 (entity_code 로 자기 법인만 접근)
- * - 'gbs_user'     본사 GBS 사용자 (전체 법인 조회 가능)
- * - 'gbs_admin'    본사 GBS 관리자
- * - 'executive'    경영진
+ * - 'gbs_admin'    본사 GBS 관리자 (전체 법인 조회 + 권한 관리)
+ *
+ * 과거에 있던 'gbs_user' / 'executive' 는 더 이상 사용하지 않는다.
+ * DB에 잔존 데이터가 있을 경우 안전하게 처리하기 위해 본 코드에서는
+ * 'gbs_user' / 'executive' 도 "전체 조회 가능(=gbs_admin 동급)"으로 폴백한다.
  */
 
 import { supabase } from '@/lib/supabase/client';
 
-export type UserRole = 'entity_user' | 'gbs_user' | 'gbs_admin' | 'executive';
+/** 정식 역할 (앞으로 신규 부여 가능한 값) */
+export type UserRole = 'entity_user' | 'gbs_admin';
+
+/** DB 에서 읽힐 수 있는 모든 역할 — 레거시 값 포함 (런타임 폴백용) */
+type StoredRole = UserRole | 'gbs_user' | 'executive';
 
 export interface CurrentUserRoleInfo {
   userId: string | null;
@@ -23,10 +29,13 @@ export interface CurrentUserRoleInfo {
   canSeeAll: boolean;
 }
 
+/** 레거시 역할은 gbs_admin 으로 정규화 (전체 조회 가능 권한) */
+function normalizeRole(role: StoredRole): UserRole {
+  return role === 'entity_user' ? 'entity_user' : 'gbs_admin';
+}
+
 const ROLE_PRIORITY: Record<UserRole, number> = {
-  gbs_admin: 4,
-  gbs_user: 3,
-  executive: 2,
+  gbs_admin: 2,
   entity_user: 1,
 };
 
@@ -39,7 +48,7 @@ const DEFAULT_INFO: CurrentUserRoleInfo = {
 
 type UserRoleRow = {
   user_id: string;
-  role: UserRole;
+  role: StoredRole;
   entity_code: string | null;
 };
 
@@ -73,10 +82,11 @@ export async function getCurrentUserRoleInfo(): Promise<CurrentUserRoleInfo> {
     return { ...DEFAULT_INFO, userId: user.id };
   }
 
-  const highest = rows.reduce<UserRole>((acc, r) => {
-    const cur = (ROLE_PRIORITY[r.role] ?? 0) > (ROLE_PRIORITY[acc] ?? 0) ? r.role : acc;
-    return cur;
-  }, rows[0].role);
+  // 레거시 값(gbs_user/executive)은 gbs_admin 동급으로 정규화
+  const normalizedRoles = rows.map((r) => normalizeRole(r.role));
+  const highest = normalizedRoles.reduce<UserRole>((acc, role) => {
+    return (ROLE_PRIORITY[role] ?? 0) > (ROLE_PRIORITY[acc] ?? 0) ? role : acc;
+  }, normalizedRoles[0]);
 
   const entityCodes = [
     ...new Set(

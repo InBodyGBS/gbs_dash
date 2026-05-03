@@ -2,7 +2,7 @@
 
 /**
  * Financial Closing 레이아웃
- * 탭: Calendar, Overview, Submission — Finance guide는 Closing → Finance guide(사이드바)에서 진입
+ * 탭: Calendar, Overview, Submission — Accounting treatment는 Closing → Accounting treatment(사이드바)에서 진입
  */
 
 import Link from 'next/link';

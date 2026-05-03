@@ -4,13 +4,21 @@
 CREATE TABLE IF NOT EXISTS custom_calendar_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
-  event_date DATE NOT NULL,
+  event_date DATE NOT NULL,           -- 시작일 (단일 일정인 경우 그 날짜)
+  end_date   DATE,                     -- 종료일 (NULL이면 단일 일정 = event_date)
   color TEXT NOT NULL DEFAULT '#3B82F6',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 기존 테이블에 end_date 컬럼 추가 (이미 존재하면 무시)
+ALTER TABLE custom_calendar_events
+  ADD COLUMN IF NOT EXISTS end_date DATE;
+
 CREATE INDEX IF NOT EXISTS idx_custom_calendar_events_event_date
   ON custom_calendar_events (event_date);
+
+CREATE INDEX IF NOT EXISTS idx_custom_calendar_events_end_date
+  ON custom_calendar_events (end_date);
 
 COMMENT ON TABLE custom_calendar_events IS 'Closing Schedule 캘린더 수기 이벤트';
 

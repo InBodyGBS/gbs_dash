@@ -11,9 +11,9 @@
  * 권한: gbs_admin 이 아니면 진입 불가 (배너 안내).
  */
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Fragment, useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
-import { Loader2, Search, ShieldAlert, ShieldCheck, UserCheck, UserX, History, RefreshCw } from 'lucide-react';
+import { Loader2, Search, ShieldAlert, ShieldCheck, UserCheck, UserX, History, RefreshCw, Lock, KeyRound, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -62,20 +62,26 @@ import {
   type AdminUserRole,
   type AuditLogEntry,
 } from '@/lib/services/userManagementService';
+import {
+  getAllRolePagePermissions,
+  setRolePagePermissions,
+  type ManagedRole,
+} from '@/lib/services/rolePagePermissionService';
+import { getPagesByGroup } from '@/lib/constants/pages';
 import type { Subsidiary } from '@/lib/supabase/types';
 
-const ROLE_OPTIONS: Array<{ value: AdminUserRole['role']; label: string; hint: string }> = [
+// 2-tier 권한: 신규 부여 가능한 role 만 옵션으로 노출
+const ROLE_OPTIONS: Array<{ value: 'entity_user' | 'gbs_admin'; label: string; hint: string }> = [
   { value: 'entity_user', label: 'Entity User', hint: '법인 사용자 (entity_code 필수)' },
-  { value: 'gbs_user', label: 'GBS User', hint: '본사 GBS — 전체 법인 조회' },
-  { value: 'gbs_admin', label: 'GBS Admin', hint: '본사 관리자 — 권한 관리 가능' },
-  { value: 'executive', label: 'Executive', hint: '경영진 — 전체 조회' },
+  { value: 'gbs_admin', label: 'GBS Admin', hint: '본사 관리자 — 전체 법인 조회 + 권한 관리' },
 ];
 
+// 표시용 배지 — 레거시 gbs_user/executive 도 화면에서 깨지지 않도록 유지 (회색 처리)
 const ROLE_BADGE: Record<AdminUserRole['role'], { bg: string; text: string }> = {
   entity_user: { bg: '#EFF6FF', text: '#1D4ED8' },
-  gbs_user: { bg: '#ECFDF5', text: '#047857' },
   gbs_admin: { bg: '#FEF3C7', text: '#B45309' },
-  executive: { bg: '#F3E8FF', text: '#7E22CE' },
+  gbs_user: { bg: '#F3F4F6', text: '#6B7280' },
+  executive: { bg: '#F3F4F6', text: '#6B7280' },
 };
 
 const getErrorMessage = (e: unknown): string => {
@@ -93,7 +99,7 @@ export default function UsersAdminPage() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [editTarget, setEditTarget] = useState<AdminUserRow | null>(null);
-  const [tab, setTab] = useState<'pending' | 'active' | 'audit'>('pending');
+  const [tab, setTab] = useState<'pending' | 'active' | 'audit' | 'permissions'>('pending');
 
   // 권한 확인
   useEffect(() => {
@@ -210,11 +216,14 @@ export default function UsersAdminPage() {
               <TabsTrigger value="active">
                 Active <span className="ml-2 text-xs text-gray-500">({activeCount})</span>
               </TabsTrigger>
+              <TabsTrigger value="permissions">
+                <KeyRound className="h-4 w-4 mr-1" /> Page Access
+              </TabsTrigger>
               <TabsTrigger value="audit">
                 <History className="h-4 w-4 mr-1" /> Audit Log
               </TabsTrigger>
             </TabsList>
-            {tab !== 'audit' && (
+            {tab !== 'audit' && tab !== 'permissions' && (
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
                 <Input
@@ -257,6 +266,10 @@ export default function UsersAdminPage() {
             />
           </TabsContent>
 
+          <TabsContent value="permissions" className="mt-4">
+            <PageAccessMatrix />
+          </TabsContent>
+
           <TabsContent value="audit" className="mt-4">
             <AuditLogTable entries={auditEntries} loading={loading} />
           </TabsContent>
@@ -281,6 +294,188 @@ export default function UsersAdminPage() {
         }}
       />
     </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+
+/**
+ * 역할 × 페이지 접근 매트릭스.
+ * - gbs_admin 컬럼은 잠금 (항상 전체 허용)
+ * - entity_user 만 체크박스 편집 → 저장 시 role_page_permissions 통째 교체
+ */
+function PageAccessMatrix() {
+  const [loadingPerm, setLoadingPerm] = useState(true);
+  const [savingPerm, setSavingPerm] = useState(false);
+  const [entityPages, setEntityPages] = useState<Set<string>>(new Set());
+  const [originalEntityPages, setOriginalEntityPages] = useState<Set<string>>(new Set());
+
+  const groups = useMemo(() => getPagesByGroup(), []);
+
+  const load = useCallback(async () => {
+    setLoadingPerm(true);
+    try {
+      const all = await getAllRolePagePermissions();
+      setEntityPages(new Set(all.entity_user));
+      setOriginalEntityPages(new Set(all.entity_user));
+    } catch (e) {
+      toast.error('권한 로드 실패', { description: getErrorMessage(e) });
+    } finally {
+      setLoadingPerm(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const isDirty = useMemo(() => {
+    if (entityPages.size !== originalEntityPages.size) return true;
+    for (const id of entityPages) {
+      if (!originalEntityPages.has(id)) return true;
+    }
+    return false;
+  }, [entityPages, originalEntityPages]);
+
+  const togglePage = (pageId: string, role: ManagedRole) => {
+    if (role === 'gbs_admin') return; // 잠금
+    setEntityPages((prev) => {
+      const next = new Set(prev);
+      if (next.has(pageId)) next.delete(pageId);
+      else next.add(pageId);
+      return next;
+    });
+  };
+
+  const toggleAllInGroup = (pageIds: string[], allOn: boolean) => {
+    setEntityPages((prev) => {
+      const next = new Set(prev);
+      if (allOn) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    setSavingPerm(true);
+    try {
+      await setRolePagePermissions('entity_user', Array.from(entityPages));
+      setOriginalEntityPages(new Set(entityPages));
+      toast.success('페이지 접근 권한이 저장되었습니다.');
+    } catch (e) {
+      toast.error('저장 실패', { description: getErrorMessage(e) });
+    } finally {
+      setSavingPerm(false);
+    }
+  };
+
+  if (loadingPerm) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center text-sm text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> 권한 로드 중…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-gray-500" />
+              역할별 페이지 접근 권한
+            </CardTitle>
+            <p className="text-xs text-gray-500 mt-1">
+              <strong className="text-gray-700">GBS Admin</strong>은 항상 모든 페이지에 접근할 수 있습니다 (잠금).
+              <strong className="text-gray-700 ml-1">Entity User</strong>는 체크된 페이지만 접근 가능합니다.
+            </p>
+          </div>
+          <Button
+            onClick={handleSave}
+            disabled={!isDirty || savingPerm}
+            className="gap-1.5"
+            style={{ backgroundColor: '#971B2F' }}
+          >
+            {savingPerm ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {savingPerm ? '저장 중...' : '변경사항 저장'}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <table className="w-full text-sm border-t border-gray-200">
+          <thead className="bg-gray-50 text-gray-700 sticky top-0">
+            <tr>
+              <th className="text-left px-4 py-2.5 font-medium w-[60%]">페이지</th>
+              <th className="text-center px-4 py-2.5 font-medium">
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>GBS Admin</span>
+                  <Lock className="h-3 w-3 text-gray-400" />
+                </div>
+              </th>
+              <th className="text-center px-4 py-2.5 font-medium">Entity User</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(({ group, pages }) => {
+              const groupIds = pages.map((p) => p.id);
+              const allOn = groupIds.every((id) => entityPages.has(id));
+              const someOn = groupIds.some((id) => entityPages.has(id));
+              return (
+                <Fragment key={`group-${group}`}>
+                  <tr className="bg-gray-50 border-t border-gray-200">
+                    <td className="px-4 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      {group}
+                    </td>
+                    <td className="px-4 py-1.5 text-center text-xs text-gray-400">—</td>
+                    <td className="px-4 py-1.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => toggleAllInGroup(groupIds, allOn)}
+                        className={cn(
+                          'text-[11px] underline-offset-2 hover:underline',
+                          allOn ? 'text-gray-500' : someOn ? 'text-blue-600' : 'text-blue-600',
+                        )}
+                      >
+                        {allOn ? '모두 해제' : '모두 선택'}
+                      </button>
+                    </td>
+                  </tr>
+                  {pages.map((p) => {
+                    const entityChecked = entityPages.has(p.id);
+                    return (
+                      <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-800">{p.label}</span>
+                            <span className="text-[11px] text-gray-400 font-mono">{p.path}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <Checkbox checked disabled aria-label="GBS Admin 항상 허용" />
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <Checkbox
+                            checked={entityChecked}
+                            onCheckedChange={() => togglePage(p.id, 'entity_user')}
+                            aria-label={`Entity User: ${p.label}`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -469,7 +664,14 @@ function RoleEditDialog({
   useEffect(() => {
     if (!target) return;
     const existing = target.roles[0]?.role as AdminUserRole['role'] | undefined;
-    setRole(existing ?? 'entity_user');
+    // 레거시 역할(gbs_user / executive)은 신규 부여 불가 — 편집 시 'gbs_admin' 으로 정규화
+    const normalized: AdminUserRole['role'] =
+      existing === 'entity_user' || existing === 'gbs_admin'
+        ? existing
+        : existing
+          ? 'gbs_admin'
+          : 'entity_user';
+    setRole(normalized);
     setEntityCodes(target.roles.map((r) => r.entity_code).filter((c): c is string => Boolean(c)));
     setReason('');
   }, [target]);

@@ -22,11 +22,12 @@ interface CalendarItem {
   categoryColor: string;
 }
 
-/** 수기 추가 이벤트 (Supabase `custom_calendar_events`; 날짜는 `date` 필드로 'yyyy-MM-dd') */
+/** 수기 추가 이벤트 (Supabase `custom_calendar_events`; 날짜는 'yyyy-MM-dd') */
 interface CustomCalendarEvent {
   id: string;
   title: string;
-  date: string;       // 'yyyy-MM-dd'
+  date: string;       // 시작일 'yyyy-MM-dd'
+  endDate: string;    // 종료일 'yyyy-MM-dd' (단일 일정이면 date와 동일)
   color: string;
 }
 
@@ -66,14 +67,34 @@ function mapCustomCalendarRow(row: {
   id: string;
   title: string;
   event_date: string;
+  end_date: string | null;
   color: string;
 }): CustomCalendarEvent {
   return {
     id: row.id,
     title: row.title,
     date: row.event_date,
+    endDate: row.end_date ?? row.event_date,
     color: row.color,
   };
+}
+
+/** 시작일 ~ 종료일 사이의 모든 날짜('yyyy-MM-dd')를 반환 */
+function enumerateDates(startISO: string, endISO: string): string[] {
+  if (endISO < startISO) return [startISO];
+  const result: string[] = [];
+  const [sy, sm, sd] = startISO.split('-').map(Number);
+  const [ey, em, ed] = endISO.split('-').map(Number);
+  const cur = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  while (cur.getTime() <= end.getTime()) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    const d = String(cur.getDate()).padStart(2, '0');
+    result.push(`${y}-${m}-${d}`);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
 }
 
 function isMissingTableError(error: { code?: string; message?: string } | null): boolean {
@@ -97,6 +118,8 @@ export function ScheduleCalendar() {
   const [addDialog, setAddDialog] = useState<{ date: string } | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newColor, setNewColor] = useState(EVENT_COLORS[0].value);
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
   const legacyCustomEventsMigrated = useRef(false);
 
@@ -118,6 +141,7 @@ export function ScheduleCalendar() {
               await supabase.from('custom_calendar_events').insert({
                 title: ev.title,
                 event_date: ev.date,
+                end_date: ev.endDate ?? ev.date,
                 color: ev.color || EVENT_COLORS[0].value,
               });
             }
@@ -137,11 +161,14 @@ export function ScheduleCalendar() {
           ? `${year}-12-31`
           : new Date(year, month + 1, 0).toISOString().split('T')[0];
 
+      // 기간(시작일~종료일)이 뷰 범위에 한 번이라도 걸치면 가져온다.
+      // 조건: event_date <= viewEnd AND coalesce(end_date, event_date) >= viewStart
+      // PostgREST에서는 coalesce를 직접 못 쓰니, end_date가 NULL인 행은 event_date 기준으로 비교하도록 OR 조건으로 분기한다.
       const { data, error } = await supabase
         .from('custom_calendar_events')
-        .select('id, title, event_date, color')
-        .gte('event_date', startDate)
+        .select('id, title, event_date, end_date, color')
         .lte('event_date', endDate)
+        .or(`end_date.gte.${startDate},and(end_date.is.null,event_date.gte.${startDate})`)
         .order('event_date', { ascending: true });
 
       if (cancelled) return;
@@ -158,7 +185,10 @@ export function ScheduleCalendar() {
         return;
       }
 
-      setCustomEvents(((data ?? []) as { id: string; title: string; event_date: string; color: string }[]).map(mapCustomCalendarRow));
+      setCustomEvents(
+        ((data ?? []) as { id: string; title: string; event_date: string; end_date: string | null; color: string }[])
+          .map(mapCustomCalendarRow),
+      );
     };
 
     loadCustomEvents();
@@ -263,10 +293,15 @@ export function ScheduleCalendar() {
     const title = newTitle.trim();
     if (!title || !addDialog) return;
 
+    // 시작일/종료일 정규화: 종료일이 시작일보다 빠르면 swap
+    const start = newStartDate || addDialog.date;
+    const end = newEndDate || start;
+    const [eventDate, endDate] = start <= end ? [start, end] : [end, start];
+
     const { data, error } = await supabase
       .from('custom_calendar_events')
-      .insert({ title, event_date: addDialog.date, color: newColor })
-      .select('id, title, event_date, color')
+      .insert({ title, event_date: eventDate, end_date: endDate, color: newColor })
+      .select('id, title, event_date, end_date, color')
       .single();
 
     if (error) {
@@ -285,6 +320,8 @@ export function ScheduleCalendar() {
       [...prev, event].sort((a, b) => a.date.localeCompare(b.date)),
     );
     setNewTitle('');
+    setNewStartDate('');
+    setNewEndDate('');
     setAddDialog(null);
   };
 
@@ -355,13 +392,16 @@ export function ScheduleCalendar() {
     return result;
   }, [items]);
 
-  /* ── 날짜 → 커스텀 이벤트 맵 ── */
+  /* ── 날짜 → 커스텀 이벤트 맵 (기간 이벤트는 매일 펼쳐서 매핑) ── */
   const customByDate = useMemo(() => {
     const map = new Map<string, CustomCalendarEvent[]>();
     customEvents.forEach((ev) => {
-      const list = map.get(ev.date) || [];
-      list.push(ev);
-      map.set(ev.date, list);
+      const dates = enumerateDates(ev.date, ev.endDate || ev.date);
+      dates.forEach((d) => {
+        const list = map.get(d) || [];
+        list.push(ev);
+        map.set(d, list);
+      });
     });
     return map;
   }, [customEvents]);
@@ -498,7 +538,7 @@ export function ScheduleCalendar() {
         <div className="flex-1 flex flex-col min-h-0">
           <div className="grid grid-cols-7 mb-1">
             {DAYS.map((d) => (
-              <div key={d} className="text-center text-xs text-gray-400 font-medium py-1">{d}</div>
+              <div key={d} className="text-center text-base text-gray-500 font-medium py-1.5">{d}</div>
             ))}
           </div>
           <div className="grid grid-cols-7 flex-1 gap-px bg-gray-200 rounded-lg overflow-hidden">
@@ -512,48 +552,50 @@ export function ScheduleCalendar() {
                 <div
                   key={i}
                   className={cn(
-                    'bg-white p-1 min-h-[72px] flex flex-col group cursor-pointer',
+                    'bg-white p-2 min-h-[88px] flex flex-col group cursor-pointer',
                     isToday && 'bg-red-50'
                   )}
                   onClick={() => {
                     setNewTitle('');
                     setNewColor(EVENT_COLORS[0].value);
+                    setNewStartDate(dateStr);
+                    setNewEndDate(dateStr);
                     setAddDialog({ date: dateStr });
                   }}
                 >
-                  <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center justify-between mb-1">
                     <span
                       className={cn(
-                        'text-xs w-5 h-5 flex items-center justify-center rounded-full font-medium',
+                        'text-base w-7 h-7 flex items-center justify-center rounded-full font-medium',
                         isToday ? 'bg-red-500 text-white' : 'text-gray-700'
                       )}
                     >
                       {day}
                     </span>
                     {/* + 버튼: hover 시 표시 — TODO: 관리자 권한 체크로 대체 */}
-                    <Plus className="w-3 h-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    <Plus className="w-4 h-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                   </div>
-                  <div className="space-y-0.5 overflow-hidden">
+                  <div className="space-y-1 overflow-hidden">
                     {/* 스케줄 아이템 (계획) */}
                     {dayItems.slice(0, 3).map((item) => (
                       <div
                         key={item.category}
-                        className="text-[9px] leading-tight px-1 py-0.5 rounded truncate text-white"
+                        className="text-xs leading-tight px-2 py-0.5 rounded truncate text-white font-medium"
                         style={{ backgroundColor: item.categoryColor }}
-                        title={`${item.categoryLabel} — ${item.subsidiaryNames.join(', ')}`}
+                        title={item.categoryLabel}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {item.categoryLabel}
                       </div>
                     ))}
                     {dayItems.length > 3 && (
-                      <div className="text-[9px] text-gray-400 px-1">+{dayItems.length - 3} more</div>
+                      <div className="text-[11px] text-gray-400 px-1">+{dayItems.length - 3} more</div>
                     )}
                     {/* 수기 이벤트 */}
                     {customDayItems.map((ev) => (
                       <div
                         key={ev.id}
-                        className="text-[9px] leading-tight px-1 py-0.5 rounded truncate flex items-center justify-between gap-0.5 group/ev"
+                        className="text-xs leading-tight px-2 py-0.5 rounded truncate flex items-center justify-between gap-0.5 group/ev font-medium"
                         style={{ border: `1px solid ${ev.color}`, color: ev.color }}
                         onClick={(e) => e.stopPropagation()}
                         title={ev.title}
@@ -563,7 +605,7 @@ export function ScheduleCalendar() {
                           onClick={(e) => { e.stopPropagation(); handleDeleteEvent(ev.id); }}
                           className="opacity-0 group-hover/ev:opacity-100 transition-opacity flex-shrink-0"
                         >
-                          <X className="w-2 h-2" />
+                          <X className="w-3 h-3" />
                         </button>
                       </div>
                     ))}
@@ -592,21 +634,12 @@ export function ScheduleCalendar() {
           style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
         >
           <p className="font-semibold mb-1 text-gray-300">{tooltip.date}</p>
-          {(categoryByDate.get(tooltip.date) || []).map((item) => {
-            const subsidiaryText = item.subsidiaryNames.join(', ');
-            return (
-              <div key={item.category} className="flex items-center gap-1.5 py-0.5">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.categoryColor }} />
-                <span className="truncate">{item.categoryLabel}</span>
-                <span
-                  className="text-gray-400 truncate"
-                  title={subsidiaryText}
-                >
-                  · {subsidiaryText}
-                </span>
-              </div>
-            );
-          })}
+          {(categoryByDate.get(tooltip.date) || []).map((item) => (
+            <div key={item.category} className="flex items-center gap-1.5 py-0.5">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.categoryColor }} />
+              <span className="truncate">{item.categoryLabel}</span>
+            </div>
+          ))}
           {(customByDate.get(tooltip.date) || []).map((ev) => (
             <div key={ev.id} className="flex items-center gap-1.5 py-0.5">
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color }} />
@@ -626,12 +659,16 @@ export function ScheduleCalendar() {
           onClick={() => setAddDialog(null)}
         >
           <div
-            className="bg-white rounded-xl shadow-xl p-5 w-72"
+            className="bg-white rounded-xl shadow-xl p-5 w-96"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">이벤트 추가</h3>
-              <span className="text-xs text-gray-400">{addDialog.date}</span>
+              <span className="text-xs text-gray-400">
+                {newStartDate === newEndDate || !newEndDate
+                  ? newStartDate || addDialog.date
+                  : `${newStartDate} ~ ${newEndDate}`}
+              </span>
             </div>
 
             <div className="space-y-3">
@@ -643,6 +680,31 @@ export function ScheduleCalendar() {
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddEvent(); }}
                 className="text-sm"
               />
+
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">기간</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={newStartDate}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewStartDate(v);
+                      // 시작일이 종료일보다 늦어지면 종료일을 시작일로 자동 보정
+                      if (v && newEndDate && v > newEndDate) setNewEndDate(v);
+                    }}
+                    className="text-sm flex-1 min-w-0 px-2"
+                  />
+                  <span className="text-xs text-gray-400 flex-shrink-0">~</span>
+                  <Input
+                    type="date"
+                    value={newEndDate}
+                    min={newStartDate || undefined}
+                    onChange={(e) => setNewEndDate(e.target.value)}
+                    className="text-sm flex-1 min-w-0 px-2"
+                  />
+                </div>
+              </div>
 
               <div>
                 <p className="text-xs text-gray-500 mb-1.5">색상</p>
@@ -668,7 +730,12 @@ export function ScheduleCalendar() {
                 variant="outline"
                 size="sm"
                 className="flex-1"
-                onClick={() => setAddDialog(null)}
+                onClick={() => {
+                  setAddDialog(null);
+                  setNewTitle('');
+                  setNewStartDate('');
+                  setNewEndDate('');
+                }}
               >
                 취소
               </Button>
@@ -676,7 +743,7 @@ export function ScheduleCalendar() {
                 size="sm"
                 className="flex-1"
                 onClick={handleAddEvent}
-                disabled={!newTitle.trim()}
+                disabled={!newTitle.trim() || !newStartDate || !newEndDate}
               >
                 추가
               </Button>

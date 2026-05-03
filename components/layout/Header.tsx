@@ -7,10 +7,11 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { LogOut, LogIn, Settings } from 'lucide-react';
 import { CATEGORIES, getDeepestMatchingChild } from '@/lib/constants/categories';
 import { formatDate } from '@/lib/utils/format';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,8 @@ import {
 import { signOut } from '@/lib/auth';
 import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+import { LanguageToggle } from './LanguageToggle';
+import { useT } from '@/lib/contexts/LanguageContext';
 
 interface HeaderProps {
   title?: string;
@@ -50,6 +53,7 @@ const getErrorMessage = (error: unknown): string => {
  */
 const getPageTitle = (pathname: string): string => {
   if (pathname === '/') return 'Dashboard';
+  if (pathname === '/profile' || pathname.startsWith('/profile/')) return '내 계정 설정';
 
   const exact = CATEGORIES.find((c) => c.path && c.path === pathname);
   if (exact) return exact.label;
@@ -66,6 +70,7 @@ const getPageTitle = (pathname: string): string => {
 export const Header = ({ title }: HeaderProps) => {
   const pathname = usePathname();
   const router = useRouter();
+  const t = useT();
   const pageTitle = title || getPageTitle(pathname);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,13 +142,16 @@ export const Header = ({ title }: HeaderProps) => {
         <h1 className="text-xl font-semibold text-gray-900">{pageTitle}</h1>
       </div>
 
-      {/* 우측: 업데이트 시간 + 사용자 메뉴 */}
+      {/* 우측: 언어 토글 + 업데이트 시간 + 사용자 메뉴 */}
       <div className="flex items-center gap-4">
+        {/* KR / EN 토글 */}
+        <LanguageToggle />
+
         <span className="text-sm text-gray-500">
-          마지막 업데이트: {formatDate(new Date())}
+          {t('dashboard.last_updated')}: {formatDate(new Date())}
         </span>
-        
-        {!loading && userProfile && (
+
+        {!loading && userProfile ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -171,13 +179,32 @@ export const Header = ({ title }: HeaderProps) => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => router.push('/profile')}
+                className="cursor-pointer"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                {t('header.profile')}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="text-red-600 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
-                로그아웃
+                {t('header.logout')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        )}
+        ) : !loading ? (
+          /* 로그인 안 된 상태: 로그인 버튼 노출 */
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/login')}
+            className="gap-1.5"
+          >
+            <LogIn className="h-4 w-4" />
+            {t('common.login')}
+          </Button>
+        ) : null}
       </div>
     </header>
   );

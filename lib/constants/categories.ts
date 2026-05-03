@@ -62,7 +62,7 @@ export const CATEGORIES: Category[] = [
     icon: Calendar,
     description: '마감 일정 관리',
     children: [
-      { id: 'finance-guide', label: 'Finance guide', path: '/quarterly-closing/reference' },
+      { id: 'finance-guide', label: 'Accounting treatment', path: '/quarterly-closing/reference' },
       { id: 'quarterly-closing', label: 'Financial Closing', path: '/quarterly-closing' },
       { id: 'my-submissions', label: 'My Submissions', path: '/my-submissions' },
     ],
