@@ -15,6 +15,7 @@ import {
   Legend,
 } from 'recharts';
 import type { BSPeriodMetrics } from '@/lib/types/monthly-closing';
+import { ZoomableChartCard } from './ZoomableChartCard';
 
 interface Props {
   trendData: BSPeriodMetrics[];
@@ -68,34 +69,26 @@ export function WorkingCapital({ trendData, currentData }: Props) {
 
       {/* 상단 2분할: WC 막대그래프 + AR/Inv/AP 표 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 월별 Working Capital 막대그래프 */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-gray-800">
-              Monthly Working Capital
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isEmpty ? (
-              <p className="text-center text-gray-400 py-10 text-sm">데이터 없음</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={wcBarData} margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `$${v}K`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}K`, 'W/C']} />
-                  <Bar
-                    dataKey="W/C"
-                    fill="#6366F1"
-                    radius={[4, 4, 0, 0]}
-                    label={false}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+        {/* 월별 Working Capital 막대그래프 — 확대 가능 */}
+        <ZoomableChartCard title="Monthly Working Capital" isEmpty={isEmpty}>
+          {(mode) => (
+            <ResponsiveContainer
+              width="100%"
+              height={mode === 'zoomed' ? '100%' : 220}
+            >
+              <BarChart data={wcBarData} margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="period" tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }} />
+                <YAxis
+                  tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }}
+                  tickFormatter={(v: number) => `$${v}K`}
+                />
+                <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}K`, 'W/C']} />
+                <Bar dataKey="W/C" fill="#6366F1" radius={[4, 4, 0, 0]} label={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ZoomableChartCard>
 
         {/* AR / Inventories / AP 현재값 표 */}
         <Card>
@@ -159,105 +152,117 @@ export function WorkingCapital({ trendData, currentData }: Props) {
 
       {/* 하단 2분할: DSO 라인차트 + AP Turnover 라인차트 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* AR Turnover (DSO) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-gray-800">
+        {/* AR Turnover (DSO) — 확대 가능 */}
+        <ZoomableChartCard
+          title={
+            <>
               AR Turnover (DSO)
               <span className="ml-2 text-xs font-normal text-gray-400">
                 회전율 높을수록 / DSO 낮을수록 양호
               </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isEmpty ? (
-              <p className="text-center text-gray-400 py-10 text-sm">데이터 없음</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart
-                  data={arTurnoverData}
-                  margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} unit="×" />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="d" />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="AR Turnover (×)"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    connectNulls
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="DSO (days)"
-                    stroke="#93C5FD"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 2"
-                    dot={{ r: 2 }}
-                    connectNulls
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          }
+          isEmpty={isEmpty}
+        >
+          {(mode) => (
+            <ResponsiveContainer
+              width="100%"
+              height={mode === 'zoomed' ? '100%' : 220}
+            >
+              <LineChart
+                data={arTurnoverData}
+                margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="period" tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }} unit="×" />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }}
+                  unit="d"
+                />
+                <Tooltip />
+                <Legend />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="AR Turnover (×)"
+                  stroke="#3B82F6"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="DSO (days)"
+                  stroke="#93C5FD"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 2"
+                  dot={{ r: 2 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ZoomableChartCard>
 
-        {/* AP Turnover (DPO) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-gray-800">
+        {/* AP Turnover (DPO) — 확대 가능 */}
+        <ZoomableChartCard
+          title={
+            <>
               AP Turnover (DPO)
               <span className="ml-2 text-xs font-normal text-gray-400">
                 DPO 높을수록 지급 여유 양호
               </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isEmpty ? (
-              <p className="text-center text-gray-400 py-10 text-sm">데이터 없음</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart
-                  data={apTurnoverData}
-                  margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} unit="×" />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit="d" />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="AP Turnover (×)"
-                    stroke="#F59E0B"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    connectNulls
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="DPO (days)"
-                    stroke="#FCD34D"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 2"
-                    dot={{ r: 2 }}
-                    connectNulls
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          }
+          isEmpty={isEmpty}
+        >
+          {(mode) => (
+            <ResponsiveContainer
+              width="100%"
+              height={mode === 'zoomed' ? '100%' : 220}
+            >
+              <LineChart
+                data={apTurnoverData}
+                margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="period" tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }} unit="×" />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: mode === 'zoomed' ? 13 : 10 }}
+                  unit="d"
+                />
+                <Tooltip />
+                <Legend />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="AP Turnover (×)"
+                  stroke="#F59E0B"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="DPO (days)"
+                  stroke="#FCD34D"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 2"
+                  dot={{ r: 2 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ZoomableChartCard>
       </div>
     </div>
   );

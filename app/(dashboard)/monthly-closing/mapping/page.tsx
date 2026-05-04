@@ -368,35 +368,67 @@ export default function MappingPage() {
   };
 
   // P&L Code별 그룹화
+  // 정렬 정책: 카테고리는 display_order(자연 P&L 흐름) 순, 카테고리 내부는 pl_code 내림차순
   const plMasterByCategory = useMemo(() => {
     const grouped = new Map<string, StdPLMaster[]>();
+    const categoryFirstOrder = new Map<string, number>();
+
     plMaster.forEach((pl) => {
       const category = pl.pl_category;
       if (!grouped.has(category)) {
         grouped.set(category, []);
+        categoryFirstOrder.set(category, pl.display_order);
       }
       grouped.get(category)!.push(pl);
     });
+
     grouped.forEach((pls, category) => {
-      grouped.set(category, pls.sort((a, b) => parseInt(a.pl_code, 10) - parseInt(b.pl_code, 10)));
+      grouped.set(
+        category,
+        pls.sort((a, b) => parseInt(b.pl_code, 10) - parseInt(a.pl_code, 10)),
+      );
     });
-    return grouped;
+
+    const sortedEntries = Array.from(grouped.entries()).sort(([a], [b]) => {
+      const oa = categoryFirstOrder.get(a) ?? 0;
+      const ob = categoryFirstOrder.get(b) ?? 0;
+      return oa - ob;
+    });
+    return new Map(sortedEntries);
   }, [plMaster]);
 
   // BS Code별 그룹화
+  // 정렬 정책:
+  //   - 카테고리 순서: 각 카테고리에 처음 등장한 항목의 display_order 기준 (자연스러운 BS 흐름: 자산 → 부채 → 자본)
+  //   - 카테고리 내부 순서: bs_code 숫자 내림차순 (큰 코드가 위로)
   const bsMasterByCategory = useMemo(() => {
     const grouped = new Map<string, StdBSMaster[]>();
+    const categoryFirstOrder = new Map<string, number>(); // 카테고리 → 최초 등장 display_order
+
     bsMaster.forEach((bs) => {
       const category = bs.bs_category;
       if (!grouped.has(category)) {
         grouped.set(category, []);
+        categoryFirstOrder.set(category, bs.display_order);
       }
       grouped.get(category)!.push(bs);
     });
+
+    // 각 카테고리 내부를 bs_code 내림차순 정렬
     grouped.forEach((bss, category) => {
-      grouped.set(category, bss.sort((a, b) => parseInt(a.bs_code, 10) - parseInt(b.bs_code, 10)));
+      grouped.set(
+        category,
+        bss.sort((a, b) => parseInt(b.bs_code, 10) - parseInt(a.bs_code, 10)),
+      );
     });
-    return grouped;
+
+    // 카테고리 자체를 display_order 기준으로 재정렬한 새 Map 반환
+    const sortedEntries = Array.from(grouped.entries()).sort(([a], [b]) => {
+      const oa = categoryFirstOrder.get(a) ?? 0;
+      const ob = categoryFirstOrder.get(b) ?? 0;
+      return oa - ob;
+    });
+    return new Map(sortedEntries);
   }, [bsMaster]);
 
   if (loading) {
@@ -780,9 +812,7 @@ export default function MappingPage() {
                       <SelectValue placeholder="P&L Code 선택" />
                     </SelectTrigger>
                     <SelectContent position="popper" className="max-h-[400px]">
-                      {Array.from(plMasterByCategory.entries())
-                        .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([category, pls]) => (
+                      {Array.from(plMasterByCategory.entries()).map(([category, pls]) => (
                           <div key={category}>
                             <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-blue-50 sticky top-0">
                               {category}
@@ -806,9 +836,7 @@ export default function MappingPage() {
                       <SelectValue placeholder="BS Code 선택" />
                     </SelectTrigger>
                     <SelectContent position="popper" className="max-h-[400px]">
-                      {Array.from(bsMasterByCategory.entries())
-                        .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([category, bss]) => (
+                      {Array.from(bsMasterByCategory.entries()).map(([category, bss]) => (
                           <div key={category}>
                             <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-green-50 sticky top-0">
                               {category}

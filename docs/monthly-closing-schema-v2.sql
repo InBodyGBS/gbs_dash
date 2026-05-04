@@ -258,6 +258,7 @@ INSERT INTO std_bs_master (bs_code, bs_line, bs_category, display_order, is_calc
 ('12301', 'Goodwill', 'Non-Current Assets', 150, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
 ('12303', 'Industrial rights', 'Non-Current Assets', 152, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
 ('12304', 'Industrial rights - Accumulated Depreciation', 'Non-Current Assets', 153, FALSE, 'Asset', TRUE, 'Non-Current Assets'),
+('12306', 'Development costs', 'Non-Current Assets', 154, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
 ('12309', 'Computer Software', 'Non-Current Assets', 158, FALSE, 'Asset', FALSE, 'Non-Current Assets'),
 ('12310', 'Computer Software - Accumulated Amortisation', 'Non-Current Assets', 159, FALSE, 'Asset', TRUE, 'Non-Current Assets'),
 ('12313', 'Other intangible assets', 'Non-Current Assets', 162, FALSE, 'Asset', FALSE, 'Non-Current Assets'),

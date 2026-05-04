@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -14,6 +14,7 @@ import {
   Legend,
 } from 'recharts';
 import type { BSPeriodMetrics } from '@/lib/types/monthly-closing';
+import { ZoomableChartCard } from './ZoomableChartCard';
 
 interface Props {
   trendData: BSPeriodMetrics[];
@@ -138,42 +139,40 @@ export function AssetsStatus({ trendData, currentData, compareData, compareLabel
         />
       </div>
 
-      {/* Cash Status Line Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold text-gray-800">
-            Cash Status — Monthly Trend
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isEmpty ? (
-            <p className="text-center text-gray-400 py-12 text-sm">표시할 데이터가 없습니다.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} />
-                <YAxis
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(v: number) => `$${v}K`}
-                />
-                <Tooltip
-                  formatter={(value: number) => [`$${value.toLocaleString()}K`, 'Cash']}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="Cash"
-                  stroke="#10B981"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
+      {/* Cash Status Line Chart — 확대 가능 */}
+      <ZoomableChartCard
+        title="Cash Status — Monthly Trend"
+        isEmpty={isEmpty}
+        emptyMessage="표시할 데이터가 없습니다."
+      >
+        {(mode) => (
+          <ResponsiveContainer
+            width="100%"
+            height={mode === 'zoomed' ? '100%' : 240}
+          >
+            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="period" tick={{ fontSize: mode === 'zoomed' ? 13 : 11 }} />
+              <YAxis
+                tick={{ fontSize: mode === 'zoomed' ? 13 : 11 }}
+                tickFormatter={(v: number) => `$${v}K`}
+              />
+              <Tooltip
+                formatter={(value: number) => [`$${value.toLocaleString()}K`, 'Cash']}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="Cash"
+                stroke="#10B981"
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </ZoomableChartCard>
     </div>
   );
 }
