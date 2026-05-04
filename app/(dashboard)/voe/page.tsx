@@ -8,8 +8,11 @@ import {
   updateVoeEntityResponse,
   updateVoeStatusOnly,
   updateVoeContent,
+  markVoeAsSeen,
 } from '@/lib/services/voeService';
 import { VoeSubmitDialog } from '@/components/voe/VoeSubmitDialog';
+import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
+import { supabase } from '@/lib/supabase/client';
 import type { VoeInquiry, VoeStatus, VoeDirection } from '@/lib/types/voe';
 
 const STATUS_STYLES: Record<VoeStatus, { label: string; bg: string; text: string }> = {
@@ -23,18 +26,45 @@ const FILTERS: FilterStatus[] = ['All', 'Pending', 'In Progress', 'Resolved'];
 
 type DirectionFilter = 'all' | 'entity_to_gbs' | 'gbs_to_entity';
 
-const DIRECTION_LABELS: Record<VoeDirection, { label: string; icon: React.ReactNode; bg: string; text: string }> = {
-  entity_to_gbs: {
-    label: '내 문의',
-    icon: <ArrowUpRight className="w-3 h-3" />,
-    bg: 'bg-blue-50',
-    text: 'text-blue-600',
+/**
+ * Direction 라벨은 보는 사람의 역할에 따라 달라진다.
+ *   - entity_user: '내 문의' (entity_to_gbs) / 'GBS 문의' (gbs_to_entity)
+ *   - gbs_admin: '법인 문의' (entity_to_gbs) / 'GBS 문의' (gbs_to_entity)
+ *
+ * scope = 'user' | 'admin' 으로 분기.
+ */
+type DirectionLabelScope = 'user' | 'admin';
+const DIRECTION_LABELS_BY_SCOPE: Record<
+  DirectionLabelScope,
+  Record<VoeDirection, { label: string; icon: React.ReactNode; bg: string; text: string }>
+> = {
+  user: {
+    entity_to_gbs: {
+      label: '내 문의',
+      icon: <ArrowUpRight className="w-3 h-3" />,
+      bg: 'bg-blue-50',
+      text: 'text-blue-600',
+    },
+    gbs_to_entity: {
+      label: 'GBS 문의',
+      icon: <ArrowDownLeft className="w-3 h-3" />,
+      bg: 'bg-yellow-50',
+      text: 'text-yellow-700',
+    },
   },
-  gbs_to_entity: {
-    label: 'GBS 문의',
-    icon: <ArrowDownLeft className="w-3 h-3" />,
-    bg: 'bg-yellow-50',
-    text: 'text-yellow-700',
+  admin: {
+    entity_to_gbs: {
+      label: '법인 문의',
+      icon: <ArrowUpRight className="w-3 h-3" />,
+      bg: 'bg-blue-50',
+      text: 'text-blue-600',
+    },
+    gbs_to_entity: {
+      label: 'GBS 문의',
+      icon: <ArrowDownLeft className="w-3 h-3" />,
+      bg: 'bg-yellow-50',
+      text: 'text-yellow-700',
+    },
   },
 };
 
@@ -94,7 +124,16 @@ function parseThreadBlocks(
   });
 }
 
-function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => void }) {
+function VoeDetailRow({
+  item,
+  onUpdate,
+  directionScope,
+}: {
+  item: VoeInquiry;
+  onUpdate: () => void;
+  /** 라벨 표기 관점 — 'user' = 본인 법인 시점, 'admin' = 본사 시점 */
+  directionScope: DirectionLabelScope;
+}) {
   const direction = item.direction ?? 'entity_to_gbs';
   const isGbsToEntity = direction === 'gbs_to_entity';
 
@@ -216,7 +255,7 @@ function VoeDetailRow({ item, onUpdate }: { item: VoeInquiry; onUpdate: () => vo
       >
         <td className="px-4 py-3">
           {(() => {
-            const d = DIRECTION_LABELS[direction];
+            const d = DIRECTION_LABELS_BY_SCOPE[directionScope][direction];
             return (
               <span className={`inline-flex items-center gap-0.5 text-xs px-2 py-0.5 rounded-full font-medium ${d.bg} ${d.text}`}>
                 {d.icon}{d.label}
@@ -569,12 +608,66 @@ export default function VoePage() {
   const [filter, setFilter] = useState<FilterStatus>('All');
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('all');
   const [showDialog, setShowDialog] = useState(false);
+  /** entity_user 인 경우 본인 법인 식별자(이름/코드). gbs_admin 이면 null = 전체 보기 */
+  const [scopeIdentifiers, setScopeIdentifiers] = useState<Set<string> | null>(null);
+  const [scopeLabel, setScopeLabel] = useState<string>('');
+  /** 본인 담당 법인 이름 목록 — 새 문의 등록 시 자동 채움 (entity_user 만) */
+  const [myEntityNames, setMyEntityNames] = useState<string[] | undefined>(undefined);
+  /** 로그인 사용자 이름 — 작성자 자동 입력 */
+  const [myDisplayName, setMyDisplayName] = useState<string>('');
+  /** 이번 방문에서 새로 보이는 항목 수 — 페이지 진입 시 한 번만 계산되어 배너에 표시 */
+  const [newSinceLastVisit, setNewSinceLastVisit] = useState<number>(0);
 
   const load = async () => {
     setLoading(true);
     try {
+      // 1) 권한 조회 — entity_user 면 본인 법인 식별자 집합 생성
+      const roleInfo = await getCurrentUserRoleInfo();
+      let identifiers: Set<string> | null = null;
+      let entityNamesForDialog: string[] | undefined = undefined;
+      if (!roleInfo.canSeeAll) {
+        // entity_user: code + name 모두 매칭 대상
+        if (roleInfo.entityCodes.length === 0) {
+          identifiers = new Set();
+        } else {
+          const { data: subs } = await supabase
+            .from('subsidiaries')
+            .select('code, name')
+            .in('code', roleInfo.entityCodes);
+          const rows = (subs ?? []) as { code: string; name: string }[];
+          identifiers = new Set();
+          rows.forEach((s) => {
+            identifiers!.add(s.code);
+            identifiers!.add(s.name);
+          });
+          // 새 문의 다이얼로그에 자동 채울 법인 이름 목록
+          entityNamesForDialog = rows.map((s) => s.name);
+        }
+        setScopeLabel(roleInfo.entityCodes.join(', '));
+      } else {
+        setScopeLabel('');
+      }
+      setScopeIdentifiers(identifiers);
+      setMyEntityNames(entityNamesForDialog);
+
+      // 1-b) 로그인 사용자 이름 조회 (작성자 자동 채우기용)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('name')
+          .eq('id', user.id)
+          .maybeSingle();
+        const name = (profile as { name?: string } | null)?.name;
+        setMyDisplayName(name || user.email?.split('@')[0] || '');
+      }
+
+      // 2) VOE 데이터 조회 후 entity 필터 적용
       const data = await getVoeInquiries();
-      setInquiries(data);
+      const scoped = identifiers
+        ? data.filter((v) => identifiers!.has(v.entity_name))
+        : data;
+      setInquiries(scoped);
     } catch (err) {
       console.error('VOE load error:', err);
     } finally {
@@ -582,7 +675,42 @@ export default function VoePage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  // 페이지 진입 시: 마지막 방문 이후 새로 갱신된 항목 수 계산 → 배너 표시 → 본 시각 갱신
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const lastSeen = typeof window !== 'undefined'
+        ? window.localStorage.getItem('gbs_voe_last_seen_at') ?? '1970-01-01T00:00:00.000Z'
+        : '1970-01-01T00:00:00.000Z';
+      // 권한·필터 결과를 받기 전이라도 lastSeen 만 읽어서 표시용 카운트로 활용 가능.
+      // 정확한 카운트는 inquiries 가 로드된 뒤 useEffect 로 다시 계산.
+      void lastSeen; // 위 코드는 의도적 — 실제 계산은 아래 useEffect
+      if (cancelled) return;
+    })();
+    void load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // inquiries 가 로드된 뒤 lastSeen 기준으로 새 항목 카운트 계산.
+  // 본 후에는 markVoeAsSeen() 으로 lastSeen 을 현재 시각으로 갱신.
+  useEffect(() => {
+    if (loading || inquiries.length === 0) {
+      // 로딩 중이거나 데이터가 0건이면 배너 숨김. 단 0건이어도 lastSeen 은 갱신해야 사이드바 배지가 사라짐.
+      if (!loading) markVoeAsSeen();
+      return;
+    }
+    const lastSeen = typeof window !== 'undefined'
+      ? window.localStorage.getItem('gbs_voe_last_seen_at') ?? '1970-01-01T00:00:00.000Z'
+      : '1970-01-01T00:00:00.000Z';
+    const lastSeenTs = new Date(lastSeen).getTime();
+    const newCount = inquiries.filter((v) => {
+      const ts = v.updated_at ? new Date(v.updated_at).getTime() : 0;
+      return ts > lastSeenTs;
+    }).length;
+    setNewSinceLastVisit(newCount);
+    // 페이지를 보고 있다는 의미이므로 즉시 'seen' 처리 — 다음 사이드바 갱신 시 배지 0
+    markVoeAsSeen();
+  }, [loading, inquiries]);
 
   const directionFiltered = directionFilter === 'all'
     ? inquiries
@@ -611,8 +739,18 @@ export default function VoePage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">VOE</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Voice of Entity — 법인 담당자 문의</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">VOE</h1>
+              {scopeLabel && (
+                <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-mono font-semibold">
+                  {scopeLabel}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-400 mt-0.5">
+              Voice of Entity — 법인 담당자 문의
+              {scopeLabel && <span className="ml-1 text-gray-500">· 본인 법인 항목만 표시</span>}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -633,11 +771,39 @@ export default function VoePage() {
           </div>
         </div>
 
-        {/* 방향 탭 */}
+        {/* 새 답변/문의 알림 배너 — 마지막 방문 이후 갱신된 항목이 있을 때만 */}
+        {newSinceLastVisit > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-200 text-blue-700 flex-shrink-0">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-blue-900">
+                {scopeIdentifiers
+                  ? `새 답변·문의 ${newSinceLastVisit}건이 도착했습니다.`
+                  : `법인으로부터 새 답변·문의 ${newSinceLastVisit}건이 도착했습니다.`}
+              </p>
+              <p className="text-xs text-blue-700">
+                마지막 방문 이후 업데이트된 항목입니다. 아래 목록에서 확인하세요.
+              </p>
+            </div>
+            <button
+              onClick={() => setNewSinceLastVisit(0)}
+              className="text-xs text-blue-700 font-medium hover:underline whitespace-nowrap px-2 py-1"
+            >
+              확인
+            </button>
+          </div>
+        )}
+
+        {/* 방향 탭 — admin/user 에 따라 라벨 분기 */}
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 w-fit">
           {([
             { key: 'all', label: '전체' },
-            { key: 'entity_to_gbs', label: '내 문의' },
+            {
+              key: 'entity_to_gbs',
+              label: scopeIdentifiers ? '내 문의' : '법인 문의',
+            },
             { key: 'gbs_to_entity', label: 'GBS 문의' },
           ] as { key: DirectionFilter; label: string }[]).map(({ key, label }) => (
             <button
@@ -709,7 +875,12 @@ export default function VoePage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((item) => (
-                  <VoeDetailRow key={item.id} item={item} onUpdate={load} />
+                  <VoeDetailRow
+                    key={item.id}
+                    item={item}
+                    onUpdate={load}
+                    directionScope={scopeIdentifiers ? 'user' : 'admin'}
+                  />
                 ))}
               </tbody>
             </table>
@@ -721,6 +892,8 @@ export default function VoePage() {
         open={showDialog}
         onClose={() => setShowDialog(false)}
         onSubmitted={load}
+        entityNames={myEntityNames}
+        defaultAuthor={myDisplayName}
       />
     </div>
   );

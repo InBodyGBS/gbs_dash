@@ -99,9 +99,33 @@ export async function signUp({ email, password, name, team }: SignUpData) {
 }
 
 export async function signOut() {
+  // 1) 클라이언트 측 만료 타임스탬프 즉시 제거 — 서버 호출 결과와 무관하게 무조건 정리
   clearAuthExpiry();
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+
+  // 2) 서버 측 signOut — 토큰이 이미 만료/무효화된 경우 403 이 떨어질 수 있음.
+  //    이미 무효화된 세션은 더 이상 무효화할 게 없는 정상 상황이므로 에러를 throw 하지 않는다.
+  //    (토스트 '로그아웃 실패' 가 뜨는 것을 방지)
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.warn('Supabase signOut server-side warning (ignored):', error.message);
+    }
+  } catch (e) {
+    console.warn('Supabase signOut exception (ignored):', e);
+  }
+
+  // 3) 안전망: 로컬 스토리지의 supabase 세션 키도 강제로 정리 (희박한 경우 잔존 방지)
+  if (typeof window !== 'undefined') {
+    try {
+      Object.keys(window.localStorage).forEach((k) => {
+        if (k.startsWith('sb-') && k.endsWith('-auth-token')) {
+          window.localStorage.removeItem(k);
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /**

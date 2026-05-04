@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { ScheduleCalendar } from '@/components/dashboard/ScheduleCalendar';
-import { getVoeInquiries } from '@/lib/services/voeService';
+import { getVoeInquiries, getUnreadVoeCount } from '@/lib/services/voeService';
 import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 import { getPendingUserCount } from '@/lib/services/userManagementService';
 import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
@@ -126,6 +126,8 @@ export default function DashboardPage() {
   const [taskList, setTaskList] = useState<VoeInquiry[]>([]);
   /** admin 전용 — 승인 대기 사용자 수 */
   const [pendingUserCount, setPendingUserCount] = useState<number>(0);
+  /** 모든 사용자 — 마지막 VOE 방문 이후 새 답변/문의 수 */
+  const [voeUnreadCount, setVoeUnreadCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   /** 'admin' | 'user' — Upcoming Deadlines 위젯 모드 */
@@ -152,17 +154,30 @@ export default function DashboardPage() {
         setPendingUserCount(0);
       }
 
+      // 모든 사용자 — VOE 미확인 카운트 (배너용)
+      getUnreadVoeCount().then((cnt) => setVoeUnreadCount(cnt));
+
       // ── entity_user → entity_code → subsidiary_id 매핑
+      // 추가로: VOE entity_name 필터용 식별자 집합도 같이 만든다 (code + name 모두 포함)
       let allowedSubsidiaryIds: string[] | null = null;
+      let allowedEntityIdentifiers: Set<string> | null = null;
       if (isUserMode) {
         if (roleInfo.entityCodes.length === 0) {
           allowedSubsidiaryIds = [];
+          allowedEntityIdentifiers = new Set();
         } else {
           const { data: subs } = await supabase
             .from('subsidiaries')
-            .select('id, code')
+            .select('id, code, name')
             .in('code', roleInfo.entityCodes);
-          allowedSubsidiaryIds = ((subs ?? []) as { id: string; code: string }[]).map((s) => s.id);
+          const rows = (subs ?? []) as { id: string; code: string; name: string }[];
+          allowedSubsidiaryIds = rows.map((s) => s.id);
+          // VOE.entity_name 이 'InBody Japan' 같은 이름인 경우와 'JP' 같은 코드인 경우 둘 다 매칭
+          allowedEntityIdentifiers = new Set();
+          rows.forEach((s) => {
+            allowedEntityIdentifiers!.add(s.code);
+            allowedEntityIdentifiers!.add(s.name);
+          });
         }
         setScopeLabel(roleInfo.entityCodes.join(', '));
       } else {
@@ -429,7 +444,15 @@ export default function DashboardPage() {
       }
 
       const voeData = voeResult as VoeInquiry[];
-      const pendingTasks = voeData.filter((v) => v.status !== 'Resolved');
+
+      // entity_user 면 본인 법인 관련 VOE 만 노출 (entity_name 매칭)
+      const scopedVoeData = (() => {
+        if (!isUserMode) return voeData;
+        if (!allowedEntityIdentifiers || allowedEntityIdentifiers.size === 0) return [];
+        return voeData.filter((v) => allowedEntityIdentifiers!.has(v.entity_name));
+      })();
+
+      const pendingTasks = scopedVoeData.filter((v) => v.status !== 'Resolved');
 
       setStats({
         announcements: announcementsResult.count || 0,
@@ -487,6 +510,32 @@ export default function DashboardPage() {
             </div>
             <span className="text-xs text-amber-700 font-medium group-hover:underline whitespace-nowrap">
               {t('dashboard.pending_users.cta')}
+              <ChevronRight className="w-3.5 h-3.5 inline -mt-0.5 ml-0.5" />
+            </span>
+          </Link>
+        )}
+
+        {/* VOE 새 답변·문의 배너 — 모든 사용자, 미확인 항목 있을 때만 */}
+        {voeUnreadCount > 0 && (
+          <Link
+            href="/voe"
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0 group"
+          >
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-200 text-blue-700 flex-shrink-0">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-blue-900">
+                {viewMode === 'user'
+                  ? `새 답변·문의 ${voeUnreadCount}건이 도착했습니다.`
+                  : `법인으로부터 새 답변·문의 ${voeUnreadCount}건이 도착했습니다.`}
+              </p>
+              <p className="text-xs text-blue-700">
+                마지막 VOE 방문 이후 업데이트된 항목입니다.
+              </p>
+            </div>
+            <span className="text-xs text-blue-700 font-medium group-hover:underline whitespace-nowrap">
+              VOE로 이동
               <ChevronRight className="w-3.5 h-3.5 inline -mt-0.5 ml-0.5" />
             </span>
           </Link>

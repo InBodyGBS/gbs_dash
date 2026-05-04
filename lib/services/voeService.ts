@@ -21,8 +21,69 @@
 
 import { supabase } from '@/lib/supabase/client';
 import type { VoeInquiry, VoeInquiryInsert, VoeStatus } from '@/lib/types/voe';
+import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 
 const voeTable = () => supabase.from('voe_inquiries' as never);
+
+// ============================================================================
+// 읽음 처리 — 사용자가 마지막으로 VOE 페이지를 방문한 시각을 localStorage 에 저장.
+//   updated_at > lastSeen 인 항목 = '새 답변/문의'.
+//   서버 측 read 테이블 없이 가벼운 in-app 알림 구현.
+// ============================================================================
+
+const VOE_LAST_SEEN_KEY = 'gbs_voe_last_seen_at';
+
+/** 마지막 방문 시각(ISO) 가져오기 — 미설정 시 매우 옛날 값 반환 (= 모두 unread) */
+function getVoeLastSeen(): string {
+  if (typeof window === 'undefined') return '1970-01-01T00:00:00.000Z';
+  return window.localStorage.getItem(VOE_LAST_SEEN_KEY) ?? '1970-01-01T00:00:00.000Z';
+}
+
+/** 현재 시각으로 마지막 방문 시각 갱신 — VOE 페이지 진입 시 호출 */
+export function markVoeAsSeen(): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(VOE_LAST_SEEN_KEY, new Date().toISOString());
+}
+
+/**
+ * 사용자에게 보여줄 unread VOE 개수.
+ *   - entity_user: 본인 법인 관련 항목 중 lastSeen 이후 갱신된 것
+ *   - gbs_admin / 미부여: 모든 항목 중 lastSeen 이후 갱신된 것
+ *
+ * 사이드바 빨간 배지 / VOE 페이지 배너 등에서 호출.
+ */
+export async function getUnreadVoeCount(): Promise<number> {
+  try {
+    const lastSeen = getVoeLastSeen();
+    const roleInfo = await getCurrentUserRoleInfo();
+
+    let query = voeTable()
+      .select('id', { count: 'exact', head: true })
+      .gt('updated_at', lastSeen);
+
+    // entity_user: 본인 법인 이름들로 필터
+    if (!roleInfo.canSeeAll) {
+      if (roleInfo.entityCodes.length === 0) return 0;
+      const { data: subs } = await supabase
+        .from('subsidiaries')
+        .select('name')
+        .in('code', roleInfo.entityCodes);
+      const names = ((subs ?? []) as { name: string }[]).map((s) => s.name);
+      if (names.length === 0) return 0;
+      query = query.in('entity_name', names);
+    }
+
+    const { count, error } = await query;
+    if (error) {
+      console.warn('getUnreadVoeCount 오류:', error.message);
+      return 0;
+    }
+    return count ?? 0;
+  } catch (e) {
+    console.warn('getUnreadVoeCount 예외:', e);
+    return 0;
+  }
+}
 
 /** 전체 문의 조회 (관리자용) */
 export async function getVoeInquiries(): Promise<VoeInquiry[]> {

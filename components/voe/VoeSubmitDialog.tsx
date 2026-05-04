@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Send } from 'lucide-react';
 import { createVoeInquiry } from '@/lib/services/voeService';
 import type { VoeCategory } from '@/lib/types/voe';
@@ -12,27 +12,58 @@ interface VoeSubmitDialogProps {
   onClose: () => void;
   onSubmitted: () => void;
   /**
-   * 권한 부여 후 로그인 사용자의 법인이 자동으로 주입될 예정.
-   * 현재는 undefined → 수기 입력 필드 노출.
+   * 사용자의 담당 법인.
+   * - entity_user 1개 법인: 1-요소 배열 → 읽기 전용 표시
+   * - entity_user 다수 법인: 다중 배열 → 드롭다운 선택
+   * - gbs_admin / 권한 미부여: undefined → 자유 텍스트 입력
    */
-  entityName?: string;
+  entityNames?: string[];
+  /**
+   * 작성자 기본값 (로그인 사용자 이름).
+   * 사용자가 필요 시 수정 가능.
+   */
+  defaultAuthor?: string;
 }
 
-export function VoeSubmitDialog({ open, onClose, onSubmitted, entityName }: VoeSubmitDialogProps) {
-  // entityName prop이 없을 때만 사용되는 수기 입력 상태
+export function VoeSubmitDialog({
+  open,
+  onClose,
+  onSubmitted,
+  entityNames,
+  defaultAuthor,
+}: VoeSubmitDialogProps) {
+  // 자유 입력용 (entityNames 가 없을 때만)
   const [entityNameInput, setEntityNameInput] = useState('');
+  // 다중 법인 담당일 때 선택값
+  const [selectedEntity, setSelectedEntity] = useState<string>('');
 
   const [form, setForm] = useState({
     title: '',
     category: 'General' as VoeCategory,
-    author: '',
+    author: defaultAuthor ?? '',
     content: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 실제 사용할 법인명: prop 우선, 없으면 수기 입력값
-  const resolvedEntityName = entityName ?? entityNameInput;
+  // defaultAuthor / entityNames 변화 시 폼 초기화
+  useEffect(() => {
+    if (defaultAuthor) {
+      setForm((f) => ({ ...f, author: defaultAuthor }));
+    }
+    if (entityNames && entityNames.length > 0) {
+      setSelectedEntity(entityNames[0]);
+    }
+  }, [defaultAuthor, entityNames]);
+
+  // 실제 사용할 법인명 결정
+  const isFixedEntity = !!entityNames && entityNames.length === 1;
+  const isMultiEntity = !!entityNames && entityNames.length > 1;
+  const resolvedEntityName = isFixedEntity
+    ? entityNames![0]
+    : isMultiEntity
+      ? selectedEntity
+      : entityNameInput;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +75,8 @@ export function VoeSubmitDialog({ open, onClose, onSubmitted, entityName }: VoeS
     setError(null);
     try {
       await createVoeInquiry({ ...form, entity_name: resolvedEntityName, direction: 'entity_to_gbs', source_category: null, source_quarter_id: null });
-      setForm({ title: '', category: 'General', author: '', content: '' });
+      // 폼 초기화 — author 는 defaultAuthor 가 있으면 유지 (다음 등록 시 다시 채울 필요 없게)
+      setForm({ title: '', category: 'General', author: defaultAuthor ?? '', content: '' });
       setEntityNameInput('');
       onSubmitted();
       onClose();
@@ -72,17 +104,31 @@ export function VoeSubmitDialog({ open, onClose, onSubmitted, entityName }: VoeS
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 법인명 *
-                {entityName && (
+                {isFixedEntity && (
                   <span className="ml-1.5 text-xs text-blue-500 font-normal">(자동)</span>
                 )}
+                {isMultiEntity && (
+                  <span className="ml-1.5 text-xs text-blue-500 font-normal">(담당 법인 중 선택)</span>
+                )}
               </label>
-              {entityName ? (
-                /* 권한 부여 후: prop으로 자동 주입된 법인명 표시 */
+              {isFixedEntity ? (
+                /* entity_user 단일 법인: 읽기 전용 */
                 <div className="w-full px-3 py-2 text-sm border border-gray-100 rounded-lg bg-gray-50 text-gray-700">
-                  {entityName}
+                  {entityNames![0]}
                 </div>
+              ) : isMultiEntity ? (
+                /* entity_user 다수 법인: 본인 담당 법인 중 선택 */
+                <select
+                  value={selectedEntity}
+                  onChange={(e) => setSelectedEntity(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {entityNames!.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
               ) : (
-                /* 현재: 수기 입력 */
+                /* gbs_admin / 미부여: 자유 입력 */
                 <input
                   type="text"
                   value={entityNameInput}

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 import { getAllowedPageIds, canAccessPage } from '@/lib/services/rolePagePermissionService';
 import { getPendingUserCount } from '@/lib/services/userManagementService';
+import { getUnreadVoeCount } from '@/lib/services/voeService';
 import { findPageByPath } from '@/lib/constants/pages';
 import { useT } from '@/lib/contexts/LanguageContext';
 
@@ -29,6 +30,8 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
   const [allowedPageIds, setAllowedPageIds] = useState<Set<string>>(new Set(['*']));
   /** gbs_admin 일 때만 채워짐 — 미승인 사용자 수 (배지용) */
   const [pendingCount, setPendingCount] = useState<number>(0);
+  /** VOE 미확인 답변/문의 수 — 사이드바 VOE 메뉴 옆 배지용 */
+  const [voeUnreadCount, setVoeUnreadCount] = useState<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,11 +51,16 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
         const cnt = await getPendingUserCount();
         if (!cancelled) setPendingCount(cnt);
       }
+
+      // VOE 미확인 카운트 — 모든 로그인 사용자 대상
+      const voeCnt = await getUnreadVoeCount();
+      if (!cancelled) setVoeUnreadCount(voeCnt);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]); // 페이지 이동 시마다 카운트 재계산 (VOE 방문 후 0으로 떨어지도록)
 
   /** path 기반으로 접근 가능 여부 판정 (PAGE_REGISTRY 에 없는 라우트는 기본 허용) */
   const isPathAllowed = (path: string): boolean => {
@@ -230,7 +238,16 @@ export const Sidebar = ({ currentPath }: SidebarProps) => {
                 )}
               >
                 <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
-                <span>{category.label}</span>
+                <span className="flex-1">{category.label}</span>
+                {/* VOE 미확인 배지 */}
+                {category.id === 'voe' && voeUnreadCount > 0 && (
+                  <span
+                    className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold"
+                    title={`새 답변/문의 ${voeUnreadCount}건`}
+                  >
+                    {voeUnreadCount > 99 ? '99+' : voeUnreadCount}
+                  </span>
+                )}
               </Link>
             </div>
           );
