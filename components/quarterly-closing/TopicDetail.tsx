@@ -29,7 +29,7 @@ export function TopicDetail({ topic, onBack, onOpenChat }: TopicDetailProps) {
         </Button>
         <Button onClick={onOpenChat} className="gap-2">
           <MessageCircle className="w-4 h-4" />
-          Chat
+          VOE 문의
         </Button>
       </div>
 

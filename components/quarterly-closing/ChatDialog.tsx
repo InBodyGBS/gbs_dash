@@ -17,6 +17,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getQuestionsByTopic, createQuestion, updateQuestion } from '@/lib/services/questionService';
+import { createVoeInquiry } from '@/lib/services/voeService';
+import { supabase } from '@/lib/supabase/client';
+import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 import type { ClosingQuestion } from '@/lib/types/reference';
 import { format } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -85,6 +88,7 @@ export function ChatDialog({
 
     setSubmitting(true);
     try {
+      // 1) closing_questions 에 토픽별 Q&A 로 저장 (이 페이지의 Past Q&A 표시용)
       await createQuestion({
         topic_id: topicId,
         subsidiary_id: subsidiaryId,
@@ -93,12 +97,68 @@ export function ChatDialog({
         priority: 'normal',
       });
 
-      toast.success('Question submitted successfully');
+      // 2) VOE 에도 동시 등록 — entity_user 의 본인 법인 이름 + 사용자 표시명 자동 채움
+      //    실패해도 closing_questions 등록은 이미 성공했으므로 사용자에겐 부분 성공 안내
+      try {
+        const roleInfo = await getCurrentUserRoleInfo();
+        let entityName = 'Unknown';
+        let authorName = currentUserEmail.split('@')[0];
+
+        // 본인 법인 이름 (entity_user 만)
+        if (!roleInfo.canSeeAll && roleInfo.entityCodes.length > 0) {
+          const { data: subs } = await supabase
+            .from('subsidiaries')
+            .select('name')
+            .in('code', roleInfo.entityCodes)
+            .limit(1);
+          const firstName = ((subs ?? []) as { name: string }[])[0]?.name;
+          if (firstName) entityName = firstName;
+        } else if (subsidiaryId) {
+          // gbs_admin 이 토픽 페이지에서 보낼 때: subsidiaryId 로 조회
+          const { data: sub } = await supabase
+            .from('subsidiaries')
+            .select('name')
+            .eq('id', subsidiaryId)
+            .maybeSingle();
+          const n = (sub as { name?: string } | null)?.name;
+          if (n) entityName = n;
+        }
+
+        // 작성자 표시명 (user_profiles.name 우선)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('name')
+            .eq('id', user.id)
+            .maybeSingle();
+          const pn = (profile as { name?: string } | null)?.name;
+          if (pn) authorName = pn;
+        }
+
+        await createVoeInquiry({
+          title: `[Accounting Treatment] ${topicTitle}`,
+          content: newQuestion.trim(),
+          category: 'Closing',
+          entity_name: entityName,
+          author: authorName,
+          direction: 'entity_to_gbs',
+          source_category: topicId,
+          source_quarter_id: null,
+        });
+      } catch (voeErr) {
+        // VOE 동시 등록 실패는 부분 실패로 처리 — 토픽 Q&A 자체는 등록되었음
+        console.warn('VOE 동시 등록 실패 (closing_questions 는 정상 등록됨):', voeErr);
+      }
+
+      toast.success('VOE 문의가 등록되었습니다.', {
+        description: '본사 GBS 팀에 전달되었으며, VOE 페이지에서도 확인할 수 있습니다.',
+      });
       setNewQuestion('');
       loadQuestions();
     } catch (error) {
       console.error('Failed to submit question:', error);
-      toast.error('Failed to submit question');
+      toast.error('문의 등록 실패');
     } finally {
       setSubmitting(false);
     }
@@ -159,7 +219,7 @@ export function ChatDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>💬</span>
-            Closing Questions - {topicTitle}
+            VOE 문의 — {topicTitle}
           </DialogTitle>
         </DialogHeader>
 
@@ -286,7 +346,10 @@ export function ChatDialog({
 
           {/* New Question Form */}
           <div className="border-t pt-4">
-            <h4 className="font-medium mb-2 text-gray-900">New Question:</h4>
+            <h4 className="font-medium mb-1 text-gray-900">New Question</h4>
+            <p className="text-xs text-gray-500 mb-2">
+              등록 시 본사 GBS 팀에게 자동으로 전달되며, <strong>VOE 페이지</strong>에서도 확인할 수 있습니다.
+            </p>
             <Textarea
               value={newQuestion}
               onChange={(e) => setNewQuestion(e.target.value)}
@@ -306,7 +369,7 @@ export function ChatDialog({
                     Submitting...
                   </>
                 ) : (
-                  'Submit Question →'
+                  'VOE로 문의 전송 →'
                 )}
               </Button>
             </div>

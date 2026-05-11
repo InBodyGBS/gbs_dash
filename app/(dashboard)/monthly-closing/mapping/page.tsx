@@ -745,7 +745,7 @@ export default function MappingPage() {
 
       {/* 매핑 편집 다이얼로그 */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editingId ? '매핑 수정' : '매핑 추가'}</DialogTitle>
           </DialogHeader>
@@ -808,10 +808,11 @@ export default function MappingPage() {
                     value={editingMapping.std_code}
                     onValueChange={(code) => setEditingMapping({ ...editingMapping, std_code: code })}
                   >
-                    <SelectTrigger>
+                    {/* min-w-0 + truncate 로 긴 라벨이 트리거를 넘지 않도록 */}
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="P&L Code 선택" />
                     </SelectTrigger>
-                    <SelectContent position="popper" className="max-h-[400px]">
+                    <SelectContent position="popper" className="max-h-[400px] max-w-[600px]">
                       {Array.from(plMasterByCategory.entries()).map(([category, pls]) => (
                           <div key={category}>
                             <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-blue-50 sticky top-0">
@@ -819,8 +820,10 @@ export default function MappingPage() {
                             </div>
                             {pls.map((pl) => (
                               <SelectItem key={pl.pl_code} value={pl.pl_code}>
-                                <span className="font-mono text-xs mr-2">{pl.pl_code}</span>
-                                {pl.pl_line}
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <span className="font-mono text-xs text-gray-500 flex-shrink-0">{pl.pl_code}</span>
+                                  <span className="truncate">{pl.pl_line}</span>
+                                </span>
                               </SelectItem>
                             ))}
                           </div>
@@ -832,10 +835,10 @@ export default function MappingPage() {
                     value={editingMapping.std_code}
                     onValueChange={(code) => setEditingMapping({ ...editingMapping, std_code: code })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="BS Code 선택" />
                     </SelectTrigger>
-                    <SelectContent position="popper" className="max-h-[400px]">
+                    <SelectContent position="popper" className="max-h-[400px] max-w-[600px]">
                       {Array.from(bsMasterByCategory.entries()).map(([category, bss]) => (
                           <div key={category}>
                             <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-green-50 sticky top-0">
@@ -843,9 +846,13 @@ export default function MappingPage() {
                             </div>
                             {bss.map((bs) => (
                               <SelectItem key={bs.bs_code} value={bs.bs_code}>
-                                <span className="font-mono text-xs mr-2">{bs.bs_code}</span>
-                                {bs.bs_line}
-                                {bs.is_contra && <span className="text-xs text-orange-500 ml-1">(차감)</span>}
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <span className="font-mono text-xs text-gray-500 flex-shrink-0">{bs.bs_code}</span>
+                                  <span className="truncate">{bs.bs_line}</span>
+                                  {bs.is_contra && (
+                                    <span className="text-xs text-orange-500 flex-shrink-0">(차감)</span>
+                                  )}
+                                </span>
                               </SelectItem>
                             ))}
                           </div>
@@ -853,12 +860,19 @@ export default function MappingPage() {
                     </SelectContent>
                   </Select>
                 )}
+                {/* 선택된 항목의 풀 라벨을 별도 줄에 표시 — 트리거에서 잘려도 여기서 확인 가능 */}
                 {editingMapping.std_code && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {editingMapping.statement_type === 'BS'
-                      ? bsMaster.find((bs) => bs.bs_code === editingMapping.std_code)?.bs_line || ''
-                      : plMaster.find((pl) => pl.pl_code === editingMapping.std_code)?.pl_line || ''}
-                  </p>
+                  <div className="mt-2 px-3 py-2 rounded-md bg-gray-50 border border-gray-200">
+                    <p className="text-xs text-gray-500 mb-0.5">선택된 표준 계정</p>
+                    <p className="text-sm text-gray-800 break-words">
+                      <span className="font-mono text-xs text-gray-500 mr-2">
+                        {editingMapping.std_code}
+                      </span>
+                      {editingMapping.statement_type === 'BS'
+                        ? bsMaster.find((bs) => bs.bs_code === editingMapping.std_code)?.bs_line || ''
+                        : plMaster.find((pl) => pl.pl_code === editingMapping.std_code)?.pl_line || ''}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>

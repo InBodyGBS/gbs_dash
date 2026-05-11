@@ -29,6 +29,7 @@ import {
   Clock,
   RefreshCw,
   Trash2,
+  Info,
 } from 'lucide-react';
 import {
   uploadTBFile,
@@ -362,10 +363,19 @@ export default function UploadPage() {
   return (
     <div className="h-full flex flex-col max-w-7xl mx-auto py-6 overflow-y-auto">
       {/* Header */}
-      <div className="flex-shrink-0 mb-6">
+      <div className="flex-shrink-0 mb-4">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Trial Balance Upload</h1>
         <p className="text-gray-600">
           해외법인의 Trial Balance 파일을 업로드하여 월별 마감 자료를 제출합니다.
+        </p>
+      </div>
+
+      {/* 업로드 규칙 안내 배너 — TB 추출 기간 가이드 */}
+      <div className="flex-shrink-0 mb-6 flex items-start gap-3 px-4 py-3 rounded-lg border border-blue-200 bg-blue-50">
+        <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-blue-900 leading-relaxed">
+          해당 연도의 <span className="font-semibold">1월 1일 ~ 기준 시점</span>까지의
+          Trial Balance 를 업로드해 주세요.
         </p>
       </div>
 
