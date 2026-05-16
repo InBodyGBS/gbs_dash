@@ -580,16 +580,18 @@ export default function CalendarTPage() {
                       )}
                     </div>
 
-                    {/* Submission badges */}
+                    {/* Submission badges — '제출완료' 표시. 카테고리명을 메인으로,
+                        법인명은 보조(여러 법인이 같은 날 같은 카테고리를 제출했을 때 구분용)로 표시. */}
                     {daySubs.length > 0 && (
                       <div className="mt-0.5 space-y-0.5">
                         {daySubs.slice(0, 2).map((sub, i) => (
                           <div
                             key={i}
                             className="text-[10px] leading-tight px-1 py-0.5 rounded truncate bg-green-100 text-green-700"
-                            title={`${sub.subsidiaryName} — ${sub.category}`}
+                            title={`✓ 제출: ${sub.category} — ${sub.subsidiaryName}`}
                           >
-                            ↑ {sub.subsidiaryName}
+                            ✓ {sub.category}
+                            <span className="ml-1 text-green-600/70">· {sub.subsidiaryName}</span>
                           </div>
                         ))}
                         {daySubs.length > 2 && (
@@ -745,11 +747,11 @@ export default function CalendarTPage() {
                     </p>
                   )}
 
-                  {/* Submission log for this date */}
+                  {/* Submission log for this date — 카테고리를 메인, 법인명은 보조로 */}
                   {submissionsOnSelected.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                        제출 내역
+                        ✓ 제출 내역
                       </p>
                       <div className="space-y-1.5">
                         {submissionsOnSelected.map((sub, i) => (
@@ -761,9 +763,9 @@ export default function CalendarTPage() {
                               className="h-2 w-2 rounded-full mt-0.5 flex-shrink-0"
                               style={{ backgroundColor: sub.color }}
                             />
-                            <div>
-                              <div className="font-semibold text-green-800">{sub.subsidiaryName}</div>
-                              <div className="text-green-600">{sub.category}</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-green-800 truncate">{sub.category}</div>
+                              <div className="text-green-600/80">{sub.subsidiaryName}</div>
                             </div>
                           </div>
                         ))}

@@ -28,9 +28,29 @@ interface SubmissionListProps {
   quarterId?: string | null;
   subsidiaryId?: string | null;
   fiscalYear?: string | null;
+  /** 귀속(결산) 월 — 같은 분기 안에서 해당 결산월에 해당하는 제출만 보이도록 시간 윈도우 필터 */
+  closingMonth?: string | null;
   onSubmissionClick?: (submission: Submission) => void;
   refreshKey?: number;
   onDeleteSuccess?: () => void;
+}
+
+/**
+ * 귀속(결산) 월에 해당하는 제출 시간 윈도우.
+ *   - 시작: 귀속월 25일 00:00
+ *   - 끝:   귀속월 다음 캘린더월 말일 23:59:59
+ * 같은 분기 내에서도 결산월별로 제출 시점을 명확히 구분.
+ */
+function getSubmissionWindow(year: number, attributionMonth: number): { start: Date; end: Date } {
+  let am = attributionMonth;
+  let ay = year;
+  if (am === 0) {
+    am = 12;
+    ay = year - 1;
+  }
+  const start = new Date(ay, am - 1, 25, 0, 0, 0, 0);
+  const end = new Date(ay, am + 1, 0, 23, 59, 59, 999); // monthIndex am+1의 0일 = 다음 캘린더월 말일
+  return { start, end };
 }
 
 const getErrorMessage = (error: unknown): string => {
@@ -44,6 +64,7 @@ export function SubmissionList({
   quarterId,
   subsidiaryId,
   fiscalYear,
+  closingMonth,
   onSubmissionClick,
   refreshKey = 0,
   onDeleteSuccess,
@@ -59,13 +80,29 @@ export function SubmissionList({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, selectedCategory, quarterId, subsidiaryId]);
+  }, [refreshKey, selectedCategory, quarterId, subsidiaryId, closingMonth, fiscalYear]);
 
   const loadSubmissions = async () => {
     try {
       setLoading(true);
       const data = await getSubmissions(selectedCategory, quarterId, subsidiaryId, fiscalYear ?? null);
-      setSubmissions(data);
+
+      // 같은 분기(quarter) 내에서 결산월별로 구분: 귀속월 시간 윈도우(25일 ~ 다음달 말일)에 들어온 것만 노출
+      const monthNum = closingMonth ? parseInt(closingMonth, 10) : NaN;
+      const yearNum = fiscalYear ? parseInt(fiscalYear, 10) : NaN;
+      const filtered =
+        Number.isFinite(monthNum) && Number.isFinite(yearNum)
+          ? (() => {
+              const win = getSubmissionWindow(yearNum, monthNum);
+              return data.filter((s) => {
+                const ts = s.submitted_at ? new Date(s.submitted_at).getTime() : NaN;
+                if (!Number.isFinite(ts)) return false;
+                return ts >= win.start.getTime() && ts <= win.end.getTime();
+              });
+            })()
+          : data;
+
+      setSubmissions(filtered);
     } catch (error: unknown) {
       console.error('Failed to load submissions:', error);
       toast.error('제출 목록 로드 실패', {

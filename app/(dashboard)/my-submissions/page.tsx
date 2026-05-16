@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
-import { Download, FileSpreadsheet, RefreshCw, Lock } from 'lucide-react';
+import { Download, RefreshCw, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -258,7 +258,7 @@ export default function MySubmissionsPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
-      <div className="max-w-[1600px] mx-auto px-6 py-6 space-y-6">
+      <div className="w-full px-4 py-5 space-y-5">
         <header className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">My Submissions</h1>
@@ -450,17 +450,17 @@ function SubmissionsMatrix({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0 text-sm">
+      <table className="w-full border-separate border-spacing-0 text-sm table-fixed">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-white text-left px-3 py-2 border-b border-r border-gray-200 min-w-[180px]">
+            <th className="sticky left-0 z-10 bg-white text-left px-2 py-2 border-b border-r border-gray-200 w-[140px]">
               Category
             </th>
             {MONTHS.map((m) => (
               <th
                 key={m}
                 className={cn(
-                  'px-2 py-2 border-b border-gray-200 text-center font-medium text-gray-700 min-w-[120px]',
+                  'px-1.5 py-2 border-b border-gray-200 text-center font-medium text-gray-700',
                   isQuarterEndMonth(m) && 'bg-blue-50',
                 )}
               >
@@ -530,12 +530,12 @@ function SubmissionsMatrix({
                           }
                         }}
                         title={`${cat.label} · ${m}월 제출 페이지로 이동`}
-                        className="w-full h-full px-2 py-2 text-left cursor-pointer hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="w-full h-full px-1.5 py-1.5 text-left cursor-pointer hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         <CellContent cell={cell} onDownload={onDownload} />
                       </div>
                     ) : (
-                      <div className="px-2 py-2 text-center text-[11px] text-gray-300">—</div>
+                      <div className="px-1.5 py-1.5 text-center text-[11px] text-gray-300">—</div>
                     )}
                   </td>
                 );
@@ -585,6 +585,30 @@ function CellContent({
           : `D+${Math.abs(cell.daysToDue)}`;
   const category = getCategoryById(cell.category);
 
+  // 실제 제출일 vs 마감일 비교 — 적시/지연 판정 + 지연 일수
+  let submittedDateLabel: string | null = null;
+  let isLateSubmission = false;
+  let lateDays = 0;
+  if (cell.latestSubmission?.submitted_at) {
+    const submittedDate = new Date(cell.latestSubmission.submitted_at);
+    submittedDateLabel = format(submittedDate, 'MM/dd');
+    if (cell.dueDate) {
+      // 마감일 23:59:59 까지를 '적시' 로 간주 (당일 제출 OK)
+      const due = parseISO(cell.dueDate);
+      due.setHours(23, 59, 59, 999);
+      isLateSubmission = submittedDate.getTime() > due.getTime();
+      if (isLateSubmission) {
+        // 마감일 0시 기준으로 며칠 늦었는지 계산 (D+N)
+        const dueStart = parseISO(cell.dueDate);
+        dueStart.setHours(0, 0, 0, 0);
+        const submittedStart = new Date(submittedDate);
+        submittedStart.setHours(0, 0, 0, 0);
+        const diffMs = submittedStart.getTime() - dueStart.getTime();
+        lateDays = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       <Badge
@@ -598,12 +622,43 @@ function CellContent({
         {meta.label}
         {dDay && cell.status !== 'submitted' && cell.status !== 'none' ? ` · ${dDay}` : ''}
       </Badge>
-      <div className="text-[11px] text-gray-600">
-        마감 <span className="font-medium text-gray-800">{dueLabel}</span>
-        {cell.dueDate && cell.dueConfirmed && (
-          <span className="ml-1 text-blue-700">✓확정</span>
-        )}
-      </div>
+      {/* 제출 완료 셀: 실제 제출일 + 적시/지연 라벨 (지연 시 D+N) */}
+      {cell.status === 'submitted' && submittedDateLabel ? (
+        <div className="text-[11px]">
+          <span
+            className={cn(
+              'font-medium',
+              isLateSubmission ? 'text-orange-700' : 'text-gray-700',
+            )}
+          >
+            {isLateSubmission ? '지연마감' : '마감'}
+          </span>
+          <span
+            className={cn(
+              'ml-1 font-medium',
+              isLateSubmission ? 'text-orange-700' : 'text-gray-800',
+            )}
+          >
+            {submittedDateLabel}
+          </span>
+          {isLateSubmission && (
+            <span
+              className="ml-1 inline-flex items-center px-1 py-0 rounded text-[10px] font-bold bg-orange-100 text-orange-700"
+              title={`마감일 ${dueLabel} 대비 ${lateDays}일 지연`}
+            >
+              D+{lateDays}
+            </span>
+          )}
+        </div>
+      ) : (
+        /* 그 외 셀: 마감일만 표시 */
+        <div className="text-[11px] text-gray-600">
+          마감 <span className="font-medium text-gray-800">{dueLabel}</span>
+          {cell.dueDate && cell.dueConfirmed && (
+            <span className="ml-1 text-blue-700">✓확정</span>
+          )}
+        </div>
+      )}
       {cell.latestSubmission ? (
         <button
           type="button"
@@ -611,14 +666,12 @@ function CellContent({
             e.stopPropagation();
             onDownload(cell);
           }}
-          className="group flex items-start gap-1 text-left"
-          title={`다운로드: ${cell.latestSubmission.file_name}`}
+          className="group inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded px-1.5 py-0.5 transition-colors"
+          title={`최신 파일 다운로드 (v${cell.latestSubmission.version ?? 1})`}
+          aria-label="최신 제출 파일 다운로드"
         >
-          <FileSpreadsheet className="h-3.5 w-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
-          <span className="text-[11px] text-gray-700 group-hover:text-blue-700 group-hover:underline truncate max-w-[120px]">
-            {cell.latestSubmission.file_name}
-          </span>
-          <Download className="h-3 w-3 text-gray-400 group-hover:text-blue-700 flex-shrink-0 mt-0.5" />
+          <Download className="h-3.5 w-3.5" />
+          <span className="text-[11px] font-medium">다운로드</span>
         </button>
       ) : (
         <div className="text-[11px] text-gray-400">

@@ -417,6 +417,7 @@ function SubmissionPageInner() {
             quarterId={quarter?.id || null}
             subsidiaryId={selectedSubsidiaryId !== 'all' ? selectedSubsidiaryId : null}
             fiscalYear={selectedYear}
+            closingMonth={selectedMonth}
             onSubmissionClick={handleSubmissionClick}
             refreshKey={refreshKey}
             onDeleteSuccess={handleDeleteSuccess}

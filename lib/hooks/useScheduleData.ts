@@ -15,6 +15,7 @@ import {
   getCategoryById,
   getClosingCategoriesForMonth,
 } from '@/lib/constants/closing-categories';
+import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { Quarter, ScheduleItem, DocumentSubmission } from '@/lib/types/quarterly-closing';
 
@@ -252,11 +253,24 @@ export function useScheduleData() {
       console.log('✅ 최종 quarterData:', quarterData);
       setQuarter(quarterData);
 
-      // Subsidiaries
-      const { data: subsData, error: subsError } = await supabase
+      // Subsidiaries — entity_user 면 본인 담당 법인만, gbs_admin/미부여는 전체
+      const roleInfo = await getCurrentUserRoleInfo();
+      let subsQuery = supabase
         .from('subsidiaries')
         .select('*')
         .order('name');
+
+      if (!roleInfo.canSeeAll) {
+        // entity_user: 본인 entity_code 목록으로 필터
+        if (roleInfo.entityCodes.length === 0) {
+          // 담당 법인이 없으면 강제로 빈 결과
+          subsQuery = subsQuery.in('code', ['__no_entity__']);
+        } else {
+          subsQuery = subsQuery.in('code', roleInfo.entityCodes);
+        }
+      }
+
+      const { data: subsData, error: subsError } = await subsQuery;
 
       if (subsError) throw subsError;
 
@@ -453,10 +467,35 @@ export function useScheduleData() {
 
         setSubmissions(mergedSubmissions);
       } else {
+        // entity_user 면 schedule_items / document_submissions 도 본인 법인만 필터
+        const allowedSubIds = orderedSubsidiaries.map((s) => s.id);
+        const buildScheduleItemsQuery = () => {
+          let q = supabase.from('schedule_items').select('*').eq('quarter_id', quarterData.id);
+          if (!roleInfo.canSeeAll) {
+            if (allowedSubIds.length === 0) {
+              q = q.in('subsidiary_id', ['00000000-0000-0000-0000-000000000000']);
+            } else {
+              q = q.in('subsidiary_id', allowedSubIds);
+            }
+          }
+          return q;
+        };
+        const buildDocumentSubmissionsQuery = () => {
+          let q = supabase.from('document_submissions').select('*').eq('quarter_id', quarterData.id);
+          if (!roleInfo.canSeeAll) {
+            if (allowedSubIds.length === 0) {
+              q = q.in('subsidiary_id', ['00000000-0000-0000-0000-000000000000']);
+            } else {
+              q = q.in('subsidiary_id', allowedSubIds);
+            }
+          }
+          return q;
+        };
+
         const [itemsResult, documentSubmissionsResult, submissionsResult, preliminarySalesSGAResult] =
           await Promise.all([
-            supabase.from('schedule_items').select('*').eq('quarter_id', quarterData.id),
-            supabase.from('document_submissions').select('*').eq('quarter_id', quarterData.id),
+            buildScheduleItemsQuery(),
+            buildDocumentSubmissionsQuery(),
             submissionsQuery ?? Promise.resolve({ data: [], error: null }),
             preliminarySalesSGAQuery ?? Promise.resolve({ data: [], error: null }),
           ]);

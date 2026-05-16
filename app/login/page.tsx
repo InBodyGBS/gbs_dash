@@ -13,8 +13,6 @@ import Link from 'next/link';
 import {
   Building2,
   Loader2,
-  ChevronDown,
-  ChevronUp,
   Calendar,
   Upload,
   BookOpen,
@@ -25,6 +23,7 @@ import {
   ShieldCheck,
   User,
   Users,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +32,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 import { supabase } from '@/lib/supabase/client';
 import { signInWithEmail, signUp } from '@/lib/auth';
@@ -150,63 +155,85 @@ function LoginPageInner() {
   if (checking) return <LoadingScreen />;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 px-6 py-10">
-      <div className="w-full max-w-6xl">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 px-6 py-12">
+      <div className="w-full max-w-xl">
         {/* 우측 상단 — KR/EN 토글 */}
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-end mb-6">
           <LanguageToggle />
         </div>
 
-        {/* 로고/타이틀 */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Building2 className="h-10 w-10" style={{ color: '#971B2F' }} />
-            <span className="text-3xl font-bold text-gray-900 tracking-tight">
+        {/* 로고/타이틀 + 정보 버튼 */}
+        <div className="flex flex-col items-center mb-10">
+          <div className="flex items-center gap-4 mb-3">
+            <Building2 className="h-12 w-12" style={{ color: '#971B2F' }} />
+            <span className="text-4xl font-bold text-gray-900 tracking-tight">
               <BrandName />
             </span>
+            <AboutInfoButton />
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="text-base text-gray-500">
             <BrandTagline />
           </p>
         </div>
 
-        {/* 본문 — 데스크톱: 좌(로그인) + 우(소개) / 모바일: 세로 스택 */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-start">
-          {/* 좌측 (2/5): 로그인/회원가입 */}
-          <Card className="md:col-span-2 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">계정으로 계속하기 / Continue</CardTitle>
-              <CardDescription className="text-xs">
-                회사 이메일을 사용해 주세요. 신규 가입 후 GBS 관리자의 승인이 있어야 정상 사용이 가능합니다.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-                <TabsList className="grid grid-cols-2 w-full">
-                  <TabsTrigger value="signin">로그인</TabsTrigger>
-                  <TabsTrigger value="signup">회원가입</TabsTrigger>
-                </TabsList>
-                <TabsContent value="signin" className="mt-4">
-                  <SignInForm onSuccess={() => router.replace(redirect)} />
-                </TabsContent>
-                <TabsContent value="signup" className="mt-4">
-                  <SignUpForm onSuccess={() => setTab('signin')} />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+        {/* 로그인/회원가입 카드 — 가운데 정렬 */}
+        <Card className="shadow-md">
+          <CardHeader className="pb-4 pt-6 px-8">
+            <CardTitle className="text-xl">계정으로 계속하기 / Continue</CardTitle>
+            <CardDescription className="text-sm mt-1.5">
+              회사 이메일을 사용해 주세요. 신규 가입 후 GBS 관리자의 승인이 있어야 정상 사용이 가능합니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-8 pb-8">
+            <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+              <TabsList className="grid grid-cols-2 w-full h-11">
+                <TabsTrigger value="signin" className="text-sm">로그인</TabsTrigger>
+                <TabsTrigger value="signup" className="text-sm">회원가입</TabsTrigger>
+              </TabsList>
+              <TabsContent value="signin" className="mt-6">
+                <SignInForm onSuccess={() => router.replace(redirect)} />
+              </TabsContent>
+              <TabsContent value="signup" className="mt-6">
+                <SignUpForm onSuccess={() => setTab('signin')} />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
 
-          {/* 우측 (3/5): 이 대시보드란? */}
-          <div className="md:col-span-3">
-            <AboutCard />
-          </div>
-        </div>
-
-        <p className="text-center text-xs text-gray-400 mt-8">
+        <p className="text-center text-sm text-gray-400 mt-8">
           © 2026 InBody Co., Ltd.
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * 브랜드명 옆에 표시되는 작은 정보 버튼 — 클릭 시 "이 대시보드란?" 다이얼로그를 띄운다.
+ */
+function AboutInfoButton() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full p-1.5 transition-colors"
+        title={t('about.title')}
+        aria-label={t('about.title')}
+      >
+        <Info className="h-6 w-6" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg">{t('about.title')}</DialogTitle>
+          </DialogHeader>
+          <AboutContent />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -223,13 +250,12 @@ function BrandTagline() {
 // -----------------------------------------------------------------------------
 
 /**
- * 로그인 페이지 우측의 "이 대시보드란?" 소개 카드.
+ * 다이얼로그 안에 들어가는 "이 대시보드란?" 컨텐츠.
  * - 법인 담당자 / GBS 팀 두 관점으로 구성
- * - 색감 톤: 슬레이트 베이스 + 섹션별 단일 액센트 (User=indigo, Admin=brand red)
+ * - 색감 톤: 슬레이트 베이스 + 섹션별 단일 액센트 (User=slate, Admin=brand red)
  */
-function AboutCard() {
+function AboutContent() {
   const t = useT();
-  const [open, setOpen] = useState(true);
 
   const userBullets = [
     { Icon: Calendar,       titleKey: 'about.user.1.title',  descKey: 'about.user.1.desc'  },
@@ -272,66 +298,48 @@ function AboutCard() {
   );
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors text-left"
-        aria-expanded={open}
-      >
-        <span className="text-base font-semibold text-slate-900">{t('about.title')}</span>
-        {open ? (
-          <ChevronUp className="w-4 h-4 text-slate-400" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-slate-400" />
-        )}
-      </button>
+    <div>
+      {/* 한 줄 요약 */}
+      <p className="text-sm text-slate-600 leading-relaxed mb-5">
+        {t('about.summary')}
+      </p>
 
-      {open && (
-        <div className="px-5 pb-5 pt-2 border-t border-slate-100">
-          {/* 한 줄 요약 */}
-          <p className="text-sm text-slate-600 leading-relaxed mb-5 mt-3">
-            {t('about.summary')}
+      {/* 법인 담당자 관점 — 슬레이트 톤 */}
+      <section className="mb-5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-100 text-slate-700">
+            <User className="w-3.5 h-3.5" />
+          </div>
+          <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            {t('about.user.heading')}
           </p>
-
-          {/* 법인 담당자 관점 — 슬레이트/인디고 톤 */}
-          <section className="mb-5">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-100 text-slate-700">
-                <User className="w-3.5 h-3.5" />
-              </div>
-              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                {t('about.user.heading')}
-              </p>
-            </div>
-            {renderBullets(userBullets, {
-              iconBg: '#F1F5F9',  // slate-100
-              iconColor: '#475569', // slate-600
-            })}
-          </section>
-
-          <div className="border-t border-slate-100 my-4" />
-
-          {/* GBS 팀 관점 — 브랜드 InBody Red 액센트 */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: '#FBE8EC', color: '#971B2F' }}
-              >
-                <Users className="w-3.5 h-3.5" />
-              </div>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#7A1626' }}>
-                {t('about.admin.heading')}
-              </p>
-            </div>
-            {renderBullets(adminBullets, {
-              iconBg: '#FBE8EC',  // 옅은 브랜드 레드
-              iconColor: '#971B2F', // InBody Red
-            })}
-          </section>
         </div>
-      )}
+        {renderBullets(userBullets, {
+          iconBg: '#F1F5F9',
+          iconColor: '#475569',
+        })}
+      </section>
+
+      <div className="border-t border-slate-100 my-4" />
+
+      {/* GBS 팀 관점 — 브랜드 InBody Red 액센트 */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center"
+            style={{ backgroundColor: '#FBE8EC', color: '#971B2F' }}
+          >
+            <Users className="w-3.5 h-3.5" />
+          </div>
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#7A1626' }}>
+            {t('about.admin.heading')}
+          </p>
+        </div>
+        {renderBullets(adminBullets, {
+          iconBg: '#FBE8EC',
+          iconColor: '#971B2F',
+        })}
+      </section>
     </div>
   );
 }
@@ -369,9 +377,9 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="signin-email" className="text-xs">이메일</Label>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="signin-email" className="text-sm">이메일</Label>
         <Input
           id="signin-email"
           type="email"
@@ -381,10 +389,11 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => setEmail(e.target.value)}
           disabled={submitting}
           required
+          className="h-11 text-sm"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="signin-password" className="text-xs">비밀번호</Label>
+      <div className="space-y-2">
+        <Label htmlFor="signin-password" className="text-sm">비밀번호</Label>
         <Input
           id="signin-password"
           type="password"
@@ -393,6 +402,7 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => setPassword(e.target.value)}
           disabled={submitting}
           required
+          className="h-11 text-sm"
         />
       </div>
 
@@ -400,35 +410,35 @@ function SignInForm({ onSuccess }: { onSuccess: () => void }) {
       {errorInfo && (
         <div
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+          className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
         >
           <p className="font-semibold mb-1">{errorInfo.title}</p>
-          <pre className="whitespace-pre-wrap font-sans text-[11px] text-red-700 leading-snug">
+          <pre className="whitespace-pre-wrap font-sans text-xs text-red-700 leading-snug">
             {errorInfo.detail}
           </pre>
         </div>
       )}
 
       {/* 로그인 정보 저장 (Remember me) */}
-      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+      <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
         <input
           type="checkbox"
           checked={remember}
           onChange={(e) => setRemember(e.target.checked)}
           disabled={submitting}
-          className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
         />
         <span>로그인 정보 저장 (30일간 유지)</span>
       </label>
 
-      <Button type="submit" className="w-full" disabled={submitting}>
+      <Button type="submit" className="w-full h-11 text-sm" disabled={submitting}>
         {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
         로그인
       </Button>
-      <div className="text-center">
+      <div className="text-center pt-1">
         <Link
           href="/reset-password"
-          className="text-xs text-gray-600 hover:text-blue-700 hover:underline"
+          className="text-sm text-gray-600 hover:text-blue-700 hover:underline"
         >
           비밀번호를 잊으셨나요?
         </Link>
@@ -474,9 +484,9 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="signup-email" className="text-xs">이메일 (아이디)</Label>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="signup-email" className="text-sm">이메일 (아이디)</Label>
         <Input
           id="signup-email"
           type="email"
@@ -486,10 +496,11 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => setEmail(e.target.value)}
           disabled={submitting}
           required
+          className="h-11 text-sm"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="signup-password" className="text-xs">비밀번호 (6자 이상)</Label>
+      <div className="space-y-2">
+        <Label htmlFor="signup-password" className="text-sm">비밀번호 (6자 이상)</Label>
         <Input
           id="signup-password"
           type="password"
@@ -499,10 +510,11 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           disabled={submitting}
           required
           minLength={6}
+          className="h-11 text-sm"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="signup-name" className="text-xs">이름</Label>
+      <div className="space-y-2">
+        <Label htmlFor="signup-name" className="text-sm">이름</Label>
         <Input
           id="signup-name"
           type="text"
@@ -511,10 +523,11 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => setName(e.target.value)}
           disabled={submitting}
           required
+          className="h-11 text-sm"
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="signup-team" className="text-xs">팀/법인 (선택)</Label>
+      <div className="space-y-2">
+        <Label htmlFor="signup-team" className="text-sm">팀/법인 (선택)</Label>
         <Input
           id="signup-team"
           type="text"
@@ -522,9 +535,10 @@ function SignUpForm({ onSuccess }: { onSuccess: () => void }) {
           value={team}
           onChange={(e) => setTeam(e.target.value)}
           disabled={submitting}
+          className="h-11 text-sm"
         />
       </div>
-      <Button type="submit" className="w-full" disabled={submitting}>
+      <Button type="submit" className="w-full h-11 text-sm" disabled={submitting}>
         {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
         가입하기
       </Button>

@@ -1010,11 +1010,19 @@ export async function getMySubmissionsOverview(
       version: r.version ?? 1,
       submitted_at: r.submitted_at,
     };
-    if (
-      !cell.latestSubmission ||
-      new Date(candidate.submitted_at).getTime() > new Date(cell.latestSubmission.submitted_at).getTime()
-    ) {
+    if (!cell.latestSubmission) {
       cell.latestSubmission = candidate;
+    } else {
+      // 최신 판정: submitted_at 우선, 같으면 version 큰 쪽이 최신
+      const candTs = new Date(candidate.submitted_at).getTime();
+      const currTs = new Date(cell.latestSubmission.submitted_at).getTime();
+      const candVer = candidate.version ?? 1;
+      const currVer = cell.latestSubmission.version ?? 1;
+      const shouldReplace =
+        candTs > currTs || (candTs === currTs && candVer > currVer);
+      if (shouldReplace) {
+        cell.latestSubmission = candidate;
+      }
     }
   }
 

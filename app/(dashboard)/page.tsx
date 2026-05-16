@@ -8,7 +8,6 @@ import {
   Megaphone,
   MessageSquare,
   ChevronRight,
-  ListChecks,
   Clock,
   CheckCircle2,
   AlertTriangle,
@@ -24,7 +23,7 @@ import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 import { getPendingUserCount } from '@/lib/services/userManagementService';
 import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
 import { useT } from '@/lib/contexts/LanguageContext';
-import type { VoeInquiry, VoeStatus } from '@/lib/types/voe';
+import type { VoeInquiry } from '@/lib/types/voe';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * 두 가지 뷰 모델
@@ -61,12 +60,6 @@ interface EntityProgress {
   /** 가장 가까운 미제출 마감의 D-day. 없으면 null */
   earliestPendingDday: number | null;
 }
-
-const VOE_STATUS_STYLES: Record<VoeStatus, { bg: string; text: string }> = {
-  Pending:       { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-  'In Progress': { bg: 'bg-blue-100',   text: 'text-blue-700'   },
-  Resolved:      { bg: 'bg-green-100',  text: 'text-green-700'  },
-};
 
 /** D-day 계산 (오늘 기준) */
 function calcDday(plannedDate: string): { label: string; tone: 'urgent' | 'soon' | 'normal' } {
@@ -123,7 +116,6 @@ export default function DashboardPage() {
   const [userDeadlines, setUserDeadlines] = useState<UserDeadline[]>([]);
   const [adminDeadlines, setAdminDeadlines] = useState<AdminDeadline[]>([]);
   const [entityProgress, setEntityProgress] = useState<EntityProgress[]>([]);
-  const [taskList, setTaskList] = useState<VoeInquiry[]>([]);
   /** admin 전용 — 승인 대기 사용자 수 */
   const [pendingUserCount, setPendingUserCount] = useState<number>(0);
   /** 모든 사용자 — 마지막 VOE 방문 이후 새 답변/문의 수 */
@@ -140,6 +132,8 @@ export default function DashboardPage() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const in15Days = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      // 과거 지연 항목 추적용 — 90일 이전까지 거슬러 올라가서 미제출 건을 찾는다
+      const past90Days = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       // ── 권한 조회
@@ -190,15 +184,32 @@ export default function DashboardPage() {
         .select('id', { count: 'exact', head: true })
         .gte('created_at', last7Days);
 
-      // ── 2) schedule_items 조회 (15일 이내, status='planned')
-      let upcomingListQuery = supabase
+      // ── 2-a) Upcoming Deadlines 카운트 (Stat 카드용) — 15일 이내만
+      let upcomingCountQuery = supabase
         .from('schedule_items')
-        .select('id, planned_date, category, subsidiary_id, quarter_id', { count: 'exact' })
+        .select('id', { count: 'exact', head: true })
         .eq('status', 'planned')
         .gte('planned_date', today)
+        .lte('planned_date', in15Days);
+
+      if (isUserMode) {
+        if (!allowedSubsidiaryIds || allowedSubsidiaryIds.length === 0) {
+          upcomingCountQuery = upcomingCountQuery.in('subsidiary_id', ['00000000-0000-0000-0000-000000000000']);
+        } else {
+          upcomingCountQuery = upcomingCountQuery.in('subsidiary_id', allowedSubsidiaryIds);
+        }
+      }
+
+      // ── 2-b) 리스트 데이터 — 90일 전부터 15일 후까지 (과거 지연 추적용)
+      //   user 뷰에서는 과거 미제출 = '지연' 항목을 자동으로 노출하기 위해 범위 확장
+      let upcomingListQuery = supabase
+        .from('schedule_items')
+        .select('id, planned_date, category, subsidiary_id, quarter_id')
+        .eq('status', 'planned')
+        .gte('planned_date', past90Days)
         .lte('planned_date', in15Days)
         .order('planned_date', { ascending: true })
-        .limit(200);
+        .limit(500);
 
       if (isUserMode) {
         if (!allowedSubsidiaryIds || allowedSubsidiaryIds.length === 0) {
@@ -208,8 +219,9 @@ export default function DashboardPage() {
         }
       }
 
-      const [announcementsResult, upcomingListResult, voeResult] = await Promise.all([
+      const [announcementsResult, upcomingCountResult, upcomingListResult, voeResult] = await Promise.all([
         announcementsQuery,
+        upcomingCountQuery,
         upcomingListQuery,
         getVoeInquiries().catch(() => []),
       ]);
@@ -277,26 +289,35 @@ export default function DashboardPage() {
 
       if (isUserMode) {
         // ── User 뷰: 각 schedule_item 마다 본인 제출 상태 표기
-        const enriched: UserDeadline[] = scheduleRows.map((r) => {
-          const cat = CLOSING_CATEGORIES.find((c) => c.id === r.category);
-          const submitted = isSubmittedInWindow(r.quarter_id!, r.subsidiary_id, r.category, r.planned_date);
-          const [py, pm, pd] = r.planned_date.split('-').map(Number);
-          const planned = new Date(py, pm - 1, pd);
-          const isOverdue = !submitted && planned.getTime() < todayDateOnly.getTime();
-          const status: UserDeadline['status'] = submitted
-            ? 'submitted'
-            : isOverdue
-              ? 'overdue'
-              : 'pending';
-          return {
-            id: r.id,
-            planned_date: r.planned_date,
-            category: r.category,
-            categoryLabel: cat?.label || r.category,
-            categoryColor: cat?.color || '#9CA3AF',
-            status,
-          };
-        });
+        //   - 미래 일정 (planned_date >= today): 모두 노출 (제출 / 미제출 모두)
+        //   - 과거 일정 (planned_date < today): "미제출 = 지연"인 것만 노출 (이미 제출한 과거 건은 화면에서 제외)
+        const enriched: UserDeadline[] = scheduleRows
+          .map((r) => {
+            const cat = CLOSING_CATEGORIES.find((c) => c.id === r.category);
+            const submitted = isSubmittedInWindow(r.quarter_id!, r.subsidiary_id, r.category, r.planned_date);
+            const [py, pm, pd] = r.planned_date.split('-').map(Number);
+            const planned = new Date(py, pm - 1, pd);
+            const isPast = planned.getTime() < todayDateOnly.getTime();
+            const isOverdue = !submitted && isPast;
+            const status: UserDeadline['status'] = submitted
+              ? 'submitted'
+              : isOverdue
+                ? 'overdue'
+                : 'pending';
+            return {
+              id: r.id,
+              planned_date: r.planned_date,
+              category: r.category,
+              categoryLabel: cat?.label || r.category,
+              categoryColor: cat?.color || '#9CA3AF',
+              status,
+              _isPast: isPast,
+            } as UserDeadline & { _isPast: boolean };
+          })
+          // 과거 항목 중 지연(미제출)만 통과, 미래는 모두 통과
+          .filter((d) => !d._isPast || d.status === 'overdue')
+          .map(({ _isPast: _isPastIgnored, ...rest }) => rest);
+
         // 같은 카테고리/날짜 중복 제거 (사용자가 여러 법인 담당이면 중복 가능)
         const dedup = new Map<string, UserDeadline>();
         enriched.forEach((d) => {
@@ -306,7 +327,13 @@ export default function DashboardPage() {
           const order = { overdue: 3, pending: 2, submitted: 1 } as const;
           if (!prev || order[d.status] > order[prev.status]) dedup.set(k, d);
         });
-        setUserDeadlines(Array.from(dedup.values()).slice(0, 30));
+        // 정렬: 지연(과거)을 최상단에, 그 다음 미래 일정 시간순
+        const sorted = Array.from(dedup.values()).sort((a, b) => {
+          if (a.status === 'overdue' && b.status !== 'overdue') return -1;
+          if (b.status === 'overdue' && a.status !== 'overdue') return 1;
+          return a.planned_date.localeCompare(b.planned_date);
+        });
+        setUserDeadlines(sorted.slice(0, 30));
         setAdminDeadlines([]);
         setEntityProgress([]);
       } else {
@@ -456,10 +483,9 @@ export default function DashboardPage() {
 
       setStats({
         announcements: announcementsResult.count || 0,
-        upcoming: upcomingListResult.count || 0,
+        upcoming: upcomingCountResult.count || 0,
         pendingVoe: pendingTasks.length,
       });
-      setTaskList(pendingTasks.slice(0, 10));
       setLastRefreshed(new Date());
     } catch (err) {
       console.error('Dashboard load error:', err);
@@ -633,8 +659,9 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 하단 위젯 — admin: Entity Progress / user: Tasks(VOE) */}
-            {viewMode === 'admin' ? (
+            {/* 하단 위젯 — admin 전용 Entity Progress.
+                entity_user 는 Tasks 위젯 표시하지 않음 (Upcoming Deadlines 가 우측 컬럼 전체 차지) */}
+            {viewMode === 'admin' && (
               <div className="bg-white rounded-xl border border-gray-200 flex flex-col flex-1 min-h-0">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 flex-shrink-0">
                   <div className="flex items-center gap-2 min-w-0">
@@ -667,67 +694,6 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col flex-1 min-h-0">
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 flex-shrink-0">
-                  <div className="flex items-center gap-2">
-                    <ListChecks className="w-4 h-4 text-yellow-500" />
-                    <h3 className="font-semibold text-gray-900">{t('dashboard.tasks')}</h3>
-                    {stats.pendingVoe > 0 && (
-                      <span className="text-xs text-gray-400">({stats.pendingVoe})</span>
-                    )}
-                  </div>
-                  <Link
-                    href="/voe"
-                    className="flex items-center gap-0.5 text-xs text-blue-600 hover:underline"
-                  >
-                    View All <ChevronRight className="w-3 h-3" />
-                  </Link>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  {loading ? (
-                    <div className="p-3 space-y-2">
-                      {[...Array(4)].map((_, i) => (
-                        <div key={i} className="h-7 bg-gray-100 rounded animate-pulse" />
-                      ))}
-                    </div>
-                  ) : taskList.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-gray-400 text-base px-4 text-center">
-                      미완료 작업이 없습니다.
-                    </div>
-                  ) : (
-                    <ul className="divide-y divide-gray-50">
-                      {taskList.map((item) => {
-                        const s = VOE_STATUS_STYLES[item.status];
-                        return (
-                          <li
-                            key={item.id}
-                            className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
-                            onClick={() => (window.location.href = '/voe')}
-                          >
-                            <div className="flex items-start gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-base text-gray-800 truncate font-medium" title={item.title}>
-                                  {item.title}
-                                </p>
-                                <p className="text-sm text-gray-400 mt-0.5">
-                                  {item.entity_name}
-                                  {item.category && (
-                                    <span className="ml-1 text-gray-400">· {item.category}</span>
-                                  )}
-                                </p>
-                              </div>
-                              <span className={`text-sm px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${s.bg} ${s.text}`}>
-                                {item.status}
-                              </span>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </div>
             )}
           </div>
         </div>
@@ -753,7 +719,7 @@ function UserDeadlinesList({ items }: { items: UserDeadline[] }) {
   if (items.length === 0) {
     return (
       <div className="flex items-center justify-center h-32 text-gray-400 text-base px-4 text-center">
-        15일 이내 본인 마감이 없습니다.
+        15일 이내 본인 마감과 미제출 지연 건이 없습니다.
       </div>
     );
   }

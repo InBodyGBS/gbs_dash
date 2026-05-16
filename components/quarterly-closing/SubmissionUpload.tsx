@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Download, FileSpreadsheet } from 'lucide-react';
+import { Download, FileSpreadsheet, Upload as UploadIcon, Trash2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { createSubmissionViaApi } from '@/lib/services/submissionService';
 import { downloadSubmissionTemplate } from '@/lib/utils/submissionTemplate';
+import {
+  getSubmissionTemplate,
+  downloadTemplateFile,
+  uploadSubmissionTemplate,
+  deleteSubmissionTemplate,
+  type SubmissionTemplate,
+} from '@/lib/services/submissionTemplateService';
+import { getIsAdminUser } from '@/lib/auth/admin';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import { CLOSING_CATEGORIES } from '@/lib/constants/closing-categories';
 
@@ -45,16 +53,114 @@ export function SubmissionUpload({
 }: SubmissionUploadProps) {
   const [uploading, setUploading] = useState(false);
 
+  // 관리자 여부 + 현재 카테고리의 등록된 템플릿 상태
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [registeredTemplate, setRegisteredTemplate] = useState<SubmissionTemplate | null>(null);
+  const [templateUploading, setTemplateUploading] = useState(false);
+  const templateInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 관리자 권한 1회 조회
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const admin = await getIsAdminUser();
+      if (!cancelled) setIsAdmin(admin);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 카테고리 바뀔 때마다 등록된 템플릿 조회
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const tpl = await getSubmissionTemplate(category);
+        if (!cancelled) setRegisteredTemplate(tpl);
+      } catch (e) {
+        console.warn('템플릿 조회 실패:', e);
+        if (!cancelled) setRegisteredTemplate(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [category]);
+
+  const categoryLabel = CLOSING_CATEGORIES.find((cat) => cat.id === category)?.label || category;
+
   const handleTemplateDownload = async () => {
     try {
+      // 1) 등록된 템플릿이 있으면 그 파일 다운로드
+      if (registeredTemplate) {
+        const blob = await downloadTemplateFile(registeredTemplate.file_path);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = registeredTemplate.file_name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success('템플릿 다운로드 완료', {
+          description: `${categoryLabel} 양식이 다운로드되었습니다.`,
+        });
+        return;
+      }
+      // 2) 없으면 기본 생성 템플릿 폴백
       await downloadSubmissionTemplate(category);
-      const categoryLabel = CLOSING_CATEGORIES.find((cat) => cat.id === category)?.label || category;
-      toast.success('템플릿 다운로드 완료', {
-        description: `${categoryLabel} 템플릿이 다운로드되었습니다.`,
+      toast.success('기본 템플릿 다운로드 완료', {
+        description: `등록된 양식이 없어 기본 템플릿을 다운로드합니다.`,
       });
     } catch (error: unknown) {
       toast.error('템플릿 다운로드 실패', {
         description: getErrorMessage(error),
+      });
+    }
+  };
+
+  const handleTemplateUploadClick = () => {
+    if (!isAdmin) return;
+    templateInputRef.current?.click();
+  };
+
+  const handleTemplateFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 같은 파일 재선택 가능하도록 reset
+    if (!file) return;
+    if (!isAdmin) {
+      toast.error('관리자 권한이 필요합니다.');
+      return;
+    }
+    setTemplateUploading(true);
+    try {
+      const tpl = await uploadSubmissionTemplate({ categoryId: category, file });
+      setRegisteredTemplate(tpl);
+      toast.success('템플릿 등록 완료', {
+        description: `${categoryLabel} 양식이 갱신되었습니다.`,
+      });
+    } catch (err) {
+      toast.error('템플릿 업로드 실패', {
+        description: getErrorMessage(err),
+      });
+    } finally {
+      setTemplateUploading(false);
+    }
+  };
+
+  const handleTemplateDelete = async () => {
+    if (!isAdmin || !registeredTemplate) return;
+    if (!confirm(`${categoryLabel} 등록된 템플릿을 삭제하시겠습니까?\n사용자는 기본 템플릿으로 폴백됩니다.`)) {
+      return;
+    }
+    try {
+      await deleteSubmissionTemplate(category);
+      setRegisteredTemplate(null);
+      toast.success('템플릿 삭제 완료');
+    } catch (err) {
+      toast.error('템플릿 삭제 실패', {
+        description: getErrorMessage(err),
       });
     }
   };
@@ -113,25 +219,83 @@ export function SubmissionUpload({
     disabled: uploading || uploadBlocked,
   });
 
-  const categoryLabel = CLOSING_CATEGORIES.find((cat) => cat.id === category)?.label || category;
-
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
           <h3 className="text-lg font-semibold text-gray-900">제출 파일 업로드</h3>
           <p className="text-sm text-gray-600 mt-1">{categoryLabel}</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleTemplateDownload}
-          className="flex items-center gap-2"
-        >
-          <Download className="h-4 w-4" />
-          템플릿 다운로드
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 다운로드 버튼 — 모두 */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTemplateDownload}
+            className="flex items-center gap-2"
+            title={registeredTemplate ? `등록된 양식: ${registeredTemplate.file_name}` : '등록된 양식이 없어 기본 템플릿을 받습니다.'}
+          >
+            <Download className="h-4 w-4" />
+            템플릿 다운로드
+          </Button>
+
+          {/* Admin 전용 — 템플릿 업로드/삭제 */}
+          {isAdmin && (
+            <>
+              <input
+                ref={templateInputRef}
+                type="file"
+                accept=".xls,.xlsx"
+                className="hidden"
+                onChange={handleTemplateFileSelected}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTemplateUploadClick}
+                disabled={templateUploading}
+                className="flex items-center gap-2 border-purple-300 text-purple-700 hover:bg-purple-50"
+                title="관리자: 이 카테고리의 양식을 업로드/교체"
+              >
+                <UploadIcon className="h-4 w-4" />
+                {templateUploading
+                  ? '업로드 중...'
+                  : registeredTemplate
+                    ? '템플릿 교체'
+                    : '템플릿 등록'}
+                <ShieldCheck className="h-3 w-3 ml-0.5 text-purple-500" />
+              </Button>
+              {registeredTemplate && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTemplateDelete}
+                  className="flex items-center gap-1 border-red-200 text-red-600 hover:bg-red-50"
+                  title="등록된 양식 삭제"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
+
+      {/* 등록된 템플릿 정보 — 작은 안내 */}
+      {registeredTemplate ? (
+        <div className="flex items-center gap-2 text-xs text-gray-500 -mt-1">
+          <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" />
+          <span className="font-medium text-green-700">등록된 양식</span>
+          <span className="text-gray-400">·</span>
+          <span className="truncate">{registeredTemplate.file_name}</span>
+          <span className="text-gray-400">·</span>
+          <span>{(registeredTemplate.file_size / 1024).toFixed(1)} KB</span>
+        </div>
+      ) : isAdmin ? (
+        <p className="text-xs text-amber-700 -mt-1">
+          ⚠️ 등록된 양식이 없어 사용자는 기본(샘플) 템플릿을 받게 됩니다. 우측 <strong>템플릿 등록</strong>으로 실제 양식을 올려주세요.
+        </p>
+      ) : null}
 
       {uploadBlocked && (
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
