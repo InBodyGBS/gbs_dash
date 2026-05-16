@@ -30,7 +30,7 @@ export async function getSubmissionTemplate(
   categoryId: ClosingCategoryId,
 ): Promise<SubmissionTemplate | null> {
   const { data, error } = await supabase
-    .from('submission_templates')
+    .from('submission_templates' as never)
     .select('*')
     .eq('category', categoryId)
     .maybeSingle();
@@ -107,7 +107,7 @@ export async function uploadSubmissionTemplate(params: {
 
   // 3) DB upsert
   const { data, error: dbError } = await supabase
-    .from('submission_templates')
+    .from('submission_templates' as never)
     .upsert(
       {
         category: categoryId,
@@ -116,7 +116,7 @@ export async function uploadSubmissionTemplate(params: {
         file_size: file.size,
         uploaded_by: uploaderName ?? null,
         uploaded_at: new Date().toISOString(),
-      },
+      } as never,
       { onConflict: 'category' },
     )
     .select()
@@ -147,7 +147,7 @@ export async function deleteSubmissionTemplate(
   if (!existing) return;
 
   await supabase
-    .from('submission_templates')
+    .from('submission_templates' as never)
     .delete()
     .eq('category', categoryId);
 
