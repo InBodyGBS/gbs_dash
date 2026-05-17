@@ -42,6 +42,41 @@ function clearAuthExpiry(): void {
   window.localStorage.removeItem(AUTH_EXPIRES_AT_KEY);
 }
 
+/**
+ * 서버를 호출하지 않고 로컬 세션만 정리한다.
+ * - refresh token이 이미 무효화된 상태(=서버 호출 시 401/403)에서 사용
+ * - localStorage의 supabase 세션 키와 만료 타임스탬프를 모두 제거
+ */
+export function clearLocalSession(): void {
+  clearAuthExpiry();
+  if (typeof window === 'undefined') return;
+  try {
+    Object.keys(window.localStorage).forEach((k) => {
+      if (k.startsWith('sb-') && k.endsWith('-auth-token')) {
+        window.localStorage.removeItem(k);
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Supabase auth 에러가 "Invalid Refresh Token / Refresh Token Not Found" 류인지 판별.
+ * 이 에러는 서버에 이미 무효화된 토큰으로 갱신 시도할 때 발생하므로
+ * 정상적인 "로그인 필요" 상황으로 취급해야 한다.
+ */
+export function isRefreshTokenError(err: unknown): boolean {
+  if (!err) return false;
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : '';
+  return /refresh\s*token/i.test(msg) || /invalid.*token/i.test(msg);
+}
+
 export async function signInWithEmail(
   email: string,
   password: string,

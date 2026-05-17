@@ -132,8 +132,11 @@ export default function DashboardPage() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const in15Days = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      // 과거 지연 항목 추적용 — 90일 이전까지 거슬러 올라가서 미제출 건을 찾는다
+      // 과거 지연 항목 추적용:
+      //   - entity_user: 본인 지연 마감을 폭넓게 보여주기 위해 90일까지
+      //   - admin: '진행 중인 마감' 시각화에 집중하기 위해 30일까지
       const past90Days = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const past30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       // ── 권한 조회
@@ -200,13 +203,15 @@ export default function DashboardPage() {
         }
       }
 
-      // ── 2-b) 리스트 데이터 — 90일 전부터 15일 후까지 (과거 지연 추적용)
-      //   user 뷰에서는 과거 미제출 = '지연' 항목을 자동으로 노출하기 위해 범위 확장
+      // ── 2-b) 리스트 데이터 — 모드별로 다른 시간 범위 적용
+      //   - entity_user: 과거 90일 ~ 향후 15일 (오랜 지연도 추적)
+      //   - admin: 과거 30일 ~ 향후 15일 (진행 중 마감에 집중)
+      const listStartDate = isUserMode ? past90Days : past30Days;
       let upcomingListQuery = supabase
         .from('schedule_items')
         .select('id, planned_date, category, subsidiary_id, quarter_id')
         .eq('status', 'planned')
-        .gte('planned_date', past90Days)
+        .gte('planned_date', listStartDate)
         .lte('planned_date', in15Days)
         .order('planned_date', { ascending: true })
         .limit(500);
@@ -411,7 +416,11 @@ export default function DashboardPage() {
           entityMap.set(r.subsidiary_id, eAcc);
         });
 
+        // Admin "All Deadlines" 정렬·필터 기준:
+        //   1) 미완료(progress < 100%) 항목만
+        //   2) 정렬: planned_date 오름차순 (가장 오래된 미완료 마감 먼저)
         const adminList = Array.from(groupMap.values())
+          .filter((g) => g.totalSubs === 0 || g.submittedSubs < g.totalSubs)
           .map((g) => ({
             key: g.key,
             planned_date: g.planned_date,
@@ -421,6 +430,7 @@ export default function DashboardPage() {
             totalSubs: g.totalSubs,
             submittedSubs: g.submittedSubs,
           }))
+          .sort((a, b) => a.planned_date.localeCompare(b.planned_date))
           .slice(0, 30);
         setAdminDeadlines(adminList);
         setUserDeadlines([]);
@@ -620,26 +630,34 @@ export default function DashboardPage() {
 
             {/* Upcoming Deadlines — admin/user 분기 */}
             <div className="bg-white rounded-xl border border-gray-200 flex flex-col flex-1 min-h-0">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 flex-shrink-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  <h3 className="font-semibold text-gray-900">
-                    {viewMode === 'user' ? t('dashboard.my_deadlines') : t('dashboard.all_deadlines')}
-                  </h3>
-                  {viewMode === 'admin' ? (
-                    <span className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" />
-                      Admin
-                    </span>
-                  ) : scopeLabel ? (
-                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-mono font-semibold">
-                      {scopeLabel}
-                    </span>
-                  ) : null}
+              <div className="flex items-start justify-between px-4 py-2.5 border-b border-gray-100 flex-shrink-0 gap-2">
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    <h3 className="font-semibold text-gray-900">
+                      {viewMode === 'user' ? t('dashboard.my_deadlines') : t('dashboard.all_deadlines')}
+                    </h3>
+                    {viewMode === 'admin' ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3" />
+                        Admin
+                      </span>
+                    ) : scopeLabel ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-mono font-semibold">
+                        {scopeLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  {/* 필터 기준 표시 */}
+                  <p className="text-[11px] text-gray-400 mt-0.5 ml-6">
+                    {viewMode === 'admin'
+                      ? '지난 30일 ~ 향후 15일 · 미완료만'
+                      : '향후 15일 + 지난 지연 건'}
+                  </p>
                 </div>
                 <Link
                   href={viewMode === 'user' ? '/my-submissions' : '/quarterly-closing/overview'}
-                  className="flex items-center gap-0.5 text-xs text-blue-600 hover:underline flex-shrink-0"
+                  className="flex items-center gap-0.5 text-xs text-blue-600 hover:underline flex-shrink-0 mt-0.5"
                 >
                   View All <ChevronRight className="w-3 h-3" />
                 </Link>

@@ -19,7 +19,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { SidebarProvider, useSidebar } from '@/lib/contexts/SidebarContext';
 import { supabase } from '@/lib/supabase/client';
-import { isAuthExpired, signOut } from '@/lib/auth';
+import { isAuthExpired, signOut, clearLocalSession, isRefreshTokenError } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 
 interface DashboardLayoutProps {
@@ -37,7 +37,19 @@ function DashboardLayoutContent({ children }: DashboardLayoutProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      // getSession 자체가 백그라운드 refresh 를 트리거하면서 "Invalid Refresh Token" 에러를
+      // 던질 수 있다. 이 경우 세션이 무효이므로 로컬만 정리하고 로그인 페이지로 보낸다.
+      let session = null as Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'];
+      try {
+        const res = await supabase.auth.getSession();
+        session = res.data.session;
+      } catch (e) {
+        if (isRefreshTokenError(e)) {
+          clearLocalSession();
+        } else {
+          console.warn('getSession failed:', e);
+        }
+      }
 
       // 세션 자체가 없거나, 클라이언트 측 만료 타임스탬프가 지난 경우 → 로그인 페이지로
       if (!session) {

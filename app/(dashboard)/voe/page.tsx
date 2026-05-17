@@ -12,6 +12,7 @@ import {
 } from '@/lib/services/voeService';
 import { VoeSubmitDialog } from '@/components/voe/VoeSubmitDialog';
 import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
+import { getIsAdminUser } from '@/lib/auth/admin';
 import { supabase } from '@/lib/supabase/client';
 import type { VoeInquiry, VoeStatus, VoeDirection } from '@/lib/types/voe';
 
@@ -128,11 +129,14 @@ function VoeDetailRow({
   item,
   onUpdate,
   directionScope,
+  isAdmin,
 }: {
   item: VoeInquiry;
   onUpdate: () => void;
   /** 라벨 표기 관점 — 'user' = 본인 법인 시점, 'admin' = 본사 시점 */
   directionScope: DirectionLabelScope;
+  /** 관리자 여부 — VOE 상태 변경은 admin 만 가능 */
+  isAdmin: boolean;
 }) {
   const direction = item.direction ?? 'entity_to_gbs';
   const isGbsToEntity = direction === 'gbs_to_entity';
@@ -218,8 +222,13 @@ function VoeDetailRow({
             ? `${item.response}\n\n---\n[${nowLabel}] ${respondedBy.trim()} (추가 답변)\n${responseText.trim()}`
             : responseText.trim();
         await updateVoeEntityResponse(item.id, mergedResponse, respondedBy.trim());
-      } else {
+      } else if (isAdmin) {
+        // admin: 답변 + 상태 동시 업데이트
         await updateVoeStatus(item.id, newStatus, responseText.trim(), respondedBy.trim());
+      } else {
+        // 비admin (예: 다른 entity_user 가 본인 entity 의 문의를 보는 경우):
+        // 답변 내용 + 답변자만 저장하고 status 는 기존 값 유지
+        await updateVoeStatus(item.id, item.status, responseText.trim(), respondedBy.trim());
       }
       setShowResponseForm(false);
       setAppendMode(false);
@@ -230,6 +239,7 @@ function VoeDetailRow({
   };
 
   const handleGbsStatusOnlySave = async () => {
+    if (!isAdmin) return; // GBS 문의 상태 변경도 admin 전용
     setGbsStatusSaving(true);
     try {
       await updateVoeStatusOnly(item.id, gbsStatusDraft);
@@ -424,7 +434,7 @@ function VoeDetailRow({
                         <Pencil className="w-3 h-3" />
                         수정
                       </button>
-                      {isGbsToEntity && (
+                      {isGbsToEntity && isAdmin && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -495,11 +505,12 @@ function VoeDetailRow({
                     </p>
                   )}
 
-                  <div className={isGbsToEntity ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
+                  {/* 상태 변경은 admin 만 노출. entity_to_gbs 일 때만 의미가 있고 (GBS 답변자가 상태를 결정),
+                      비admin 이면 답변자 input 만 1열로 표시 */}
+                  <div className={(isGbsToEntity || !isAdmin) ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
                         답변자 *
-                        {/* 나중에 로그인 사용자 이름으로 자동 주입 예정 */}
                       </label>
                       <input
                         type="text"
@@ -509,20 +520,28 @@ function VoeDetailRow({
                         className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
-                    {!isGbsToEntity && (
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">상태 변경</label>
-                      <select
-                        value={newStatus}
-                        onChange={(e) => setNewStatus(e.target.value as VoeStatus)}
-                        className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="In Progress">In Progress</option>
-                        <option value="Resolved">Resolved</option>
-                      </select>
-                    </div>
+                    {!isGbsToEntity && isAdmin && (
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          상태 변경
+                          <span className="ml-1 text-[10px] text-purple-600 font-semibold">(Admin)</span>
+                        </label>
+                        <select
+                          value={newStatus}
+                          onChange={(e) => setNewStatus(e.target.value as VoeStatus)}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="In Progress">In Progress</option>
+                          <option value="Resolved">Resolved</option>
+                        </select>
+                      </div>
                     )}
                   </div>
+                  {!isGbsToEntity && !isAdmin && (
+                    <p className="text-[11px] text-gray-500">
+                      답변 내용만 저장됩니다. 상태(In Progress / Resolved) 변경은 GBS Admin 만 가능합니다.
+                    </p>
+                  )}
 
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">답변 내용 *</label>
@@ -555,8 +574,8 @@ function VoeDetailRow({
                 </div>
               )}
 
-              {/* GBS 문의: 상태는 GBS 담당자만 별도 저장 (법인 답변 폼과 분리) */}
-              {isGbsToEntity && showStatusManager && (
+              {/* GBS 문의: 상태 관리 — admin 전용 */}
+              {isGbsToEntity && showStatusManager && isAdmin && (
                 <div
                   ref={statusSectionRef}
                   className="border-t border-amber-100 pt-4 space-y-3"
@@ -617,12 +636,17 @@ export default function VoePage() {
   const [myDisplayName, setMyDisplayName] = useState<string>('');
   /** 이번 방문에서 새로 보이는 항목 수 — 페이지 진입 시 한 번만 계산되어 배너에 표시 */
   const [newSinceLastVisit, setNewSinceLastVisit] = useState<number>(0);
+  /** 관리자 여부 — VOE 상태 변경 권한 가드 */
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   const load = async () => {
     setLoading(true);
     try {
       // 1) 권한 조회 — entity_user 면 본인 법인 식별자 집합 생성
       const roleInfo = await getCurrentUserRoleInfo();
+      // admin 여부 — 답변 시 상태 변경 권한 가드용
+      const adminFlag = await getIsAdminUser();
+      setIsAdmin(adminFlag);
       let identifiers: Set<string> | null = null;
       let entityNamesForDialog: string[] | undefined = undefined;
       if (!roleInfo.canSeeAll) {
@@ -880,6 +904,7 @@ export default function VoePage() {
                     item={item}
                     onUpdate={load}
                     directionScope={scopeIdentifiers ? 'user' : 'admin'}
+                    isAdmin={isAdmin}
                   />
                 ))}
               </tbody>

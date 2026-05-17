@@ -813,6 +813,42 @@ export async function generatePL(uploadId: string): Promise<PLResult[]> {
 /**
  * P&L 결과 조회 (P&L Master 정보 포함)
  */
+/**
+ * pl_results 의 부호를 표시 관행에 맞게 정규화한다.
+ *
+ *  - 회계 관행: 수익 = 대변(음수), 비용 = 차변(양수)
+ *  - 표시 관행: 모든 손익계산서 줄(Sales, COGS, SGA, ...)은 양수로 보이고
+ *               GP/OP/IBT/NI 만 양/음수가 나타난다.
+ *
+ *  generateStatements() 가 양수로 변환해 저장하도록 돼 있으나, 일부 법인의 데이터는
+ *  과거 코드 또는 다른 변환 경로로 인해 음수로 남아 있을 수 있다. 본 함수가 read 시점에
+ *  한 번 더 정규화해 어떤 소비자(Result, Financial Dash, …)에서도 동일한 부호로 보이게 한다.
+ *
+ *  - 수익 코드 (4xxxx Sales, 71xxx Other Rev, 73xxx Financial Rev) : 음수면 양수로
+ *  - 비용 코드 (5xxxx COGS, 6xxxx SGA, 72xxx, 74xxx, 80xxx)         : 음수면 양수로
+ */
+function normalizePLSign(amount: number, code: string): number {
+  if (!code) return amount;
+  const p1 = code.charAt(0);
+  const p2 = code.substring(0, 2);
+
+  const isRevenue = p1 === '4' || p2 === '71' || p2 === '73';
+  const isExpense =
+    p1 === '5' || p1 === '6' || p2 === '72' || p2 === '74' || p2 === '80';
+
+  if (isRevenue || isExpense) {
+    return amount < 0 ? -amount : amount;
+  }
+  return amount;
+}
+
+function normalizePLResultsSigns(rows: PLResult[]): PLResult[] {
+  return rows.map((r) => {
+    const normalized = normalizePLSign(r.amount, r.std_pl_code);
+    return normalized === r.amount ? r : { ...r, amount: normalized };
+  });
+}
+
 export async function getPLResults(
   entityCode: string,
   periodYear: number,
@@ -826,7 +862,7 @@ export async function getPLResults(
     .eq('period_month', periodMonth);
 
   if (error) throw new Error(`P&L 조회 실패: ${error.message}`);
-  return (data || []) as unknown as PLResult[];
+  return normalizePLResultsSigns((data || []) as unknown as PLResult[]);
 }
 
 /**
@@ -931,7 +967,7 @@ export async function getAllEntityPLSummaries(
   if (error) throw new Error(`전체 P&L 조회 실패: ${error.message}`);
   if (!data || data.length === 0) return [];
 
-  // Entity별 그룹화
+  // Entity별 그룹화 (각 row 의 부호는 normalizePLSign 으로 정규화)
   const entityMap = new Map<string, { results: PLResult[]; entityName: string }>();
   ((data as unknown) as Array<PLResult & { subsidiaries?: { name?: string | null } | null }>).forEach((row) => {
     const key = row.entity_code;
@@ -941,7 +977,10 @@ export async function getAllEntityPLSummaries(
         entityName: row.subsidiaries?.name || row.entity_code,
       });
     }
-    entityMap.get(key)!.results.push(row);
+    const normalized = normalizePLSign(row.amount, row.std_pl_code);
+    entityMap.get(key)!.results.push(
+      normalized === row.amount ? row : ({ ...row, amount: normalized } as PLResult),
+    );
   });
 
   // Summary 계산
@@ -1083,9 +1122,10 @@ export async function getPLResultsForPeriods(
     .in('period_year', years);
   if (error) throw new Error(`PL 벌크 조회 실패: ${error.message}`);
   const periodSet = new Set(periods.map((p) => `${p.year}-${p.month}`));
-  return ((data || []) as unknown as PLResult[]).filter(
+  const filtered = ((data || []) as unknown as PLResult[]).filter(
     (r) => periodSet.has(`${r.period_year}-${r.period_month}`)
   );
+  return normalizePLResultsSigns(filtered);
 }
 
 // BS Dashboard에서 사용하는 계정 코드 상수

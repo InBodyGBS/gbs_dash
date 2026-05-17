@@ -26,6 +26,7 @@ import {
 import { toast } from 'sonner';
 import { fetchSubmissionCommentsForExcelExport } from '@/lib/services/submissionService';
 import { downloadSubmissionCommentsExcel } from '@/lib/utils/submissionCommentsExcel';
+import { getCurrentUserRoleInfo } from '@/lib/services/userRoleService';
 import type { Submission } from '@/lib/types/submission';
 import type { ClosingCategoryId } from '@/lib/constants/closing-categories';
 import type { Subsidiary } from '@/lib/supabase/types';
@@ -116,6 +117,8 @@ function SubmissionPageInner() {
   const [exportingComments, setExportingComments] = useState(false);
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [categoryReviewList, setCategoryReviewList] = useState<CategoryReviewStatus[]>([]);
+  // 권한: entity_user 면 본인 담당 법인만 선택 가능 (전체 옵션 숨김)
+  const [canSeeAllEntities, setCanSeeAllEntities] = useState<boolean>(true);
 
   // 마운트 후 localStorage 복원 (서버 HTML과 첫 클라이언트 트리 일치)
   // 단, query params (year/month/subsidiary_id/category) 가 있으면 딥링크 우선.
@@ -231,14 +234,36 @@ function SubmissionPageInner() {
         setQuarter(null);
       }
 
-      // 법인 데이터
-      const { data: subsData, error: subsError } = await supabase
+      // 법인 데이터 — entity_user 면 본인 담당 법인만, gbs_admin/미부여는 전체
+      const roleInfo = await getCurrentUserRoleInfo();
+      let subsQuery = supabase
         .from('subsidiaries')
         .select('*')
         .order('name');
-
+      if (!roleInfo.canSeeAll) {
+        if (roleInfo.entityCodes.length === 0) {
+          // 담당 법인이 없으면 강제로 빈 결과
+          subsQuery = subsQuery.in('code', ['__no_entity__']);
+        } else {
+          subsQuery = subsQuery.in('code', roleInfo.entityCodes);
+        }
+      }
+      const { data: subsData, error: subsError } = await subsQuery;
       if (subsError) throw subsError;
-      setSubsidiaries(subsData || []);
+      const subsList = subsData || [];
+      setSubsidiaries(subsList);
+      setCanSeeAllEntities(roleInfo.canSeeAll);
+
+      // entity_user 가 "전체"를 보고 있거나, 현재 선택이 본인 담당 외 법인인 경우
+      // 첫 번째 담당 법인으로 자동 전환 (전체 옵션 자체가 사라지므로 잘못된 선택 방지)
+      if (!roleInfo.canSeeAll) {
+        const validIds = new Set(subsList.map((s) => s.id));
+        if (selectedSubsidiaryId === 'all' || !validIds.has(selectedSubsidiaryId)) {
+          if (subsList.length > 0) {
+            setSelectedSubsidiaryId(subsList[0].id);
+          }
+        }
+      }
 
       const qid = quarterData?.id;
       if (qid && !qid.startsWith('temp-') && !qid.startsWith('custom-')) {
@@ -374,7 +399,7 @@ function SubmissionPageInner() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
+                {canSeeAllEntities && <SelectItem value="all">전체</SelectItem>}
                 {subsidiaries.map((sub) => (
                   <SelectItem key={sub.id} value={sub.id}>
                     {sub.name} ({sub.code})

@@ -18,6 +18,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -30,6 +33,9 @@ import {
   CheckCircle2,
   Info,
   RefreshCw,
+  Check,
+  ChevronDown,
+  Download,
 } from 'lucide-react';
 import {
   getAllEntityPLSummaries,
@@ -38,12 +44,24 @@ import {
   getBSResultsForPeriods,
   getPLResultsForPeriods,
   computeBSPeriodMetrics,
+  getStdPLMaster,
 } from '@/lib/services/monthlyClosingService';
+import { fetchSubsidiariesForCurrentUser } from '@/lib/services/subsidiariesAccessService';
+import {
+  generateFinancialStatementsHtml,
+  downloadHtml,
+} from '@/lib/utils/financialStatementsHtmlExport';
+import {
+  generateAnalyticsHtml,
+  downloadAnalyticsHtml,
+} from '@/lib/utils/analyticsHtmlExport';
 import type { PLSummary, PLResult, BSPeriodMetrics } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -125,6 +143,25 @@ export default function DashboardPage() {
   // P/L state
   const [summaries, setSummaries] = useState<PLSummary[]>([]);
   const [prevSummaries, setPrevSummaries] = useState<PLSummary[]>([]);
+  // 비교 탭과 무관하게 항상 YoY(전년 동월) 단월값을 별도로 로드 — YoY Revenue Growth 카드용
+  const [yoySummaries, setYoySummaries] = useState<PLSummary[]>([]);
+  // SG&A 계정과목별 분석을 위해 std_pl_master 도 로드
+  const [plMaster, setPLMaster] = useState<Array<{ pl_code: string; pl_line: string; display_order: number }>>([]);
+  // SG&A 계정과목별 단월 합계 — 코드별 amount (당기 / 비교기간)
+  const [sgaByAccountCurrent, setSgaByAccountCurrent] = useState<Map<string, number>>(new Map());
+  const [sgaByAccountPrev, setSgaByAccountPrev] = useState<Map<string, number>>(new Map());
+  // SG&A 12개월 단월 트렌드 — 코드별 [label, value] 12쌍
+  const [sgaTrendLabels, setSgaTrendLabels] = useState<string[]>([]);
+  const [sgaTrendByCode, setSgaTrendByCode] = useState<Map<string, number[]>>(new Map());
+  // 그래프에서 보고 싶은 SG&A 계정(들) — 멀티 선택 (기본: 가장 큰 계정 1개)
+  const [selectedSgaCodes, setSelectedSgaCodes] = useState<string[]>([]);
+  // 12개월 P/L 트렌드 (꺾은선 그래프용) — Sales / Operating Margin / Net Income
+  const [monthlyTrendData, setMonthlyTrendData] = useState<
+    Array<{ label: string; sales: number; operatingMargin: number | null; netIncome: number }>
+  >([]);
+  // HTML 다운로드 진행 상태
+  const [downloadingHtml, setDownloadingHtml] = useState<boolean>(false);
+  const [downloadingAnalytics, setDownloadingAnalytics] = useState<boolean>(false);
 
   // B/S state
   const [bsTrend, setBsTrend] = useState<BSPeriodMetrics[]>([]);
@@ -133,18 +170,173 @@ export default function DashboardPage() {
   const [bsLoading, setBsLoading] = useState(false);
 
   const [subsidiaries, setSubsidiaries] = useState<Subsidiary[]>([]);
+  const [canSeeAllEntities, setCanSeeAllEntities] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
+  // ============================================
+  // P/L · B/S HTML 다운로드 핸들러
+  // ============================================
+  const handleDownloadStatements = useCallback(async () => {
+    if (downloadingHtml) return;
+    const year = parseInt(selectedYear);
+    const month = parseInt(selectedMonth);
+    const entityCodes =
+      selectedEntity === 'all' ? subsidiaries.map((s) => s.code) : [selectedEntity];
+    if (entityCodes.length === 0) {
+      toast.error('선택된 Entity 가 없습니다.');
+      return;
+    }
+    const entityLabel =
+      selectedEntity === 'all'
+        ? `전체 (${entityCodes.length}개 법인)`
+        : subsidiaries.find((s) => s.code === selectedEntity)?.name || selectedEntity;
+    setDownloadingHtml(true);
+    const toastId = toast.loading('재무제표 HTML 생성 중...');
+    try {
+      const html = await generateFinancialStatementsHtml({
+        entityCodes,
+        entityLabel,
+        year,
+        month,
+      });
+      const filenameEntity =
+        selectedEntity === 'all'
+          ? 'All'
+          : selectedEntity.replace(/[^a-zA-Z0-9_-]+/g, '');
+      const filename = `FS_${filenameEntity}_${year}${String(month).padStart(2, '0')}.html`;
+      downloadHtml(filename, html);
+      toast.dismiss(toastId);
+      toast.success('HTML 다운로드 완료');
+    } catch (error: unknown) {
+      toast.dismiss(toastId);
+      toast.error(
+        `HTML 생성 실패: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setDownloadingHtml(false);
+    }
+  }, [downloadingHtml, selectedYear, selectedMonth, selectedEntity, subsidiaries]);
+
+  // 분석 지표 HTML 다운로드
+  const handleDownloadAnalytics = useCallback(async () => {
+    if (downloadingAnalytics) return;
+    const year = parseInt(selectedYear);
+    const month = parseInt(selectedMonth);
+    const entityCodes =
+      selectedEntity === 'all' ? subsidiaries.map((s) => s.code) : [selectedEntity];
+    if (entityCodes.length === 0) {
+      toast.error('선택된 Entity 가 없습니다.');
+      return;
+    }
+    const entityLabel =
+      selectedEntity === 'all'
+        ? `전체 (${entityCodes.length}개 법인)`
+        : subsidiaries.find((s) => s.code === selectedEntity)?.name || selectedEntity;
+    setDownloadingAnalytics(true);
+    const toastId = toast.loading('분석 지표 HTML 생성 중...');
+    try {
+      const html = await generateAnalyticsHtml({
+        entityCodes,
+        entityLabel,
+        year,
+        month,
+      });
+      const filenameEntity =
+        selectedEntity === 'all'
+          ? 'All'
+          : selectedEntity.replace(/[^a-zA-Z0-9_-]+/g, '');
+      const filename = `Analytics_${filenameEntity}_${year}${String(month).padStart(2, '0')}.html`;
+      downloadAnalyticsHtml(filename, html);
+      toast.dismiss(toastId);
+      toast.success('분석 지표 HTML 다운로드 완료');
+    } catch (error: unknown) {
+      toast.dismiss(toastId);
+      toast.error(
+        `분석 지표 HTML 생성 실패: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setDownloadingAnalytics(false);
+    }
+  }, [downloadingAnalytics, selectedYear, selectedMonth, selectedEntity, subsidiaries]);
+
   const loadSubsidiaries = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('subsidiaries').select('*').order('name');
-      if (error) throw error;
-      setSubsidiaries(data || []);
+      // 권한에 따라 필터된 법인만 노출 (entity_user 는 본인 담당 법인만)
+      const access = await fetchSubsidiariesForCurrentUser();
+      setSubsidiaries(access.subsidiaries);
+      setCanSeeAllEntities(access.canSeeAll);
+      // entity_user 가 '전체' 또는 본인 외 entity 를 갖고 있으면 본인 첫 법인으로 보정
+      if (!access.canSeeAll && access.subsidiaries.length > 0) {
+        const validCodes = new Set(access.subsidiaries.map((s) => s.code));
+        setSelectedEntity((prev) =>
+          prev === 'all' || !validCodes.has(prev) ? access.subsidiaries[0].code : prev,
+        );
+      }
     } catch (error: unknown) {
       console.error('Failed to load subsidiaries:', getErrorMessage(error));
     }
   }, []);
+
+  // ============================================
+  // YoY/SG&A 보조 데이터 로드용 헬퍼
+  // ============================================
+
+  /**
+   * 특정 entity codes 의 (year, month) 단월값을 P/L code별 합계 Map 으로 반환.
+   * 단월값 = (year, month) 누계 − (year, month-1) 누계
+   * 1월이면 누계 자체가 단월값
+   */
+  const loadSingleMonthByCode = useCallback(
+    async (entityCodes: string[], year: number, month: number): Promise<Map<string, number>> => {
+      const byCode = new Map<string, number>();
+      for (const entityCode of entityCodes) {
+        const cumulative = await getPLResults(entityCode, year, month);
+        if (cumulative.length === 0) continue;
+
+        if (month === 1) {
+          cumulative.forEach((r) => {
+            byCode.set(r.std_pl_code, (byCode.get(r.std_pl_code) || 0) + r.amount);
+          });
+        } else {
+          const prevMonth = month - 1;
+          const prevCumulative = await getPLResults(entityCode, year, prevMonth);
+          const currMap = new Map<string, number>();
+          cumulative.forEach((r) =>
+            currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount),
+          );
+          const prevMap = new Map<string, number>();
+          prevCumulative.forEach((r) =>
+            prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount),
+          );
+          const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
+          allCodes.forEach((code) => {
+            const diff = (currMap.get(code) || 0) - (prevMap.get(code) || 0);
+            byCode.set(code, (byCode.get(code) || 0) + diff);
+          });
+        }
+      }
+      return byCode;
+    },
+    [],
+  );
+
+  /**
+   * 특정 entity codes 의 (year, month) 누계(YTD)값을 P/L code별 합계 Map 으로 반환.
+   */
+  const loadCumulativeByCode = useCallback(
+    async (entityCodes: string[], year: number, month: number): Promise<Map<string, number>> => {
+      const byCode = new Map<string, number>();
+      for (const entityCode of entityCodes) {
+        const cumulative = await getPLResults(entityCode, year, month);
+        cumulative.forEach((r) => {
+          byCode.set(r.std_pl_code, (byCode.get(r.std_pl_code) || 0) + r.amount);
+        });
+      }
+      return byCode;
+    },
+    [],
+  );
 
   // ============================================
   // P/L 데이터 로드
@@ -424,6 +616,245 @@ export default function DashboardPage() {
   }, [activeView, subsidiaries, loadData, loadBSData]);
 
   // ============================================
+  // YoY 카드 + SG&A 계정과목별 분석 보조 데이터 로드
+  //   - YoY: 비교 탭과 무관하게 항상 (year-1, month) 단월값을 fetch
+  //   - SG&A breakdown: 현재 비교탭(MoM/YoY/YoY YTD)에 맞춰 prev period 정의
+  // ============================================
+  const loadSupplementaryPL = useCallback(async () => {
+    if (subsidiaries.length === 0 || activeView !== 'pl') return;
+    try {
+      const year = parseInt(selectedYear);
+      const month = parseInt(selectedMonth);
+      const entityCodes =
+        selectedEntity === 'all' ? subsidiaries.map((s) => s.code) : [selectedEntity];
+      if (entityCodes.length === 0) {
+        setYoySummaries([]);
+        setSgaByAccountCurrent(new Map());
+        setSgaByAccountPrev(new Map());
+        return;
+      }
+
+      // ── YoY 단월값 (전년 동월): 항상 동일 ──
+      // YoY 카드 요구 = Sales 단월값. summary 형태로 entity 별 PLSummary 를 만든다.
+      const yoyByCodeByEntity: PLSummary[] = [];
+      for (const entityCode of entityCodes) {
+        const entityName =
+          subsidiaries.find((s) => s.code === entityCode)?.name || entityCode;
+        const cumulative = await getPLResults(entityCode, year - 1, month);
+        if (cumulative.length === 0) continue;
+        let monthlyResults: PLResult[] = cumulative;
+        if (month !== 1) {
+          const prevCumulative = await getPLResults(entityCode, year - 1, month - 1);
+          monthlyResults = calculateMonthlyDifference(
+            cumulative,
+            prevCumulative,
+            entityCode,
+            year - 1,
+            month,
+          );
+        }
+        if (monthlyResults.length > 0) {
+          yoyByCodeByEntity.push(
+            calculatePLSummary(monthlyResults, entityCode, entityName, year - 1, month),
+          );
+        }
+      }
+      setYoySummaries(yoyByCodeByEntity);
+
+      // ── SG&A 계정과목별 breakdown ──
+      // 비교탭에 따라 current/prev period 의 단월(또는 YTD) 합계를 코드별로 집계
+      if (comparisonType === 'yoy_ytd') {
+        // YTD : 현재 (year, month) 누계 vs 전년 (year-1, month) 누계
+        const [curr, prev] = await Promise.all([
+          loadCumulativeByCode(entityCodes, year, month),
+          loadCumulativeByCode(entityCodes, year - 1, month),
+        ]);
+        setSgaByAccountCurrent(curr);
+        setSgaByAccountPrev(prev);
+      } else {
+        // 단월값
+        const curr = await loadSingleMonthByCode(entityCodes, year, month);
+        let prev: Map<string, number>;
+        if (comparisonType === 'mom') {
+          const prevMonth = month === 1 ? 12 : month - 1;
+          const prevYear = month === 1 ? year - 1 : year;
+          prev = await loadSingleMonthByCode(entityCodes, prevYear, prevMonth);
+        } else {
+          // yoy
+          prev = await loadSingleMonthByCode(entityCodes, year - 1, month);
+        }
+        setSgaByAccountCurrent(curr);
+        setSgaByAccountPrev(prev);
+      }
+
+      // ── SG&A 12개월 단월 트렌드 ──
+      // 최근 12개월 단월값을 한 번의 벌크 쿼리로 가져와 코드별 시계열을 만든다
+      const trendPeriods = getLast12Months(year, month);
+      const anchorPeriod = prevPeriod(trendPeriods[0].year, trendPeriods[0].month);
+      const allPeriodsForTrend = [anchorPeriod, ...trendPeriods];
+      const plRaw = await getPLResultsForPeriods(entityCodes, allPeriodsForTrend);
+
+      // (year, month) → Map<code, sum across entities>
+      const cumulativeByPeriod = new Map<string, Map<string, number>>();
+      for (const p of allPeriodsForTrend) {
+        cumulativeByPeriod.set(`${p.year}-${p.month}`, new Map<string, number>());
+      }
+      plRaw.forEach((r) => {
+        const key = `${r.period_year}-${r.period_month}`;
+        const codeMap = cumulativeByPeriod.get(key);
+        if (codeMap) {
+          codeMap.set(r.std_pl_code, (codeMap.get(r.std_pl_code) || 0) + r.amount);
+        }
+      });
+
+      // 각 trend period 의 단월값
+      //   - 1월: YTD 가 매년 0 으로 리셋되므로 단월값 = 누계 자체 (빼지 않는다)
+      //   - 2~12월: 단월값 = 당월 누계 − 직전월(같은 해) 누계
+      //   - 당월 미업로드: 0 으로 (음수 폭주 회피)
+      //   - 직전월 미업로드: 차이값을 신뢰할 수 없어 0 으로
+      const trendByCode = new Map<string, number[]>();
+      const labels: string[] = [];
+      trendPeriods.forEach((p, idx) => {
+        labels.push(`${p.year}.${String(p.month).padStart(2, '0')}`);
+        const currMap =
+          cumulativeByPeriod.get(`${p.year}-${p.month}`) ?? new Map<string, number>();
+
+        // 당월 업로드 자체가 없으면 모든 코드 값을 0 으로 두고 다음 달로
+        if (currMap.size === 0) return;
+
+        // 1월: 누계 = 단월
+        if (p.month === 1) {
+          currMap.forEach((amount, code) => {
+            const arr = trendByCode.get(code) ?? new Array(12).fill(0);
+            arr[idx] = amount;
+            trendByCode.set(code, arr);
+          });
+          return;
+        }
+
+        // 2~12월: 같은 해 직전월 누계와의 차이
+        const prevYear = p.year;
+        const prevMonth = p.month - 1;
+        const prevMap =
+          cumulativeByPeriod.get(`${prevYear}-${prevMonth}`) ?? new Map<string, number>();
+        if (prevMap.size === 0) {
+          // 직전월 미업로드 → 신뢰 불가, 0 유지
+          return;
+        }
+        const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
+        allCodes.forEach((code) => {
+          const diff = (currMap.get(code) || 0) - (prevMap.get(code) || 0);
+          const arr = trendByCode.get(code) ?? new Array(12).fill(0);
+          arr[idx] = diff;
+          trendByCode.set(code, arr);
+        });
+      });
+      setSgaTrendLabels(labels);
+      setSgaTrendByCode(trendByCode);
+
+      // ── 12개월 P/L 트렌드 (Sales / OP Margin / Net Income) ──
+      // trendByCode 와 동일한 단월 diff 를 이용해 손익 항목별 12개월 시계열 생성.
+      const SALES_CODES = ['41000', '42000', '43000', '44000', '45000', '46000'];
+      const COGS_CODES = ['51000', '52000', '53000', '54000'];
+      const OTHER_REV_CODES = Array.from(
+        { length: 9 },
+        (_, i) => `710${String(i + 1).padStart(2, '0')}`,
+      );
+      const OTHER_EXP_CODES = Array.from(
+        { length: 13 },
+        (_, i) => `720${String(i + 1).padStart(2, '0')}`,
+      );
+      const FIN_REV_CODES = Array.from(
+        { length: 5 },
+        (_, i) => `730${String(i + 1).padStart(2, '0')}`,
+      );
+      const FIN_EXP_CODES = Array.from(
+        { length: 4 },
+        (_, i) => `740${String(i + 1).padStart(2, '0')}`,
+      );
+      const TAX_CODE = '80001';
+
+      const sumByCodes = (codes: readonly string[], i: number): number => {
+        return codes.reduce((s, c) => s + ((trendByCode.get(c)?.[i] ?? 0)), 0);
+      };
+      const sgaSumByMonth = (i: number): number => {
+        let total = 0;
+        trendByCode.forEach((arr, code) => {
+          if (code.startsWith('600')) total += arr[i] ?? 0;
+        });
+        return total;
+      };
+
+      const monthly = labels.map((label, i) => {
+        const sales = sumByCodes(SALES_CODES, i);
+        const cogs = sumByCodes(COGS_CODES, i);
+        const gp = sales - cogs;
+        const sga = sgaSumByMonth(i);
+        const opIncome = gp - sga;
+        const otherRev = sumByCodes(OTHER_REV_CODES, i);
+        const otherExp = sumByCodes(OTHER_EXP_CODES, i);
+        const finRev = sumByCodes(FIN_REV_CODES, i);
+        const finExp = sumByCodes(FIN_EXP_CODES, i);
+        const tax = trendByCode.get(TAX_CODE)?.[i] ?? 0;
+        const ibt = opIncome + otherRev - otherExp + finRev - finExp;
+        const netIncome = ibt - tax;
+        const operatingMargin = sales !== 0 ? (opIncome / sales) * 100 : null;
+        return { label, sales, operatingMargin, netIncome };
+      });
+      setMonthlyTrendData(monthly);
+    } catch (error: unknown) {
+      console.error('Failed to load supplementary P/L data:', getErrorMessage(error));
+    }
+  }, [
+    activeView,
+    subsidiaries,
+    selectedYear,
+    selectedMonth,
+    selectedEntity,
+    comparisonType,
+    loadSingleMonthByCode,
+    loadCumulativeByCode,
+  ]);
+
+  useEffect(() => {
+    if (activeView !== 'pl') return;
+    void loadSupplementaryPL();
+  }, [activeView, loadSupplementaryPL]);
+
+  // std_pl_master 1회 로드 (SG&A 계정명 표시용)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getStdPLMaster();
+        if (!cancelled) setPLMaster(data);
+      } catch (e) {
+        console.warn('PL master load failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 그래프 기본 선택: 데이터가 로드되면 당기 절댓값이 가장 큰 SG&A 계정으로 자동 선택
+  useEffect(() => {
+    if (selectedSgaCodes.length > 0) return;
+    if (sgaByAccountCurrent.size === 0) return;
+    let topCode = '';
+    let topVal = 0;
+    sgaByAccountCurrent.forEach((amount, code) => {
+      if (!code.startsWith('600')) return;
+      const abs = Math.abs(amount);
+      if (abs > topVal) {
+        topVal = abs;
+        topCode = code;
+      }
+    });
+    if (topCode) setSelectedSgaCodes([topCode]);
+  }, [sgaByAccountCurrent, selectedSgaCodes]);
+
+  // ============================================
   // P/L 요약 계산
   // ============================================
   const dashboardData = useMemo(() => {
@@ -431,13 +862,21 @@ export default function DashboardPage() {
     const totalGP = summaries.reduce((sum, s) => sum + s.grossProfit, 0);
     const totalOperatingIncome = summaries.reduce((sum, s) => sum + s.operatingIncome, 0);
     const totalNetIncome = summaries.reduce((sum, s) => sum + s.netIncome, 0);
+    const totalSGA = summaries.reduce((sum, s) => sum + s.sellingAndAdminExpense, 0);
     const gpPercent = totalSales !== 0 ? (totalGP / totalSales) * 100 : 0;
     const opPercent = totalSales !== 0 ? (totalOperatingIncome / totalSales) * 100 : 0;
+    const sgaSalesPercent = totalSales !== 0 ? (totalSGA / totalSales) * 100 : 0;
 
     const prevTotalSales = prevSummaries.reduce((sum, s) => sum + s.sales, 0);
     const prevTotalGP = prevSummaries.reduce((sum, s) => sum + s.grossProfit, 0);
     const prevGPPercent = prevTotalSales !== 0 ? (prevTotalGP / prevTotalSales) * 100 : 0;
     const prevTotalNetIncome = prevSummaries.reduce((sum, s) => sum + s.netIncome, 0);
+    const prevTotalSGA = prevSummaries.reduce((sum, s) => sum + s.sellingAndAdminExpense, 0);
+    const prevSgaSalesPercent =
+      prevTotalSales !== 0 ? (prevTotalSGA / prevTotalSales) * 100 : 0;
+
+    // YoY 단월 Sales — 비교 탭과 무관하게 항상 (year-1, month) 단월값
+    const yoyTotalSales = yoySummaries.reduce((sum, s) => sum + s.sales, 0);
 
     const salesChange =
       prevTotalSales !== 0
@@ -447,6 +886,14 @@ export default function DashboardPage() {
     const netIncomeChange =
       prevTotalNetIncome !== 0
         ? ((totalNetIncome - prevTotalNetIncome) / Math.abs(prevTotalNetIncome)) * 100
+        : null;
+    const sgaSalesPercentChange =
+      prevSgaSalesPercent !== 0 ? sgaSalesPercent - prevSgaSalesPercent : null;
+
+    // YoY Revenue Growth %: 항상 전년 동월 단월 대비
+    const yoyRevenueGrowth =
+      yoyTotalSales !== 0
+        ? ((totalSales - yoyTotalSales) / Math.abs(yoyTotalSales)) * 100
         : null;
 
     const getChangeLabel = () => {
@@ -463,12 +910,43 @@ export default function DashboardPage() {
       totalOperatingIncome,
       opPercent,
       totalNetIncome,
+      totalSGA,
+      sgaSalesPercent,
+      yoyRevenueGrowth,
       salesChange,
       gpPercentChange,
       netIncomeChange,
+      sgaSalesPercentChange,
       changeLabel: getChangeLabel(),
     };
-  }, [summaries, prevSummaries, comparisonType]);
+  }, [summaries, prevSummaries, yoySummaries, comparisonType]);
+
+  // ============================================
+  // SG&A 계정과목별 증감 (현재 비교탭 기준)
+  // ============================================
+  const sgaBreakdown = useMemo(() => {
+    if (plMaster.length === 0) return [];
+    const sgaCodes = plMaster
+      .filter((m) => m.pl_code.startsWith('600'))
+      .sort((a, b) => a.display_order - b.display_order);
+
+    return sgaCodes
+      .map((m) => {
+        const current = sgaByAccountCurrent.get(m.pl_code) || 0;
+        const prev = sgaByAccountPrev.get(m.pl_code) || 0;
+        const diff = current - prev;
+        const changePct = prev !== 0 ? (diff / Math.abs(prev)) * 100 : null;
+        return {
+          code: m.pl_code,
+          label: m.pl_line,
+          current,
+          prev,
+          diff,
+          changePct,
+        };
+      })
+      .filter((r) => r.current !== 0 || r.prev !== 0); // 둘 다 0 인 계정은 숨김
+  }, [plMaster, sgaByAccountCurrent, sgaByAccountPrev]);
 
   const insights = useMemo(() => {
     const items: Array<{ type: 'warning' | 'success' | 'info'; message: string }> = [];
@@ -560,7 +1038,7 @@ export default function DashboardPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper">
-                <SelectItem value="all">전체</SelectItem>
+                {canSeeAllEntities && <SelectItem value="all">전체</SelectItem>}
                 {subsidiaries.map((sub) => (
                   <SelectItem key={sub.id} value={sub.code}>
                     {sub.name.replace('InBody ', '')}
@@ -591,6 +1069,26 @@ export default function DashboardPage() {
               </SelectContent>
             </Select>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleDownloadStatements()}
+            disabled={downloadingHtml || subsidiaries.length === 0}
+            title="현재 선택된 Entity / 기간 기준 P/L · B/S 를 HTML 파일로 저장"
+          >
+            <Download className="h-4 w-4 mr-1.5" />
+            {downloadingHtml ? '생성 중...' : 'P/L · B/S HTML'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleDownloadAnalytics()}
+            disabled={downloadingAnalytics || subsidiaries.length === 0}
+            title="성장성 · 수익성 · 비용구조 · SG&A breakdown · 위험 신호 분석 지표를 HTML 파일로 저장"
+          >
+            <Download className="h-4 w-4 mr-1.5" />
+            {downloadingAnalytics ? '생성 중...' : '분석 지표 HTML'}
+          </Button>
         </div>
       </div>
 
@@ -654,8 +1152,8 @@ export default function DashboardPage() {
             </Card>
           ) : (
             <div className="space-y-6">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Summary Cards — 5칸 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <SummaryCard
                   title="Total Sales"
                   value={formatCompact(dashboardData.totalSales)}
@@ -684,26 +1182,111 @@ export default function DashboardPage() {
                   iconColor="text-purple-600"
                   bgColor="bg-purple-50"
                 />
+                <SummaryCard
+                  title="YoY Revenue Growth"
+                  value={
+                    dashboardData.yoyRevenueGrowth !== null
+                      ? `${dashboardData.yoyRevenueGrowth >= 0 ? '+' : ''}${dashboardData.yoyRevenueGrowth.toFixed(1)}%`
+                      : '-'
+                  }
+                  change={null}
+                  changeLabel=""
+                  note={
+                    dashboardData.yoyRevenueGrowth === null
+                      ? `전년 동월(${parseInt(selectedYear) - 1}년 ${selectedMonth}월) 데이터 없음`
+                      : undefined
+                  }
+                  icon={TrendingUp}
+                  iconColor="text-rose-600"
+                  bgColor="bg-rose-50"
+                />
+                <SummaryCard
+                  title="SG&A / Sales"
+                  value={`${dashboardData.sgaSalesPercent.toFixed(1)}%`}
+                  change={dashboardData.sgaSalesPercentChange}
+                  changeLabel={dashboardData.changeLabel}
+                  changeSuffix="pp"
+                  icon={Activity}
+                  iconColor="text-amber-600"
+                  bgColor="bg-amber-50"
+                />
               </div>
 
               {/* Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Sales & Net Income by Entity</CardTitle>
+                    <CardTitle className="text-lg">12개월 추이 (Sales / OP Margin / Net Income)</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {salesChartData.length > 0 ? (
+                    {monthlyTrendData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={salesChartData} margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
+                        <LineChart
+                          data={monthlyTrendData}
+                          margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                          <XAxis dataKey="entity" tick={{ fontSize: 11 }} />
-                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}K`} />
-                          <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}K`, name]} />
+                          <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                          {/* 좌측 축: 금액 (Sales / Net Income) */}
+                          <YAxis
+                            yAxisId="left"
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) =>
+                              Math.abs(v) >= 1_000_000
+                                ? `${(v / 1_000_000).toFixed(1)}M`
+                                : Math.abs(v) >= 1_000
+                                  ? `${(v / 1_000).toFixed(0)}K`
+                                  : `${v}`
+                            }
+                          />
+                          {/* 우측 축: 비율 (Operating Margin %) */}
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `${v}%`}
+                          />
+                          <Tooltip
+                            formatter={(value: number, name: string) => {
+                              if (name === 'Operating Margin') {
+                                return [`${value.toFixed(1)}%`, name];
+                              }
+                              return [`${value.toLocaleString()}`, name];
+                            }}
+                          />
                           <Legend />
-                          <Bar dataKey="Sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="Net Income" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                          <Line
+                            yAxisId="left"
+                            type="monotone"
+                            dataKey="sales"
+                            name="Sales"
+                            stroke="#3B82F6"
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                          />
+                          <Line
+                            yAxisId="left"
+                            type="monotone"
+                            dataKey="netIncome"
+                            name="Net Income"
+                            stroke="#8B5CF6"
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                          />
+                          <Line
+                            yAxisId="right"
+                            type="monotone"
+                            dataKey="operatingMargin"
+                            name="Operating Margin"
+                            stroke="#F59E0B"
+                            strokeWidth={2}
+                            strokeDasharray="4 2"
+                            dot={{ r: 3 }}
+                            activeDot={{ r: 5 }}
+                          />
+                        </LineChart>
                       </ResponsiveContainer>
                     ) : (
                       <p className="text-gray-400 text-center py-8">차트 데이터 없음</p>
@@ -735,6 +1318,316 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* SG&A 12개월 단월 추이 — 멀티 계정 선택형 차트 */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <CardTitle className="text-lg">SG&A 12개월 추이</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm">계정과목</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-[280px] justify-between font-normal"
+                          >
+                            <span className="truncate text-sm">
+                              {selectedSgaCodes.length === 0
+                                ? '계정과목 선택'
+                                : selectedSgaCodes.length === 1
+                                  ? (() => {
+                                      const r = sgaBreakdown.find(
+                                        (b) => b.code === selectedSgaCodes[0],
+                                      );
+                                      return r ? `${r.code} ${r.label}` : selectedSgaCodes[0];
+                                    })()
+                                  : `${selectedSgaCodes.length}개 선택됨`}
+                            </span>
+                            <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[320px] p-0" align="end">
+                          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+                            <span className="text-xs text-gray-500">
+                              {selectedSgaCodes.length}/{sgaBreakdown.length} 선택
+                            </span>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className="text-xs text-blue-600 hover:underline"
+                                onClick={() =>
+                                  setSelectedSgaCodes(sgaBreakdown.map((r) => r.code))
+                                }
+                              >
+                                전체
+                              </button>
+                              <button
+                                type="button"
+                                className="text-xs text-gray-500 hover:underline"
+                                onClick={() => setSelectedSgaCodes([])}
+                              >
+                                해제
+                              </button>
+                            </div>
+                          </div>
+                          <div className="max-h-[360px] overflow-y-auto py-1">
+                            {sgaBreakdown.length === 0 ? (
+                              <p className="text-xs text-gray-400 px-3 py-3 text-center">
+                                SG&A 계정이 없습니다.
+                              </p>
+                            ) : (
+                              sgaBreakdown.map((row) => {
+                                const checked = selectedSgaCodes.includes(row.code);
+                                return (
+                                  <label
+                                    key={row.code}
+                                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+                                  >
+                                    <Checkbox
+                                      checked={checked}
+                                      onCheckedChange={(v) => {
+                                        const next = v
+                                          ? [...selectedSgaCodes, row.code]
+                                          : selectedSgaCodes.filter((c) => c !== row.code);
+                                        setSelectedSgaCodes(next);
+                                      }}
+                                    />
+                                    <span className="text-gray-500 font-mono text-xs">
+                                      {row.code}
+                                    </span>
+                                    <span className="flex-1 truncate">{row.label}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    if (selectedSgaCodes.length === 0) {
+                      return (
+                        <p className="text-sm text-gray-400 py-8 text-center">
+                          계정과목을 선택해 주세요.
+                        </p>
+                      );
+                    }
+                    // 각 row = { label, code1: value, code2: value, ... }
+                    const chartData = sgaTrendLabels.map((label, i) => {
+                      const row: Record<string, number | string> = { label };
+                      selectedSgaCodes.forEach((code) => {
+                        const arr = sgaTrendByCode.get(code) ?? new Array(12).fill(0);
+                        row[code] = arr[i] ?? 0;
+                      });
+                      return row;
+                    });
+                    const allZero = selectedSgaCodes.every((code) => {
+                      const arr = sgaTrendByCode.get(code) ?? new Array(12).fill(0);
+                      return arr.every((v) => v === 0);
+                    });
+                    if (allZero) {
+                      return (
+                        <p className="text-sm text-gray-400 py-8 text-center">
+                          선택한 계정(들)의 최근 12개월 데이터가 없습니다.
+                        </p>
+                      );
+                    }
+                    // 색상 팔레트
+                    const PALETTE = [
+                      '#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444',
+                      '#14B8A6', '#F472B6', '#6366F1', '#EAB308', '#06B6D4',
+                      '#84CC16', '#F97316',
+                    ];
+                    return (
+                      <>
+                        <ResponsiveContainer width="100%" height={320}>
+                          <LineChart
+                            data={chartData}
+                            margin={{ top: 5, right: 20, left: 5, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                            <YAxis
+                              tick={{ fontSize: 11 }}
+                              tickFormatter={(v) =>
+                                Math.abs(v) >= 1_000_000
+                                  ? `${(v / 1_000_000).toFixed(1)}M`
+                                  : Math.abs(v) >= 1_000
+                                  ? `${(v / 1_000).toFixed(0)}K`
+                                  : `${v}`
+                              }
+                            />
+                            <Tooltip
+                              formatter={(value: number, name: string) => {
+                                const row = sgaBreakdown.find((r) => r.code === name);
+                                return [
+                                  value.toLocaleString(),
+                                  row ? `${row.code} ${row.label}` : name,
+                                ];
+                              }}
+                            />
+                            <Legend
+                              formatter={(value: string) => {
+                                const row = sgaBreakdown.find((r) => r.code === value);
+                                return row
+                                  ? `${row.code} · ${row.label}`
+                                  : value;
+                              }}
+                              wrapperStyle={{ fontSize: '11px' }}
+                            />
+                            {selectedSgaCodes.map((code, idx) => (
+                              <Line
+                                key={code}
+                                type="monotone"
+                                dataKey={code}
+                                name={code}
+                                stroke={PALETTE[idx % PALETTE.length]}
+                                strokeWidth={2}
+                                dot={{ r: 3 }}
+                                activeDot={{ r: 5 }}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <p className="text-xs text-gray-400 mt-3">
+                          * 각 점은 해당 월의 단월값(누계 차이) 입니다. 1월은 누계 자체가 단월값.
+                        </p>
+                      </>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* SG&A 계정과목별 증감 — 현재 비교탭(MoM/YoY/YoY YTD) 기준 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    SG&A 계정과목별 증감
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      ({dashboardData.changeLabel || '—'} 기준)
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {sgaBreakdown.length === 0 ? (
+                    <p className="text-sm text-gray-400 py-4 text-center">
+                      SG&A 데이터가 없습니다.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b-2 border-gray-300">
+                            <th className="text-left py-2 px-3 font-semibold">계정과목</th>
+                            <th className="text-right py-2 px-3 font-semibold">당기</th>
+                            <th className="text-right py-2 px-3 font-semibold">
+                              비교기간
+                            </th>
+                            <th className="text-right py-2 px-3 font-semibold">증감</th>
+                            <th className="text-right py-2 px-3 font-semibold">증감 %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sgaBreakdown
+                            .slice()
+                            .sort((a, b) => a.code.localeCompare(b.code))
+                            .map((row) => {
+                              const isUp = row.diff > 0;
+                              const isDown = row.diff < 0;
+                              return (
+                                <tr
+                                  key={row.code}
+                                  className="border-b hover:bg-gray-50"
+                                >
+                                  <td className="py-2 px-3">
+                                    <span className="text-gray-500 mr-2 font-mono text-xs">
+                                      {row.code}
+                                    </span>
+                                    {row.label}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-mono">
+                                    {formatCompact(row.current)}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-mono text-gray-500">
+                                    {formatCompact(row.prev)}
+                                  </td>
+                                  <td
+                                    className={cn(
+                                      'py-2 px-3 text-right font-mono',
+                                      isUp && 'text-rose-600',
+                                      isDown && 'text-emerald-600',
+                                    )}
+                                  >
+                                    {row.diff > 0 ? '+' : ''}
+                                    {formatCompact(row.diff)}
+                                  </td>
+                                  <td
+                                    className={cn(
+                                      'py-2 px-3 text-right',
+                                      isUp && 'text-rose-600',
+                                      isDown && 'text-emerald-600',
+                                    )}
+                                  >
+                                    {row.changePct !== null
+                                      ? `${row.changePct > 0 ? '+' : ''}${row.changePct.toFixed(1)}%`
+                                      : '-'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          {/* Total */}
+                          <tr className="border-t-2 border-gray-400 bg-gray-100 font-semibold">
+                            <td className="py-2 px-3">Total</td>
+                            <td className="py-2 px-3 text-right font-mono">
+                              {formatCompact(
+                                sgaBreakdown.reduce((s, r) => s + r.current, 0),
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-gray-500">
+                              {formatCompact(
+                                sgaBreakdown.reduce((s, r) => s + r.prev, 0),
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono">
+                              {(() => {
+                                const totalDiff = sgaBreakdown.reduce(
+                                  (s, r) => s + r.diff,
+                                  0,
+                                );
+                                return `${totalDiff > 0 ? '+' : ''}${formatCompact(totalDiff)}`;
+                              })()}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              {(() => {
+                                const totalCurr = sgaBreakdown.reduce(
+                                  (s, r) => s + r.current,
+                                  0,
+                                );
+                                const totalPrev = sgaBreakdown.reduce(
+                                  (s, r) => s + r.prev,
+                                  0,
+                                );
+                                if (totalPrev === 0) return '-';
+                                const pct = ((totalCurr - totalPrev) / Math.abs(totalPrev)) * 100;
+                                return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                              })()}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <p className="text-xs text-gray-400 mt-3">
+                        * 비교 기간은 상단 비교 탭(MoM/YoY/YoY YTD) 선택을 따릅니다. 증감 컬러 — 비용
+                        증가는 <span className="text-rose-600">빨강</span>, 감소는{' '}
+                        <span className="text-emerald-600">초록</span>.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Insights */}
               {insights.length > 0 && (
@@ -895,6 +1788,7 @@ function SummaryCard({
   change,
   changeLabel,
   changeSuffix = '%',
+  note,
   icon: Icon,
   iconColor,
   bgColor,
@@ -904,6 +1798,8 @@ function SummaryCard({
   change: number | null;
   changeLabel: string;
   changeSuffix?: string;
+  /** change 가 null 일 때 대신 노출할 안내 문구 (예: "전년 동월 데이터 없음") */
+  note?: string;
   icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   bgColor: string;
@@ -931,6 +1827,9 @@ function SummaryCard({
                   {change > 0 ? '+' : ''}{change.toFixed(1)}{changeSuffix} {changeLabel}
                 </span>
               </div>
+            )}
+            {change === null && note && (
+              <p className="text-xs text-gray-400 mt-1 leading-tight">{note}</p>
             )}
           </div>
           <div className={cn('p-3 rounded-lg', bgColor)}>

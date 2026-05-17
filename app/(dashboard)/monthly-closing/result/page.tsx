@@ -33,6 +33,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { getPLResults, getStdPLMaster } from '@/lib/services/monthlyClosingService';
+import { fetchSubsidiariesForCurrentUser } from '@/lib/services/subsidiariesAccessService';
 import type { PLResult, StdPLMaster } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
 
@@ -165,8 +166,12 @@ export default function ResultPage() {
   const loadSubsidiaries = useCallback(async () => {
     try {
       setLoading(true);
-      const { data } = await supabase.from('subsidiaries').select('*').order('name');
-      setSubsidiaries(data || []);
+      // 권한에 따라 필터된 법인만 노출 (entity_user 는 본인 담당 법인만)
+      const access = await fetchSubsidiariesForCurrentUser();
+      setSubsidiaries(access.subsidiaries);
+      if (!access.canSeeAll && access.subsidiaries.length > 0) {
+        setSelectedEntityCode((prev) => prev || access.subsidiaries[0].code);
+      }
     } catch {
       toast.error('법인 목록 로드 실패');
     } finally {
@@ -195,44 +200,52 @@ export default function ResultPage() {
       // 누적값 로드
       const cumulative = await getPLResults(selectedEntityCode, year, month);
       setCumulativeResults(cumulative);
-      
+
       // 월별값 계산 (현재 누적 - 직전월 누적)
-      if (month === 1) {
-        // 1월은 누적값 = 월별값
+      // 게이트: 당월 또는 직전월 YTD가 없으면 단월값 계산 불가 → 빈 배열 (UI에서 "-")
+      if (!cumulative || cumulative.length === 0) {
+        setMonthlyResults([]);
+      } else if (month === 1) {
+        // 1월은 직전월이 없으므로 누적값 = 월별값
         setMonthlyResults(cumulative);
       } else {
         const prevMonth = month - 1;
         const prevResults = await getPLResults(selectedEntityCode, year, prevMonth);
-        
-        // 현재 월 누적값 Map
-        const currMap = new Map<string, number>();
-        cumulative.forEach((r) => {
-          currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount);
-        });
-        
-        // 직전월 누적값 Map
-        const prevMap = new Map<string, number>();
-        prevResults.forEach((r) => {
-          prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount);
-        });
-        
-        // 차이 계산
-        const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
-        const monthly: PLResult[] = Array.from(allCodes).map((code) => ({
-          id: `${code}-${month}`,
-          upload_id: '',
-          entity_code: selectedEntityCode,
-          subsidiary_id: null,
-          period_year: year,
-          period_month: month,
-          std_pl_code: code,
-          amount: (currMap.get(code) || 0) - (prevMap.get(code) || 0),
-          currency: cumulative[0]?.currency || 'KRW',
-          created_at: new Date().toISOString(),
-          std_pl_master: undefined,
-        }));
-        
-        setMonthlyResults(monthly);
+
+        // 직전월 YTD 업로드가 없으면 단월값을 신뢰할 수 없음
+        if (!prevResults || prevResults.length === 0) {
+          setMonthlyResults([]);
+        } else {
+          // 현재 월 누적값 Map
+          const currMap = new Map<string, number>();
+          cumulative.forEach((r) => {
+            currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount);
+          });
+
+          // 직전월 누적값 Map
+          const prevMap = new Map<string, number>();
+          prevResults.forEach((r) => {
+            prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount);
+          });
+
+          // 차이 계산
+          const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
+          const monthly: PLResult[] = Array.from(allCodes).map((code) => ({
+            id: `${code}-${month}`,
+            upload_id: '',
+            entity_code: selectedEntityCode,
+            subsidiary_id: null,
+            period_year: year,
+            period_month: month,
+            std_pl_code: code,
+            amount: (currMap.get(code) || 0) - (prevMap.get(code) || 0),
+            currency: cumulative[0]?.currency || 'KRW',
+            created_at: new Date().toISOString(),
+            std_pl_master: undefined,
+          }));
+
+          setMonthlyResults(monthly);
+        }
       }
     } catch (error: unknown) {
       console.error('Failed to load single month P&L:', getErrorMessage(error));
@@ -252,61 +265,62 @@ export default function ResultPage() {
       const newMonthlyData = new Map<number, PLResult[]>();
 
       // 12개월 데이터를 병렬로 로드
+      // - TB는 YTD 누계로 업로드되므로, 단월값 = 당월 YTD − 직전월 YTD
+      // - 게이트 규칙: 당월 YTD 업로드가 없으면 빈 배열(=UI에서 "-") 반환
+      //   (그렇지 않으면 0 − 직전월YTD 가 음수로 표시되는 버그가 발생)
+      // - 직전월 YTD 업로드도 없으면 단월 차이를 계산할 수 없으므로 동일하게 빈 배열
       const loadPromises = Array.from({ length: 12 }, async (_, i) => {
         const month = i + 1;
         const currentResults = await getPLResults(selectedEntityCode, year, month);
-        
-        // 3월 데이터가 없으면 빈 배열 반환
-        if (month === 3 && (!currentResults || currentResults.length === 0)) {
+
+        // 게이트 1: 당월 YTD 업로드 자체가 없으면 단월값 계산 불가 → "-"
+        if (!currentResults || currentResults.length === 0) {
           return { month, results: [] };
         }
-        
+
+        // 1월은 직전월 누계가 없으므로 1월 YTD = 1월 단월값
         if (month === 1) {
-          // 1월은 그냥 누적값 사용
           return { month, results: currentResults };
-        } else {
-          // 2월~12월: 현재 누적 - 직전월 누적
-          const prevMonth = month - 1;
-          const prevResults = await getPLResults(selectedEntityCode, year, prevMonth);
-          
-          // 현재 월 누적값 Map
-          const currMap = new Map<string, number>();
-          currentResults.forEach((r) => {
-            currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount);
-          });
-          
-          // 직전월 누적값 Map
-          const prevMap = new Map<string, number>();
-          prevResults.forEach((r) => {
-            prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount);
-          });
-          
-          // 차이 계산
-          const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
-          const monthlyResults: PLResult[] = Array.from(allCodes).map((code) => ({
-            id: `${code}-${month}`,
-            upload_id: '',
-            entity_code: selectedEntityCode,
-            subsidiary_id: null,
-            period_year: year,
-            period_month: month,
-            std_pl_code: code,
-            amount: (currMap.get(code) || 0) - (prevMap.get(code) || 0),
-            currency: currentResults[0]?.currency || 'KRW',
-            created_at: new Date().toISOString(),
-            std_pl_master: undefined,
-          }));
-          
-          // 3월인 경우, 모든 값이 0이면 빈 배열 반환
-          if (month === 3) {
-            const hasNonZeroValue = monthlyResults.some((r) => r.amount !== 0);
-            if (!hasNonZeroValue) {
-              return { month, results: [] };
-            }
-          }
-          
-          return { month, results: monthlyResults };
         }
+
+        // 2월~12월: 현재 누적 − 직전월 누적
+        const prevMonth = month - 1;
+        const prevResults = await getPLResults(selectedEntityCode, year, prevMonth);
+
+        // 게이트 2: 직전월 YTD 업로드가 없으면 단월값을 신뢰할 수 없음 → "-"
+        if (!prevResults || prevResults.length === 0) {
+          return { month, results: [] };
+        }
+
+        // 현재 월 누적값 Map
+        const currMap = new Map<string, number>();
+        currentResults.forEach((r) => {
+          currMap.set(r.std_pl_code, (currMap.get(r.std_pl_code) || 0) + r.amount);
+        });
+
+        // 직전월 누적값 Map
+        const prevMap = new Map<string, number>();
+        prevResults.forEach((r) => {
+          prevMap.set(r.std_pl_code, (prevMap.get(r.std_pl_code) || 0) + r.amount);
+        });
+
+        // 차이 계산
+        const allCodes = new Set<string>([...currMap.keys(), ...prevMap.keys()]);
+        const monthlyResults: PLResult[] = Array.from(allCodes).map((code) => ({
+          id: `${code}-${month}`,
+          upload_id: '',
+          entity_code: selectedEntityCode,
+          subsidiary_id: null,
+          period_year: year,
+          period_month: month,
+          std_pl_code: code,
+          amount: (currMap.get(code) || 0) - (prevMap.get(code) || 0),
+          currency: currentResults[0]?.currency || 'KRW',
+          created_at: new Date().toISOString(),
+          std_pl_master: undefined,
+        }));
+
+        return { month, results: monthlyResults };
       });
 
       const results = await Promise.all(loadPromises);

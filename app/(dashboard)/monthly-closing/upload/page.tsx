@@ -38,6 +38,7 @@ import {
   generatePL,
   deleteTBUpload,
 } from '@/lib/services/monthlyClosingService';
+import { fetchSubsidiariesForCurrentUser } from '@/lib/services/subsidiariesAccessService';
 import type { TBUpload, TBParsedRow } from '@/lib/types/monthly-closing';
 import type { Subsidiary } from '@/lib/supabase/types';
 
@@ -75,11 +76,14 @@ export default function UploadPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: subsData } = await supabase
-        .from('subsidiaries')
-        .select('*')
-        .order('name');
-      setSubsidiaries(subsData || []);
+      // 권한에 따라 필터된 법인 목록만 노출 (entity_user 는 본인 담당 법인만)
+      const access = await fetchSubsidiariesForCurrentUser();
+      setSubsidiaries(access.subsidiaries);
+      // entity_user 가 처음 진입했을 때 본인 법인을 자동으로 선택해 준다
+      if (!access.canSeeAll && access.subsidiaries.length > 0) {
+        setSelectedEntityCode((prev) => prev || access.subsidiaries[0].code);
+        setSelectedSubsidiaryId((prev) => prev || access.subsidiaries[0].id);
+      }
       await loadUploads();
     } catch (error) {
       console.error('Failed to load data:', error);

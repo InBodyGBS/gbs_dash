@@ -61,11 +61,37 @@ export default function AnnouncementsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  /** 로그인 사용자 이름 — Author 자동 채움용 */
+  const [myDisplayName, setMyDisplayName] = useState<string>('');
 
   /** 기본: All — 현재는 모두 열람 가능 정책이므로 기본 탭을 공개로 */
   const [scopeTab, setScopeTab] = useState<AnnouncementVisibility>('all');
 
-  const [form, setForm] = useState({ type: 'Notice', title: '', author: '' });
+  const [form, setForm] = useState({ type: 'Notice', title: '' });
+
+  // 로그인 사용자 이름 1회 조회 — 등록 시 author 로 자동 사용
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('name')
+          .eq('id', user.id)
+          .maybeSingle();
+        const name = (profile as { name?: string } | null)?.name;
+        const resolved = name || user.email?.split('@')[0] || '';
+        if (!cancelled) setMyDisplayName(resolved);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     await Promise.resolve();
@@ -102,10 +128,11 @@ export default function AnnouncementsPage() {
       toast.error('등록은 관리자만 가능합니다.');
       return;
     }
-    if (!form.title.trim() || !form.author.trim()) {
-      toast.error('제목과 작성자를 입력해주세요.');
+    if (!form.title.trim()) {
+      toast.error('제목을 입력해주세요.');
       return;
     }
+    const author = myDisplayName.trim() || 'Unknown';
     setSubmitting(true);
     const visibility = scopeTab;
 
@@ -114,7 +141,7 @@ export default function AnnouncementsPage() {
       .insert({
         type: form.type,
         title: form.title.trim(),
-        author: form.author.trim(),
+        author,
         content: null,
         visibility,
       } as never)
@@ -128,7 +155,7 @@ export default function AnnouncementsPage() {
     }
     const inserted = data as { id: string };
     toast.success('본문 작성 화면으로 이동합니다.');
-    setForm({ type: 'Notice', title: '', author: '' });
+    setForm({ type: 'Notice', title: '' });
     setDialogOpen(false);
     router.push(`/announcements/${inserted.id}`);
   };
@@ -321,14 +348,7 @@ export default function AnnouncementsPage() {
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </div>
-            <div>
-              <Label className="mb-1.5 block">Author</Label>
-              <Input
-                placeholder="작성자 입력"
-                value={form.author}
-                onChange={(e) => setForm({ ...form, author: e.target.value })}
-              />
-            </div>
+            {/* Author 는 로그인 사용자로 자동 기록 — UI 표시 없음 */}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>

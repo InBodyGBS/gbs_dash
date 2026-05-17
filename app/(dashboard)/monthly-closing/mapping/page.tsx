@@ -62,6 +62,7 @@ import type {
   StdBSMaster,
   StatementType,
 } from '@/lib/types/monthly-closing';
+import { fetchSubsidiariesForCurrentUser } from '@/lib/services/subsidiariesAccessService';
 import type { Subsidiary } from '@/lib/supabase/types';
 
 const getErrorMessage = (error: unknown): string => {
@@ -92,14 +93,18 @@ export default function MappingPage() {
   const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
-      const [subsData, plMasterData, bsMasterData] = await Promise.all([
-        supabase.from('subsidiaries').select('*').order('name'),
+      const [access, plMasterData, bsMasterData] = await Promise.all([
+        fetchSubsidiariesForCurrentUser(),
         getStdPLMaster(),
         getStdBSMaster(),
       ]);
-      setSubsidiaries(subsData.data || []);
+      setSubsidiaries(access.subsidiaries);
       setPLMaster(plMasterData);
       setBSMaster(bsMasterData);
+      // entity_user 는 본인 법인이 자동 선택되도록 유도
+      if (!access.canSeeAll && access.subsidiaries.length > 0) {
+        setSelectedEntityCode((prev) => prev || access.subsidiaries[0].code);
+      }
     } catch {
       toast.error('데이터 로딩 실패');
     } finally {

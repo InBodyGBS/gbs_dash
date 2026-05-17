@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RichTextEditor, AnnouncementContent } from '@/components/ui/rich-text-editor';
 import { getIsAdminUser } from '@/lib/auth/admin';
 import type { AnnouncementRow, AnnouncementVisibility } from '@/lib/types/announcement';
 
@@ -147,6 +148,16 @@ export default function AnnouncementDetailPage() {
 
   const canEdit = isAdmin;
 
+  // TipTap의 빈 본문은 보통 `<p></p>` 형태로 반환됨 → 실 내용이 있는지 검사
+  const isEmptyContent = (html: string): boolean => {
+    const stripped = html
+      .replace(/<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, '')
+      .trim();
+    return stripped.length === 0;
+  };
+
   const handleSave = async () => {
     if (!canEdit) return;
     if (!form.title.trim() || !form.author.trim()) {
@@ -154,13 +165,14 @@ export default function AnnouncementDetailPage() {
       return;
     }
     setSaving(true);
+    const contentToSave = isEmptyContent(form.content) ? null : form.content;
     const { error } = await supabase
       .from('announcements')
       .update({
         type: form.type,
         title: form.title.trim(),
         author: form.author.trim(),
-        content: form.content.trim() || null,
+        content: contentToSave,
         visibility: form.visibility,
         updated_at: new Date().toISOString(),
       } as never)
@@ -175,7 +187,7 @@ export default function AnnouncementDetailPage() {
         ? {
             ...prev,
             ...form,
-            content: form.content.trim() || null,
+            content: contentToSave,
             visibility: form.visibility,
           }
         : prev,
@@ -372,12 +384,15 @@ export default function AnnouncementDetailPage() {
               </div>
               <div>
                 <Label className="mb-1.5 block text-xs text-gray-500">Content</Label>
-                <Textarea
+                <RichTextEditor
                   value={form.content}
-                  onChange={(e) => setForm({ ...form, content: e.target.value })}
-                  placeholder="본문을 입력하세요..."
-                  className="min-h-[360px] resize-none leading-relaxed"
+                  onChange={(html) => setForm({ ...form, content: html })}
+                  placeholder="본문을 입력하세요... (툴바에서 표/이미지 삽입 가능)"
+                  minHeight={360}
                 />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  툴바에서 표·이미지·링크를 삽입할 수 있습니다. 이미지는 5MB 이하 권장.
+                </p>
               </div>
             </div>
           ) : (
@@ -396,7 +411,7 @@ export default function AnnouncementDetailPage() {
               </div>
               <div className="pt-6 min-h-[200px]">
                 {data.content ? (
-                  <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{data.content}</p>
+                  <AnnouncementContent html={data.content} />
                 ) : (
                   <p className="text-gray-400 italic">본문이 없습니다.</p>
                 )}

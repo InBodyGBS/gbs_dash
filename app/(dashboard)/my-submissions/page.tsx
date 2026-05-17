@@ -94,11 +94,62 @@ const getErrorMessage = (error: unknown): string => {
   return '알 수 없는 오류';
 };
 
-/** 분기말+월별 카테고리 합집합 (중복 제거, 표시 순서는 분기말 먼저) */
+/**
+ * 통합 카테고리 alias — 동일 회계 개념이지만 분기말 / 평월 코드가 다른 경우
+ * 매트릭스에서는 한 줄로 합쳐 보여주고, 셀 조회는 월에 따라 적절한 ID 로 매핑.
+ *
+ * 예: 'sales' 가상 ID 는
+ *   - 분기말 월(3·6·9·12): 'sales-sbp' 데이터를 사용
+ *   - 평월: 'sales-detail' 데이터를 사용
+ */
+type MergedAlias = {
+  /** 가상 통합 ID — UI 표시 및 lookup 키 */
+  id: string;
+  /** UI 라벨 */
+  label: string;
+  color: string;
+  /** 분기말일 때 사용할 실제 카테고리 ID */
+  quarterEndId: string;
+  /** 평월일 때 사용할 실제 카테고리 ID */
+  regularId: string;
+};
+
+const MERGED_CATEGORIES: MergedAlias[] = [
+  // Sales: 분기말은 'Sales (SBP)' = sales-sbp, 평월은 'Sales detail' = sales-detail
+  { id: 'sales', label: 'Sales', color: '#F59E0B', quarterEndId: 'sales-sbp', regularId: 'sales-detail' },
+];
+
+/** 어떤 실제 카테고리 ID 가 통합 ID 로 매핑되는지 역방향 lookup */
+const MERGED_ID_BY_SOURCE: Map<string, MergedAlias> = (() => {
+  const map = new Map<string, MergedAlias>();
+  for (const m of MERGED_CATEGORIES) {
+    map.set(m.quarterEndId, m);
+    map.set(m.regularId, m);
+  }
+  return map;
+})();
+
+/** 통합 ID → 특정 월에 사용할 실제 카테고리 ID */
+function resolveMergedCategoryForMonth(mergedId: string, month: number): string | null {
+  const m = MERGED_CATEGORIES.find((x) => x.id === mergedId);
+  if (!m) return null;
+  return isQuarterEndMonth(month) ? m.quarterEndId : m.regularId;
+}
+
+/** 분기말+월별 카테고리 합집합 (중복 제거 + 통합 카테고리로 치환) */
 const ALL_CATEGORIES: ClosingCategory[] = (() => {
   const seen = new Set<string>();
   const out: ClosingCategory[] = [];
   for (const c of [...CLOSING_CATEGORIES_QUARTER_END, ...CLOSING_CATEGORIES_REGULAR]) {
+    // 통합 대상이면 가상 카테고리로 치환 (한 번만)
+    const merged = MERGED_ID_BY_SOURCE.get(c.id);
+    if (merged) {
+      if (!seen.has(merged.id)) {
+        seen.add(merged.id);
+        out.push({ id: merged.id, label: merged.label, color: merged.color });
+      }
+      continue;
+    }
     if (!seen.has(c.id)) {
       seen.add(c.id);
       out.push(c);
@@ -108,6 +159,10 @@ const ALL_CATEGORIES: ClosingCategory[] = (() => {
 })();
 
 const isCategoryActiveForMonth = (category: ClosingCategory, month: number): boolean => {
+  // 통합 카테고리: 분기말이든 평월이든 항상 활성 (둘 중 하나가 매칭됨)
+  if (MERGED_CATEGORIES.some((m) => m.id === category.id)) {
+    return true;
+  }
   const isQEnd = isQuarterEndMonth(month);
   if (isQEnd) {
     return CLOSING_CATEGORIES_QUARTER_END.some((c) => c.id === category.id);
@@ -489,7 +544,9 @@ function SubmissionsMatrix({
               </th>
               {MONTHS.map((m) => {
                 const active = isCategoryActiveForMonth(cat, m);
-                const cell = cellLookup.get(`${m}|${cat.id}`);
+                // 통합 카테고리는 월에 따라 실제 ID 로 매핑해서 조회
+                const lookupCatId = resolveMergedCategoryForMonth(cat.id, m) ?? cat.id;
+                const cell = cellLookup.get(`${m}|${lookupCatId}`);
                 return (
                   <td
                     key={m}
@@ -505,7 +562,7 @@ function SubmissionsMatrix({
                         onClick={() =>
                           onCellNavigate(cell ?? {
                             month: m,
-                            category: cat.id,
+                            category: lookupCatId,
                             dueDate: null,
                             dueConfirmed: false,
                             status: 'none',
@@ -519,7 +576,7 @@ function SubmissionsMatrix({
                             e.preventDefault();
                             onCellNavigate(cell ?? {
                               month: m,
-                              category: cat.id,
+                              category: lookupCatId,
                               dueDate: null,
                               dueConfirmed: false,
                               status: 'none',

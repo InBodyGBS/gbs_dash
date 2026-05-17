@@ -9,6 +9,7 @@ import { AuditGrid } from '@/components/audit-and-tax/AuditGrid';
 import { CardNewsCard } from '@/components/audit-and-tax/CardNewsCard';
 import { CardNewsDetailDialog } from '@/components/audit-and-tax/CardNewsDetailDialog';
 import { getCardNews } from '@/lib/services/accountingStandardsService';
+import { fetchSubsidiariesForCurrentUser } from '@/lib/services/subsidiariesAccessService';
 import type { Subsidiary } from '@/lib/supabase/types';
 import type { CardNewsFull } from '@/lib/types/accounting-standards';
 
@@ -26,9 +27,10 @@ export default function AuditAndTaxPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('subsidiaries').select('*').order('name');
+      // 권한에 따라 필터된 법인만 노출 (entity_user 는 본인 담당 법인만)
+      const access = await fetchSubsidiariesForCurrentUser();
       setSubsidiaries(
-        (data || []).filter((s: Subsidiary) => !EXCLUDED.some((ex) => s.name.includes(ex)))
+        access.subsidiaries.filter((s: Subsidiary) => !EXCLUDED.some((ex) => s.name.includes(ex)))
       );
       setLoading(false);
     };

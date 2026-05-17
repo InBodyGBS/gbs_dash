@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { getAllIssues } from '@/lib/services/issueService';
-import { supabase } from '@/lib/supabase/client';
+import { fetchSubsidiariesForCurrentUser } from '@/lib/services/subsidiariesAccessService';
 import type { Issue, IssueFilters, IssueSortOption } from '@/lib/types/issue';
 import type { Subsidiary } from '@/lib/supabase/types';
 import { ISSUE_STATUS_LIST } from '@/lib/constants/issue-categories';
@@ -63,22 +63,19 @@ export default function IssuePage() {
     try {
       setLoading(true);
 
-      // 이슈 및 법인 데이터 병렬 로드
-      const [issuesData, subsidiariesData] = await Promise.all([
+      // 이슈 및 법인 데이터 병렬 로드 — 법인은 사용자 권한 범위 내만
+      const [issuesData, access] = await Promise.all([
         getAllIssues(),
-        supabase.from('subsidiaries').select('*').order('name'),
+        fetchSubsidiariesForCurrentUser(),
       ]);
 
       console.log('📊 Loaded Issues:', issuesData.length);
-      console.log('🏢 Loaded Subsidiaries:', subsidiariesData.data?.length || 0);
-      console.log('🏢 Subsidiaries Data:', subsidiariesData.data);
+      console.log('🏢 Loaded Subsidiaries:', access.subsidiaries.length);
 
       const EXCLUDED = ['Germany', 'UK', 'Singapore'];
       setIssues(issuesData);
       setSubsidiaries(
-        (subsidiariesData.data || []).filter(
-          (s) => !EXCLUDED.some((ex) => s.name.includes(ex))
-        )
+        access.subsidiaries.filter((s) => !EXCLUDED.some((ex) => s.name.includes(ex)))
       );
     } catch (error) {
       console.error('Failed to load data:', error);
