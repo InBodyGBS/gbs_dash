@@ -281,17 +281,24 @@ export default function CalendarTPage() {
 
       setSaving(true);
       try {
+        // 같은 분기 안에 동일 카테고리를 여러 귀속월에 다른 날짜로 설정 가능하도록
+        // attribution_year/attribution_month 를 함께 저장한다.
+        // 캘린더 월 = 귀속월 + 1, attribution_month 12 → 캘린더 1월 (한 해 넘김)
         const upserts = subsidiaries.map((sub) => ({
           quarter_id: quarter.id,
           subsidiary_id: sub.id,
           category: categoryId,
           planned_date: dateStr,
           status: 'planned' as const,
+          attribution_year: attributionYearNum,
+          attribution_month: attributionMonthNum,
         }));
 
         const { error } = await supabase
           .from('schedule_items')
-          .upsert(upserts, { onConflict: 'quarter_id,subsidiary_id,category' });
+          .upsert(upserts, {
+            onConflict: 'quarter_id,subsidiary_id,category,attribution_month',
+          });
 
         if (error) throw error;
         toast.success('완료 기한이 설정되었습니다.');
@@ -302,7 +309,7 @@ export default function CalendarTPage() {
         setSaving(false);
       }
     },
-    [quarter, subsidiaries, refetch],
+    [quarter, subsidiaries, refetch, attributionYearNum, attributionMonthNum],
   );
 
   // -------------------------------------------------------------------------
@@ -314,12 +321,14 @@ export default function CalendarTPage() {
 
       setSaving(true);
       try {
+        // 현재 보고 있는 귀속월의 행만 삭제 — 다른 귀속월의 같은 카테고리는 보존
         const { error } = await supabase
           .from('schedule_items')
           .delete()
           .eq('quarter_id', quarter.id)
           .eq('category', categoryId)
-          .eq('status', 'planned');
+          .eq('status', 'planned')
+          .eq('attribution_month', attributionMonthNum);
 
         if (error) throw error;
         toast.success('완료 기한이 삭제되었습니다.');
@@ -330,7 +339,7 @@ export default function CalendarTPage() {
         setSaving(false);
       }
     },
-    [quarter, refetch],
+    [quarter, refetch, attributionMonthNum],
   );
 
   // -------------------------------------------------------------------------

@@ -19,6 +19,9 @@ export interface ScheduleItem {
   planned_date: string;
   confirmed_date: string | null;
   status: 'planned' | 'confirmed';
+  /** 결산 귀속월 (1~12). attribution_month + 1 = 캘린더 표시 월 (12 → 다음 해 1월). */
+  attribution_year?: number | null;
+  attribution_month?: number | null;
   created_at: string;
   updated_at: string;
 }
