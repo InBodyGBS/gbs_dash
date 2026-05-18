@@ -1063,6 +1063,40 @@ export function useScheduleData() {
     loadData();
   };
 
+  // -------------------------------------------------------------------------
+  // 이번 달 확정 해제 (Calendar 전용)
+  // confirmed → planned 으로 되돌린다. 같은 calendar 월 범위, quarter 한정.
+  // -------------------------------------------------------------------------
+  const handleUnconfirmMonth = async (calendarYmPrefix: string) => {
+    if (!quarter || quarter.id.startsWith('temp-') || quarter.id.startsWith('custom-')) {
+      toast.error('분기 데이터가 없습니다.');
+      return;
+    }
+    const startDate = `${calendarYmPrefix}-01`;
+    const [yStr, mStr] = calendarYmPrefix.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    if (Number.isNaN(y) || Number.isNaN(m)) {
+      toast.error('달력 월 형식이 올바르지 않습니다.');
+      return;
+    }
+    const endDate = format(new Date(y, m, 0), 'yyyy-MM-dd');
+    const { error } = await supabase
+      .from('schedule_items')
+      .update({ status: 'planned', confirmed_date: null })
+      .eq('quarter_id', quarter.id)
+      .eq('status', 'confirmed')
+      .gte('planned_date', startDate)
+      .lte('planned_date', endDate);
+
+    if (error) {
+      toast.error(`확정 해제 실패: ${error.message}`);
+      return;
+    }
+    toast.success('이번 달 스케줄 확정이 해제되었습니다.');
+    loadData();
+  };
+
   return {
     // state
     quarter,
@@ -1088,6 +1122,7 @@ export function useScheduleData() {
     handleItemConfirm,
     handleCellClick,
     handleConfirmMonth,
+    handleUnconfirmMonth,
     refetch: loadData,
     // excel
     handleExportExcel,

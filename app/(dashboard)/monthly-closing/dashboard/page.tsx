@@ -948,6 +948,41 @@ export default function DashboardPage() {
       .filter((r) => r.current !== 0 || r.prev !== 0); // 둘 다 0 인 계정은 숨김
   }, [plMaster, sgaByAccountCurrent, sgaByAccountPrev]);
 
+  // ── 계정과목 멀티 선택 차트용 옵션 (Sales / COGS / SG&A 통합) ──
+  // sgaTrendByCode 와 sgaByAccountCurrent 는 이미 모든 코드를 담고 있어
+  // 4xxxx, 5xxxx, 6xxxx 까지 확장만 하면 됨.
+  const accountChartOptions = useMemo(() => {
+    if (plMaster.length === 0) return [];
+    const isInScope = (code: string) =>
+      code.startsWith('4') || code.startsWith('5') || code.startsWith('6');
+    const categoryOf = (code: string): 'Sales' | 'COGS' | 'SG&A' => {
+      if (code.startsWith('4')) return 'Sales';
+      if (code.startsWith('5')) return 'COGS';
+      return 'SG&A';
+    };
+    const categoryOrder = { Sales: 0, COGS: 1, 'SG&A': 2 } as const;
+    return plMaster
+      .filter((m) => isInScope(m.pl_code))
+      .map((m) => {
+        const current = sgaByAccountCurrent.get(m.pl_code) || 0;
+        const prev = sgaByAccountPrev.get(m.pl_code) || 0;
+        return {
+          code: m.pl_code,
+          label: m.pl_line,
+          category: categoryOf(m.pl_code),
+          current,
+          prev,
+          displayOrder: m.display_order,
+        };
+      })
+      .filter((r) => r.current !== 0 || r.prev !== 0)
+      .sort((a, b) => {
+        const c = categoryOrder[a.category] - categoryOrder[b.category];
+        if (c !== 0) return c;
+        return a.code.localeCompare(b.code);
+      });
+  }, [plMaster, sgaByAccountCurrent, sgaByAccountPrev]);
+
   const insights = useMemo(() => {
     const items: Array<{ type: 'warning' | 'success' | 'info'; message: string }> = [];
     summaries.forEach((s) => {
@@ -1323,7 +1358,12 @@ export default function DashboardPage() {
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <CardTitle className="text-lg">SG&A 12개월 추이</CardTitle>
+                    <CardTitle className="text-lg">
+                      계정과목 12개월 추이
+                      <span className="ml-2 text-xs font-normal text-gray-500">
+                        (Sales / COGS / SG&A 다중 선택)
+                      </span>
+                    </CardTitle>
                     <div className="flex items-center gap-2">
                       <Label className="text-sm">계정과목</Label>
                       <Popover>
@@ -1337,7 +1377,7 @@ export default function DashboardPage() {
                                 ? '계정과목 선택'
                                 : selectedSgaCodes.length === 1
                                   ? (() => {
-                                      const r = sgaBreakdown.find(
+                                      const r = accountChartOptions.find(
                                         (b) => b.code === selectedSgaCodes[0],
                                       );
                                       return r ? `${r.code} ${r.label}` : selectedSgaCodes[0];
@@ -1347,17 +1387,17 @@ export default function DashboardPage() {
                             <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[320px] p-0" align="end">
+                        <PopoverContent className="w-[360px] p-0" align="end">
                           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
                             <span className="text-xs text-gray-500">
-                              {selectedSgaCodes.length}/{sgaBreakdown.length} 선택
+                              {selectedSgaCodes.length}/{accountChartOptions.length} 선택
                             </span>
                             <div className="flex gap-2">
                               <button
                                 type="button"
                                 className="text-xs text-blue-600 hover:underline"
                                 onClick={() =>
-                                  setSelectedSgaCodes(sgaBreakdown.map((r) => r.code))
+                                  setSelectedSgaCodes(accountChartOptions.map((r) => r.code))
                                 }
                               >
                                 전체
@@ -1371,33 +1411,75 @@ export default function DashboardPage() {
                               </button>
                             </div>
                           </div>
-                          <div className="max-h-[360px] overflow-y-auto py-1">
-                            {sgaBreakdown.length === 0 ? (
+                          <div className="max-h-[400px] overflow-y-auto py-1">
+                            {accountChartOptions.length === 0 ? (
                               <p className="text-xs text-gray-400 px-3 py-3 text-center">
-                                SG&A 계정이 없습니다.
+                                해당 기간 계정 데이터가 없습니다.
                               </p>
                             ) : (
-                              sgaBreakdown.map((row) => {
-                                const checked = selectedSgaCodes.includes(row.code);
+                              (['Sales', 'COGS', 'SG&A'] as const).map((cat) => {
+                                const rowsInCat = accountChartOptions.filter(
+                                  (r) => r.category === cat,
+                                );
+                                if (rowsInCat.length === 0) return null;
+                                const allChecked = rowsInCat.every((r) =>
+                                  selectedSgaCodes.includes(r.code),
+                                );
                                 return (
-                                  <label
-                                    key={row.code}
-                                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
-                                  >
-                                    <Checkbox
-                                      checked={checked}
-                                      onCheckedChange={(v) => {
-                                        const next = v
-                                          ? [...selectedSgaCodes, row.code]
-                                          : selectedSgaCodes.filter((c) => c !== row.code);
-                                        setSelectedSgaCodes(next);
-                                      }}
-                                    />
-                                    <span className="text-gray-500 font-mono text-xs">
-                                      {row.code}
-                                    </span>
-                                    <span className="flex-1 truncate">{row.label}</span>
-                                  </label>
+                                  <div key={cat}>
+                                    <div className="flex items-center justify-between px-3 py-1 bg-gray-50 text-[11px] font-semibold text-gray-600 sticky top-0">
+                                      <span>{cat} ({rowsInCat.length})</span>
+                                      <button
+                                        type="button"
+                                        className="text-[10px] text-blue-600 hover:underline"
+                                        onClick={() => {
+                                          const catCodes = rowsInCat.map((r) => r.code);
+                                          if (allChecked) {
+                                            // 카테고리 전체 해제
+                                            setSelectedSgaCodes(
+                                              selectedSgaCodes.filter(
+                                                (c) => !catCodes.includes(c),
+                                              ),
+                                            );
+                                          } else {
+                                            // 카테고리 전체 선택
+                                            setSelectedSgaCodes(
+                                              Array.from(
+                                                new Set([...selectedSgaCodes, ...catCodes]),
+                                              ),
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        {allChecked ? '카테고리 해제' : '카테고리 전체'}
+                                      </button>
+                                    </div>
+                                    {rowsInCat.map((row) => {
+                                      const checked = selectedSgaCodes.includes(row.code);
+                                      return (
+                                        <label
+                                          key={row.code}
+                                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+                                        >
+                                          <Checkbox
+                                            checked={checked}
+                                            onCheckedChange={(v) => {
+                                              const next = v
+                                                ? [...selectedSgaCodes, row.code]
+                                                : selectedSgaCodes.filter(
+                                                    (c) => c !== row.code,
+                                                  );
+                                              setSelectedSgaCodes(next);
+                                            }}
+                                          />
+                                          <span className="text-gray-500 font-mono text-xs">
+                                            {row.code}
+                                          </span>
+                                          <span className="flex-1 truncate">{row.label}</span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
                                 );
                               })
                             )}
@@ -1463,18 +1545,18 @@ export default function DashboardPage() {
                             />
                             <Tooltip
                               formatter={(value: number, name: string) => {
-                                const row = sgaBreakdown.find((r) => r.code === name);
+                                const row = accountChartOptions.find((r) => r.code === name);
                                 return [
                                   value.toLocaleString(),
-                                  row ? `${row.code} ${row.label}` : name,
+                                  row ? `[${row.category}] ${row.code} ${row.label}` : name,
                                 ];
                               }}
                             />
                             <Legend
                               formatter={(value: string) => {
-                                const row = sgaBreakdown.find((r) => r.code === value);
+                                const row = accountChartOptions.find((r) => r.code === value);
                                 return row
-                                  ? `${row.code} · ${row.label}`
+                                  ? `[${row.category}] ${row.code} · ${row.label}`
                                   : value;
                               }}
                               wrapperStyle={{ fontSize: '11px' }}

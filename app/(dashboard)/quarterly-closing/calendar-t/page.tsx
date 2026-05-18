@@ -54,6 +54,7 @@ export default function CalendarTPage() {
     setSelectedMonth,
     activeClosingCategories,
     handleConfirmMonth,
+    handleUnconfirmMonth,
     refetch,
   } = useScheduleData();
 
@@ -458,11 +459,31 @@ export default function CalendarTPage() {
             </div>
 
             <div className="flex items-center gap-4">
-              {/* 이번 달 확정 버튼 — TODO: 관리자 권한 체크로 감싸기 */}
+              {/* 이번 달 확정 / 확정 해제 버튼 — TODO: 관리자 권한 체크로 감싸기 */}
               {isMonthConfirmed ? (
-                <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  <span className="font-medium">스케줄 확정됨</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    <span className="font-medium">스케줄 확정됨</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs text-gray-600 hover:text-red-700 hover:border-red-300"
+                    disabled={saving}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `${currentMonth.getFullYear()}년 ${currentMonth.getMonth() + 1}월 스케줄 확정을 해제하시겠습니까?\n확정된 일정이 모두 '계획(planned)' 상태로 돌아가며 confirmed_date 가 초기화됩니다.`,
+                        )
+                      ) {
+                        void handleUnconfirmMonth(calendarYmPrefix);
+                      }
+                    }}
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    확정 해제
+                  </Button>
                 </div>
               ) : (
                 categoryDateMap.size > 0 && (

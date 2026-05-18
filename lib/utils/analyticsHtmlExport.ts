@@ -15,6 +15,7 @@
 import {
   getPLResults,
   getStdPLMaster,
+  getPLResultsForPeriods,
 } from '@/lib/services/monthlyClosingService';
 
 // ============================================
@@ -184,6 +185,267 @@ function escapeHtml(s: string): string {
 }
 
 // ============================================
+// 12개월 시계열 데이터 로더 — 한 번의 벌크 fetch
+// ============================================
+
+interface MonthlySeries {
+  labels: string[]; // ['25.06', '25.07', ...]
+  byCodeByMonth: Map<string, number[]>; // code → 12-element array
+}
+
+async function load12MonthSeries(
+  entityCodes: string[],
+  endYear: number,
+  endMonth: number,
+): Promise<MonthlySeries> {
+  // 12 months ending at (endYear, endMonth)
+  const months: { year: number; month: number }[] = [];
+  let y = endYear;
+  let m = endMonth;
+  for (let i = 0; i < 12; i++) {
+    months.unshift({ year: y, month: m });
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+  }
+  // anchor = month before months[0] (for first diff)
+  const first = months[0];
+  const anchor =
+    first.month === 1
+      ? { year: first.year - 1, month: 12 }
+      : { year: first.year, month: first.month - 1 };
+  const periods = [anchor, ...months];
+
+  const labels = months.map(
+    (p) => `${String(p.year).slice(2)}.${String(p.month).padStart(2, '0')}`,
+  );
+
+  // 한 번에 batch fetch
+  const rows = await getPLResultsForPeriods(entityCodes, periods);
+
+  // 누계 by (year-month) → Map<code, sum>
+  const ytdByPeriod = new Map<string, Map<string, number>>();
+  periods.forEach((p) => ytdByPeriod.set(`${p.year}-${p.month}`, new Map()));
+  rows.forEach((r) => {
+    const key = `${r.period_year}-${r.period_month}`;
+    const codeMap = ytdByPeriod.get(key);
+    if (codeMap) {
+      codeMap.set(r.std_pl_code, (codeMap.get(r.std_pl_code) || 0) + r.amount);
+    }
+  });
+
+  // 단월값 = 당월 YTD - 직전월 YTD (1월은 YTD 자체, 미업로드 월은 0)
+  const byCodeByMonth = new Map<string, number[]>();
+  months.forEach((p, idx) => {
+    const currMap = ytdByPeriod.get(`${p.year}-${p.month}`) ?? new Map<string, number>();
+    if (currMap.size === 0) return;
+    if (p.month === 1) {
+      currMap.forEach((v, k) => {
+        const arr = byCodeByMonth.get(k) ?? new Array(12).fill(0);
+        arr[idx] = v;
+        byCodeByMonth.set(k, arr);
+      });
+      return;
+    }
+    const prevMap = ytdByPeriod.get(`${p.year}-${p.month - 1}`) ?? new Map<string, number>();
+    if (prevMap.size === 0) return; // 직전월 미업로드 → 신뢰 불가
+    new Set([...currMap.keys(), ...prevMap.keys()]).forEach((k) => {
+      const diff = (currMap.get(k) || 0) - (prevMap.get(k) || 0);
+      const arr = byCodeByMonth.get(k) ?? new Array(12).fill(0);
+      arr[idx] = diff;
+      byCodeByMonth.set(k, arr);
+    });
+  });
+
+  return { labels, byCodeByMonth };
+}
+
+// ============================================
+// 인라인 SVG 차트 헬퍼
+// ============================================
+
+function escapeSvg(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+interface ChartSeries {
+  name: string;
+  color: string;
+  values: number[];
+  /** 값 포맷터 (툴크 텍스트, legend 등에서 사용). 미지정시 toFixed(0) */
+  format?: (v: number) => string;
+  /** 어느 Y축에 그릴지 — 'left' (default) | 'right' */
+  axis?: 'left' | 'right';
+  /** 점선 스타일 (예: '4 2') */
+  dash?: string;
+}
+
+/**
+ * 단일 Y축 라인 차트.
+ * - 자동 Y스케일 (음수 포함 가능)
+ * - 격자 4단, X 라벨 12개
+ * - Legend 상단
+ */
+function svgLineChart(opts: {
+  width?: number;
+  height?: number;
+  labels: string[];
+  series: ChartSeries[];
+  /** 좌측 Y축 포맷터 */
+  yFormatLeft?: (v: number) => string;
+  /** 우측 Y축 포맷터 — series 중 axis='right' 가 있으면 사용 */
+  yFormatRight?: (v: number) => string;
+}): string {
+  const width = opts.width ?? 720;
+  const height = opts.height ?? 260;
+  const hasRight = opts.series.some((s) => s.axis === 'right');
+  const marginL = 58;
+  const marginR = hasRight ? 58 : 16;
+  const marginT = 24;
+  const marginB = 36; // legend 공간 포함
+  const plotW = width - marginL - marginR;
+  const plotH = height - marginT - marginB;
+
+  const leftValues = opts.series.filter((s) => (s.axis ?? 'left') === 'left').flatMap((s) => s.values);
+  const rightValues = opts.series.filter((s) => s.axis === 'right').flatMap((s) => s.values);
+
+  if (leftValues.length === 0 && rightValues.length === 0) {
+    return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" xmlns="http://www.w3.org/2000/svg"><text x="${width / 2}" y="${height / 2}" text-anchor="middle" fill="#9ca3af" font-size="12">데이터 없음</text></svg>`;
+  }
+
+  const calcRange = (vals: number[]): { min: number; max: number } => {
+    if (vals.length === 0) return { min: 0, max: 1 };
+    let mn = Math.min(0, ...vals);
+    let mx = Math.max(0, ...vals);
+    if (mn === mx) mx = mn + 1;
+    const pad = (mx - mn) * 0.08;
+    return { min: mn - pad, max: mx + pad };
+  };
+
+  const lAxis = calcRange(leftValues);
+  const rAxis = hasRight ? calcRange(rightValues) : { min: 0, max: 1 };
+
+  const n = opts.labels.length;
+  const xStep = n > 1 ? plotW / (n - 1) : 0;
+  const xPos = (i: number) => marginL + i * xStep;
+  const yPosOf = (v: number, axis: 'left' | 'right') => {
+    const a = axis === 'right' ? rAxis : lAxis;
+    return marginT + plotH - ((v - a.min) / (a.max - a.min)) * plotH;
+  };
+
+  const fmtL = opts.yFormatLeft ?? ((v: number) => v.toFixed(0));
+  const fmtR = opts.yFormatRight ?? ((v: number) => v.toFixed(0));
+
+  let body = '';
+
+  // 격자선 + 좌/우 Y 라벨 (5단계)
+  for (let i = 0; i <= 4; i++) {
+    const y = marginT + (i * plotH) / 4;
+    body += `<line x1="${marginL}" y1="${y}" x2="${marginL + plotW}" y2="${y}" stroke="#e5e7eb" stroke-width="1"/>`;
+    const lv = lAxis.max - ((lAxis.max - lAxis.min) * i) / 4;
+    body += `<text x="${marginL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#6b7280" font-family="monospace">${escapeSvg(fmtL(lv))}</text>`;
+    if (hasRight) {
+      const rv = rAxis.max - ((rAxis.max - rAxis.min) * i) / 4;
+      body += `<text x="${marginL + plotW + 6}" y="${y + 3}" text-anchor="start" font-size="9" fill="#6b7280" font-family="monospace">${escapeSvg(fmtR(rv))}</text>`;
+    }
+  }
+
+  // 0 baseline (좌축 기준)
+  if (lAxis.min < 0 && lAxis.max > 0) {
+    const yz = yPosOf(0, 'left');
+    body += `<line x1="${marginL}" y1="${yz}" x2="${marginL + plotW}" y2="${yz}" stroke="#9ca3af" stroke-width="1" stroke-dasharray="3 2"/>`;
+  }
+
+  // X 라벨
+  opts.labels.forEach((lbl, i) => {
+    if (n <= 6 || i % 2 === 0 || i === n - 1) {
+      body += `<text x="${xPos(i)}" y="${marginT + plotH + 14}" text-anchor="middle" font-size="9" fill="#6b7280" font-family="monospace">${escapeSvg(lbl)}</text>`;
+    }
+  });
+
+  // 시리즈
+  opts.series.forEach((s) => {
+    const axis = s.axis ?? 'left';
+    const points = s.values
+      .map((v, i) => `${xPos(i).toFixed(1)},${yPosOf(v, axis).toFixed(1)}`)
+      .join(' ');
+    const dashAttr = s.dash ? ` stroke-dasharray="${s.dash}"` : '';
+    body += `<polyline fill="none" stroke="${s.color}" stroke-width="2"${dashAttr} points="${points}"/>`;
+    const fmt = s.format ?? (axis === 'right' ? fmtR : fmtL);
+    s.values.forEach((v, i) => {
+      body += `<circle cx="${xPos(i).toFixed(1)}" cy="${yPosOf(v, axis).toFixed(1)}" r="2.8" fill="#fff" stroke="${s.color}" stroke-width="1.5"><title>${escapeSvg(opts.labels[i])} · ${escapeSvg(s.name)}: ${escapeSvg(fmt(v))}</title></circle>`;
+    });
+  });
+
+  // Legend (하단 중앙)
+  const legendY = height - 10;
+  const legendItems = opts.series.map((s) => {
+    const w = 18 + Math.max(40, s.name.length * 6.8) + 14;
+    return { s, w };
+  });
+  const totalW = legendItems.reduce((sum, it) => sum + it.w, 0);
+  let legendX = (width - totalW) / 2;
+  legendItems.forEach(({ s, w }) => {
+    const dashAttr = s.dash ? ` stroke-dasharray="${s.dash}"` : '';
+    body += `<line x1="${legendX}" y1="${legendY}" x2="${legendX + 14}" y2="${legendY}" stroke="${s.color}" stroke-width="2"${dashAttr}/>`;
+    body += `<circle cx="${legendX + 7}" cy="${legendY}" r="2.8" fill="#fff" stroke="${s.color}" stroke-width="1.5"/>`;
+    body += `<text x="${legendX + 18}" y="${legendY + 3}" font-size="10" fill="#374151">${escapeSvg(s.name)}</text>`;
+    legendX += w;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
+}
+
+/**
+ * 가로 막대 차트 (composition / ranking 용)
+ */
+function svgHorizBarChart(opts: {
+  width?: number;
+  height?: number;
+  rows: Array<{ label: string; value: number; color?: string }>;
+  format?: (v: number) => string;
+}): string {
+  const width = opts.width ?? 720;
+  const rows = opts.rows;
+  const rowH = 24;
+  const headerH = 8;
+  const height = opts.height ?? rows.length * rowH + headerH + 8;
+  const labelW = 180;
+  const valueW = 80;
+  const plotW = width - labelW - valueW - 12;
+  const format = opts.format ?? ((v: number) => v.toLocaleString());
+
+  if (rows.length === 0) {
+    return `<svg viewBox="0 0 ${width} 60" class="chart-svg" xmlns="http://www.w3.org/2000/svg"><text x="${width / 2}" y="30" text-anchor="middle" fill="#9ca3af" font-size="12">데이터 없음</text></svg>`;
+  }
+
+  const maxVal = Math.max(...rows.map((r) => Math.abs(r.value)));
+  if (maxVal === 0) {
+    return `<svg viewBox="0 0 ${width} 60" class="chart-svg" xmlns="http://www.w3.org/2000/svg"><text x="${width / 2}" y="30" text-anchor="middle" fill="#9ca3af" font-size="12">값이 모두 0</text></svg>`;
+  }
+
+  let body = '';
+  rows.forEach((r, i) => {
+    const y = headerH + i * rowH + 4;
+    const barLen = (Math.abs(r.value) / maxVal) * plotW;
+    const color = r.color ?? '#971B2F';
+    // 라벨
+    body += `<text x="${labelW - 6}" y="${y + 13}" text-anchor="end" font-size="11" fill="#374151">${escapeSvg(r.label)}</text>`;
+    // 막대
+    body += `<rect x="${labelW}" y="${y + 4}" width="${barLen.toFixed(1)}" height="14" fill="${color}" rx="2"/>`;
+    // 값 라벨
+    body += `<text x="${width - 6}" y="${y + 13}" text-anchor="end" font-size="10" fill="#374151" font-family="monospace">${escapeSvg(format(r.value))}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
+}
+
+// ============================================
 // 메인
 // ============================================
 
@@ -209,6 +471,7 @@ export async function generateAnalyticsHtml(args: AnalyticsExportArgs): Promise<
     yoyMap, //  전년 동월 단월 (YoY)
     ytdMap,
     prevYtdMap, // 전년 동월 YTD
+    series12m, // 12개월 시계열 (차트용)
   ] = await Promise.all([
     getStdPLMaster(),
     loadSingleMonthForEntities(entityCodes, year, month),
@@ -216,6 +479,7 @@ export async function generateAnalyticsHtml(args: AnalyticsExportArgs): Promise<
     loadSingleMonthForEntities(entityCodes, year - 1, month),
     loadYtd(entityCodes, year, month),
     loadYtd(entityCodes, year - 1, month),
+    load12MonthSeries(entityCodes, year, month),
   ]);
 
   const curr = aggregate(currMap);
@@ -545,6 +809,100 @@ export async function generateAnalyticsHtml(args: AnalyticsExportArgs): Promise<
     </ul>
   `;
 
+  // ============================================
+  // 차트 데이터 산출 (12개월 시계열에서 Sales / OPM / NI 계산)
+  // ============================================
+  const codeSum = (arr12: number[] | undefined): number[] =>
+    arr12 ? arr12.slice() : new Array(12).fill(0);
+  const sumCodesPerMonth = (codes: readonly string[]): number[] => {
+    const out = new Array(12).fill(0);
+    codes.forEach((c) => {
+      const arr = series12m.byCodeByMonth.get(c);
+      if (arr) arr.forEach((v, i) => (out[i] += v));
+    });
+    return out;
+  };
+  const sumPrefixPerMonth = (prefix: string): number[] => {
+    const out = new Array(12).fill(0);
+    series12m.byCodeByMonth.forEach((arr, code) => {
+      if (code.startsWith(prefix)) arr.forEach((v, i) => (out[i] += v));
+    });
+    return out;
+  };
+
+  const salesArr = sumCodesPerMonth(SALES_CODES);
+  const cogsArr = sumCodesPerMonth(COGS_CODES);
+  const sgaArr = sumPrefixPerMonth('600');
+  const otherRevArr = sumPrefixPerMonth('710');
+  const otherExpArr = sumPrefixPerMonth('720');
+  const finRevArr = sumPrefixPerMonth('730');
+  const finExpArr = sumPrefixPerMonth('740');
+  const taxArr = codeSum(series12m.byCodeByMonth.get('80001'));
+
+  const opArr = salesArr.map((s, i) => s - cogsArr[i] - sgaArr[i]);
+  const niArr = opArr.map(
+    (op, i) => op + otherRevArr[i] - otherExpArr[i] + finRevArr[i] - finExpArr[i] - taxArr[i],
+  );
+  const opmArr = salesArr.map((s, i) => (s !== 0 ? (opArr[i] / s) * 100 : 0));
+
+  // ── SVG 차트 3개 ──
+  const fmtNumShort = (v: number): string => {
+    const abs = Math.abs(v);
+    const sign = v < 0 ? '-' : '';
+    if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(1)}B`;
+    if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(0)}K`;
+    return `${sign}${abs.toFixed(0)}`;
+  };
+  const fmtPctShort = (v: number): string => `${v.toFixed(1)}%`;
+
+  // 대시보드의 "12개월 추이" 카드와 동일한 레이아웃:
+  // - 좌축: Sales / Net Income (금액)
+  // - 우축: Operating Margin (%, 점선)
+  const combined12mChartSvg = svgLineChart({
+    width: 560,
+    height: 220,
+    labels: series12m.labels,
+    yFormatLeft: fmtNumShort,
+    yFormatRight: fmtPctShort,
+    series: [
+      { name: 'Sales', color: '#3B82F6', values: salesArr, format: fmtNumShort },
+      { name: 'Net Income', color: '#8B5CF6', values: niArr, format: fmtNumShort },
+      {
+        name: 'Operating Margin',
+        color: '#F59E0B',
+        values: opmArr,
+        format: fmtPctShort,
+        axis: 'right',
+        dash: '4 2',
+      },
+    ],
+  });
+
+  // SG&A composition — YTD 기준 (단월은 0 이 자주 발생해 빈 차트로 보이므로 YTD 가 더 안정)
+  // 만약 YTD 도 비어 있으면 currMap 단월로 폴백
+  const sgaCompSource: Map<string, number> = (() => {
+    const ytdHas600 = Array.from(ytdMap.keys()).some((k) => k.startsWith('600'));
+    return ytdHas600 ? ytdMap : currMap;
+  })();
+  const sgaCompUsesYtd = sgaCompSource === ytdMap;
+  const sgaCompRows = plMaster
+    .filter((m) => m.pl_code.startsWith('600'))
+    .map((m) => {
+      const v = sgaCompSource.get(m.pl_code) || 0;
+      return { code: m.pl_code, label: m.pl_line, value: v };
+    })
+    .filter((r) => r.value !== 0)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+    .slice(0, 10)
+    .map((r) => ({ label: `${r.code} ${r.label}`, value: r.value, color: '#971B2F' }));
+
+  const sgaCompChartSvg = svgHorizBarChart({
+    width: 560,
+    rows: sgaCompRows,
+    format: fmtNumShort,
+  });
+
   const subjectTitle = `${entityLabel} Financial Analytics (${year}.${String(month).padStart(2, '0')})`;
 
   return `<!DOCTYPE html>
@@ -578,6 +936,17 @@ export async function generateAnalyticsHtml(args: AnalyticsExportArgs): Promise<
   header h1 { margin: 0 0 4px 0; font-size: 20px; color: var(--primary); }
   header .meta { color: var(--muted); font-size: 12px; }
   h2.section { font-size: 14px; color: var(--primary); margin: 24px 0 8px; border-left: 3px solid var(--primary); padding-left: 8px; }
+  h3.subsection { font-size: 12px; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+  .chart-wrap {
+    margin: 4px 0 12px;
+    padding: 10px 8px;
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    max-width: 560px;
+  }
+  .chart-wrap svg.chart-svg { display: block; width: 100%; height: auto; }
   table.kpi { width: 100%; border-collapse: collapse; margin-top: 4px; }
   table.kpi th, table.kpi td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
   table.kpi th { background: #f9fafb; font-weight: 600; font-size: 12px; color: var(--muted); }
@@ -612,6 +981,9 @@ ${renderHeadlines()}
 <h2 class="section">📈 성장성 (Growth)</h2>
 ${renderGrowthTable()}
 
+<h3 class="subsection">12개월 추이 — Sales / OP Margin / Net Income</h3>
+<div class="chart-wrap">${combined12mChartSvg}</div>
+
 <h2 class="section">💰 수익성 (Profitability)</h2>
 ${renderMarginTable()}
 
@@ -620,6 +992,9 @@ ${renderCostTable()}
 
 <h2 class="section">🧾 SG&A 계정과목별 (당월 vs 전년동월)</h2>
 ${renderSgaTable()}
+
+<h3 class="subsection">SG&A 구성 — ${sgaCompUsesYtd ? `YTD (${year}.01 ~ ${year}.${String(month).padStart(2, '0')})` : '당월'} Top 10</h3>
+<div class="chart-wrap">${sgaCompChartSvg}</div>
 
 <h2 class="section">⚠️ 위험 신호 (Risk Signals)</h2>
 ${renderRisks()}
