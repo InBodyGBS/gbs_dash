@@ -130,6 +130,7 @@ export const CATEGORIES: Category[] = [
       { id: 'gbs-calendar', label: 'Calendar', path: '/gbs/calendar' },
       { id: 'gbs-users', label: 'User Management', path: '/gbs/users' },
       { id: 'gbs-closing-tasks', label: '결산 일정표', path: '/gbs/closing-tasks' },
+      { id: 'gbs-todo', label: 'Todo List', path: '/gbs/todo' },
     ],
   },
 ] as const;
