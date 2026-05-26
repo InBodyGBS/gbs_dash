@@ -152,7 +152,8 @@ export async function upsertClosingTaskRecord(params: {
   if (params.completedBy !== undefined) payload.completed_by = params.completedBy;
   if (params.status === 'done') {
     payload.completed_at = new Date().toISOString();
-  } else if (params.status && params.status !== 'done') {
+  } else if (params.status) {
+    // 'todo' | 'inprog' | 'delay' 로 변경 시 완료 시각 초기화
     payload.completed_at = null;
   }
 
