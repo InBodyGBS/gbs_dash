@@ -47,6 +47,7 @@ export const PAGE_REGISTRY: PageDef[] = [
   { id: 'gbs',                 label: 'GBS',                path: '/gbs',                       group: 'Admin' },
   { id: 'gbs-calendar',        label: 'GBS Calendar',       path: '/gbs/calendar',              group: 'Admin' },
   { id: 'gbs-users',           label: 'User Management',    path: '/gbs/users',                 group: 'Admin' },
+  { id: 'gbs-closing-tasks',   label: '결산 일정표',           path: '/gbs/closing-tasks',         group: 'Admin' },
 ];
 
 /** 그룹별로 페이지를 묶어 반환 (UI 매트릭스 표시용) */
